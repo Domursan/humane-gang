@@ -40,3 +40,5 @@
 2026-10-31T17:31:23.814Z ok supabase/migrations/181_jeux_gain_affiche.sql
 2026-10-31T17:31:24.487Z ok supabase/migrations/182_arcade_prises.sql
 2026-10-31T20:13:54.765Z ok supabase/migrations/183_jeux_programme.sql
+2026-10-31T23:06:13.469Z ok supabase/migrations/184_jeux_programme_jour.sql
+2026-10-31T23:06:14.200Z ok supabase/migrations/185_duel_coups_manques.sql
