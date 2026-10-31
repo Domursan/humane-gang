@@ -6,6 +6,7 @@
  * Contrat des écrans de partie : export function monter(root, s) → { maj(etat), message(msg), detruire() }.
  *   s = { code, lg, messages, etat(), precedent(), secondesRestantes(), rafraichir(), naviguer }.
  *   precedent() : l'état reçu juste avant le dernier (null à l'ouverture de la page) ; sert aux effets d'une transition d'écran.
+ *   vueEnCours() : vrai si la partie a été vue en cours depuis cette ouverture ; l'écran de fin ne joue ses effets qu'à cette condition.
  * Dépendances : api.js, ui.js.
  * Exporte : afficher.
  */
@@ -41,12 +42,14 @@ export async function afficher(root, { code, naviguer }) {
   let fini = false;
   let vuEtat = null;      // dernier état reçu
   let avantEtat = null;   // celui d'avant
+  let vueEnCours = false; // la partie a été vue en cours depuis l'ouverture : un second état « terminee » reçu pendant le chargement de la fin ne l'efface pas
 
   const session = suivrePartie(code, {
     onEtat: async (e) => {
       if (fini) return;
       avantEtat = vuEtat;
       vuEtat = e;
+      if (e?.partie?.statut === 'en_cours') vueEnCours = true;
       if (!e?.moi) { naviguer(`#rejoindre/${encodeURIComponent(code)}`); return; }
       const nom = ecranPour(e);
       if (courant?.nom === nom) { courant.vue.maj(e); return; }
@@ -81,6 +84,7 @@ export async function afficher(root, { code, naviguer }) {
     messages: (canal, depuis = 0) => messages(session.etat()?.partie?.id, canal, depuis, code),
     etat: () => session.etat(),
     precedent: () => avantEtat,
+    vueEnCours: () => vueEnCours,
     secondesRestantes: () => session.secondesRestantes(),
     rafraichir: () => session.rafraichir(),
   };

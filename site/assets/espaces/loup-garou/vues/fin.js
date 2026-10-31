@@ -3,11 +3,17 @@
  * Rôle : bannière du vainqueur, carte personnelle (rôle final, victoire, Paillettes, MVP), « Qui était qui » par camp,
  * chronologie du journal (Nuit N / Jour N), chiffres de la partie, chat général, puis retour au Loup-Garou ou nouvelle partie.
  * Tous les rôles sont visibles à la fin de la partie (joueurs[].role, joueurs[].camp).
- * Dépendances : core.js (esc), loup-garou/ui.js (icone, vignetteRole, pastilleCamp, pseudo, avatar, libelleCause, filAriane),
+ * Effet de fin (LG1, LG2), une seule fois et seulement si la partie vient de se terminer sous mes yeux (s.vueEnCours) : ciel qui s'éclaire
+ *   ou reste sombre, son déjà sur le site, bandeau neutre ; autres vainqueurs : ciel neutre et vrai titre, sans son. Il ne lit que partie.vainqueur, déjà public : même effet pour tous, joueur,
+ *   invité ou meneur, aucun rôle, camp ni résultat personnel. Mouvement réduit : pas de ciel ni de bandeau, le son reste.
+ * Dépendances : core.js (esc), commun/effets-duels.js, commun/sons-jeux.js,
+ *   loup-garou/ui.js (icone, vignetteRole, pastilleCamp, pseudo, avatar, libelleCause, filAriane),
  *   loup-garou/roles.js (roleById, CAMPS), loup-garou/chat.js (monterChat).
  * Exporte : monter.
  */
 import { esc } from '../../../commun/core.js';
+import { anime, creerEffets, premiereFois } from '../../../commun/effets-duels.js';
+import { jouerSonJeu, sonsPrets } from '../../../commun/sons-jeux.js';
 import { icone, vignetteRole, pastilleCamp, pseudo, avatar, libelleCause, filAriane } from '../ui.js';
 import { roleById, CAMPS } from '../roles.js';
 import { monterChat } from '../chat.js';
@@ -24,6 +30,33 @@ const BANNIERES = {
   personne: { ton: null, titre: 'Personne ne survit', icone: 'croix' },
   annulee: { ton: null, titre: 'Partie arrêtée par le meneur', icone: 'info' },
 };
+
+/** Effet de fin : ciel, titre du bandeau, son du groupe « loup-garou » (2 Le jour se lève, 6 Hurlement lointain). */
+const EFFET_FIN = {
+  village: { ciel: 'jour', titre: 'Le jour se lève', son: 2 },
+  loups: { ciel: 'nuit', titre: 'La nuit reste', son: 6, couleur: '#C2606C' },
+};
+/** Vainqueur sans fiche (solo, amoureux, personne) : ciel neutre, le bandeau reprend le vrai titre de fin, sans son. */
+const EFFET_FIN_AUTRE = { ciel: 'neutre' };
+const DUREE_CIEL = 2400;
+
+/**
+ * Joue l'effet de fin une fois par partie. Partie arrêtée par le meneur : rien.
+ * @param {object} fx effets de l'écran (commun/effets-duels.js)
+ * @param {object} p partie (seul vainqueur est lu pour le contenu de l'effet)
+ */
+function effetFin(fx, p) {
+  const b = BANNIERES[p.vainqueur];
+  if (!b || p.vainqueur === 'annulee' || !premiereFois(`lg-fin:${p.id}`)) return;
+  const f = EFFET_FIN[p.vainqueur] || EFFET_FIN_AUTRE;
+  if (f.son && sonsPrets()) jouerSonJeu('loup-garou', f.son);
+  if (anime()) {
+    const ciel = document.createElement('div');
+    ciel.className = `lg-fin-ciel ${f.ciel}`;
+    fx.vol(ciel, DUREE_CIEL);
+  }
+  fx.bandeau(f.titre || b.titre, f.titre ? b.titre : '', { ton: 'n', couleur: f.couleur });
+}
 
 /** Phases du journal rattachées à la nuit ou au jour (les autres suivent l'étape précédente). */
 const PHASES_NUIT = new Set(['nuit_1', 'nuit', 'reveil']);
@@ -228,6 +261,8 @@ export function monter(root, s) {
     canaux: () => [{ canal: 'general', ecrire: true }],
     titre: 'Discussion',
   });
+  const fx = creerEffets();
+  let enDirect = !!s.vueEnCours?.();   // la partie vient de finir sous mes yeux : l'effet se joue au premier état affiché
 
   return {
     maj(etat) {
@@ -241,11 +276,13 @@ export function monter(root, s) {
       const nouveauFil = zoneCorps.querySelector('.lg-frise');
       if (nouveauFil) nouveauFil.scrollLeft = defilement;
       chat.maj(etat);
+      if (enDirect) { enDirect = false; effetFin(fx, etat.partie); }
     },
     message(msg) {
       chat.message(msg);
     },
     detruire() {
+      fx.nettoyer();
       try { chat.detruire(); } catch { /* sans effet */ }
       delete document.body.dataset.lgAmbiance;
       root.innerHTML = '';

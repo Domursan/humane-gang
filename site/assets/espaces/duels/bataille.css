@@ -133,8 +133,6 @@ body.duels-calme .duels-bn .bn-feu, body.duels-calme .duels-bn .bn-eau { animati
   animation: bn-fx-ban 2.2s cubic-bezier(.2, 1.4, .4, 1) forwards; }
 .bn-fx-ban small { display: block; text-align: center; font: 700 15px Inter, system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
 @keyframes bn-fx-ban { 0% { opacity: 0; scale: .5; rotate: -6deg; } 20% { opacity: 1; scale: 1.06; rotate: -2deg; } 35% { scale: 1; rotate: -2deg; } 85% { opacity: 1; } 100% { opacity: 0; } }
-.bn-fx-conf { position: fixed; top: -10px; width: 8px; height: 14px; z-index: 8999; pointer-events: none; animation: bn-fx-tombe linear forwards; }
-@keyframes bn-fx-tombe { to { translate: 0 105vh; rotate: 720deg; } }
 .duels-bn .bn-c.bn-fx-touche { animation: bn-fx-touche 1.2s ease-in-out 2; }
 @keyframes bn-fx-touche { 50% { box-shadow: 0 0 0 3px #FE3104, 0 0 20px rgba(254, 49, 4, .7); } }
 .duels-bn .bn-c.bn-fx-libre { animation: bn-fx-libre 1.3s ease-in-out 3; }
@@ -143,14 +141,15 @@ body.duels-calme .duels-bn .bn-feu, body.duels-calme .duels-bn .bn-eau { animati
 @keyframes bn-fx-secoue { 20% { translate: -5px 0; } 40% { translate: 5px 0; } 60% { translate: -3px 0; } 80% { translate: 2px 0; } }
 .duels-bn .duels-face-j.bn-fx-joue { box-shadow: 0 0 0 3px #E2C77E, 0 0 22px rgba(226, 199, 126, .6); animation: bn-fx-joue 1.2s ease-in-out 4; }
 @keyframes bn-fx-joue { 50% { box-shadow: 0 0 0 5px #E2C77E, 0 0 36px rgba(226, 199, 126, .85); } }
-.duels-fin-joueur.bn-fx-fin { animation: bn-fx-fin 1.2s ease-in-out 4; }
-@keyframes bn-fx-fin { 50% { box-shadow: 0 0 0 3px #E2C77E, 0 0 26px rgba(226, 199, 126, .7); } }
+/* BN1 : une case de ma flotte s'enfonce, sur l'écran de fin. */
+.duels-fin-bcase.bn-fx-sombre { animation: bn-fx-sombre 1s var(--bn-d, 0ms) both; }
+@keyframes bn-fx-sombre { to { background-color: #16375A; transform: scale(.5); } }
 
-body.duels-calme .bn-fx, body.duels-calme .bn-fx-ban, body.duels-calme .bn-fx-conf { display: none; }
+body.duels-calme .bn-fx, body.duels-calme .bn-fx-ban { display: none; }
 body.duels-calme .duels-bn .bn-c.bn-fx-touche, body.duels-calme .duels-bn .bn-c.bn-fx-libre, body.duels-calme .duels-bn .bn-coque.bn-fx-secoue,
-body.duels-calme .duels-bn .duels-face-j.bn-fx-joue, body.duels-calme .duels-fin-joueur.bn-fx-fin { animation: none; }
+body.duels-calme .duels-bn .duels-face-j.bn-fx-joue, body.duels-calme .duels-fin-bcase.bn-fx-sombre { animation: none; }
 @media (prefers-reduced-motion: reduce) {
-  .bn-fx, .bn-fx-ban, .bn-fx-conf { display: none; }
+  .bn-fx, .bn-fx-ban { display: none; }
   .duels-bn .bn-c.bn-fx-touche, .duels-bn .bn-c.bn-fx-libre, .duels-bn .bn-coque.bn-fx-secoue,
-  .duels-bn .duels-face-j.bn-fx-joue, .duels-fin-joueur.bn-fx-fin { animation: none; }
+  .duels-bn .duels-face-j.bn-fx-joue, .duels-fin-bcase.bn-fx-sombre { animation: none; }
 }

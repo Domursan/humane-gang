@@ -9,11 +9,17 @@
  * Duel en attente où je ne joue pas (défi reçu, code partagé) : renvoie vers #rejoindre/CODE.
  * Contrat des vues : export function creer(root, ctx) → { maj(etat), message(msg), detruire() },
  *   ctx = { code, naviguer, moi, suivi } (suivi : rafraichir, secondesRestantes, etat).
- * Dépendances : core.js (esc), duels/api.js (suivrePartie, messages, estInvite).
+ *   Facultatif pour une table : avantFin(etat) → promesse. Reçoit l'état final et garde la table à l'écran le temps d'un dernier
+ *   effet (4 s au plus), puis l'écran de fin s'affiche.
+ * Dépendances : core.js (esc), duels/api.js (suivrePartie, messages, estInvite), ./fin-fx.js (arreterEffetsFin, oublierPartie).
  * Exporte : afficher.
  */
 import { esc } from '../../../commun/core.js';
 import { suivrePartie, messages, estInvite } from '../api.js';
+import { arreterEffetsFin, oublierPartie } from './fin-fx.js';
+
+/** Temps maximal qu'une table peut garder l'écran après la fin (avantFin). */
+const DELAI_AVANT_FIN = 4000;
 
 const VUES = {
   salle: () => import('./salle.js'),
@@ -102,6 +108,11 @@ export async function afficher(root, { code, naviguer, moi }) {
     charge = (async () => {
       const mod = await VUES[nom]();
       if (fini) return;
+      if (nom === 'fin' && courant?.vue.avantFin) {
+        await Promise.race([Promise.resolve().then(() => courant.vue.avantFin(e)).catch(() => {}),
+          new Promise((ok) => { setTimeout(ok, DELAI_AVANT_FIN); })]);
+        if (fini) return;
+      }
       try { courant?.vue.detruire?.(); } catch { /* sans effet */ }
       root.innerHTML = '';
       const vue = mod.creer(root, { code, naviguer, moi, suivi });
@@ -137,5 +148,8 @@ export async function afficher(root, { code, naviguer, moi }) {
     fini = true;
     try { suivi.arreter(); } catch { /* sans effet */ }
     try { courant?.vue.detruire?.(); } catch { /* sans effet */ }
+    arreterEffetsFin();
+    // Parti avant la fin : une fin découverte plus tard n'est plus jouée comme une fin vue en direct.
+    if (courant?.nom !== 'fin' && dernier?.partie?.id) oublierPartie(dernier.partie.id);
   };
 }

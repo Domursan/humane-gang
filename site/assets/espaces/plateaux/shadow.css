@@ -360,13 +360,10 @@
 @keyframes shAnimMonte { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.7); } 20% { opacity: 1; transform: translate(-50%, 0) scale(1.1); } 100% { opacity: 0; transform: translate(-50%, -60px) scale(1); } }
 .sh-anim-rate { position: fixed; z-index: 9001; pointer-events: none; transform: translate(-50%, -50%) rotate(-10deg) scale(2); opacity: 0; font: 900 22px Inter, sans-serif; color: #CFCFCF; border: 3px solid #CFCFCF; border-radius: 8px; padding: 2px 12px; background: rgba(10, 10, 14, .8); letter-spacing: .08em; animation: shAnimTampon .5s ease forwards; }
 @keyframes shAnimTampon { to { opacity: 1; transform: translate(-50%, -50%) rotate(-10deg) scale(1); } }
-.sh-anim-banc { position: fixed; left: 50%; top: 70%; transform: translate(-50%, -50%) scale(.5); opacity: 0; z-index: 9002; pointer-events: none; white-space: nowrap; font: 400 clamp(26px, 4.5vw, 52px) 'Archivo Black', Inter, sans-serif; color: #fff; text-shadow: 0 4px 0 rgba(0, 0, 0, .6), 0 0 30px rgba(226, 199, 126, .9); animation: shAnimBanc 2.6s cubic-bezier(.2, 1.4, .4, 1) forwards; }
-.sh-anim-banc small { display: block; text-align: center; font: 700 15px Inter, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
-@keyframes shAnimBanc { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.5) rotate(-6deg); } 20% { opacity: 1; transform: translate(-50%, -50%) scale(1.06) rotate(-2deg); } 35% { transform: translate(-50%, -50%) scale(1) rotate(-2deg); } 85% { opacity: 1; } 100% { opacity: 0; } }
-.sh-anim-conf { position: fixed; top: -10px; width: 8px; height: 14px; z-index: 8999; pointer-events: none; animation: shAnimTombe linear forwards; }
-@keyframes shAnimTombe { to { transform: translateY(105vh) rotate(720deg); } }
+/* Bandeau de fin (commun/effets-duels.js, fxd-ban) : le titre du camp, en Cinzel. Il passe à la ligne sur téléphone. */
+.fxd-ban.sh-ban-fin { font-family: Cinzel, serif; font-weight: 700; }
 
 body.plat-calme .sh-table *, body.plat-calme .sh-table *::before, body.plat-calme .sh-table *::after { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) {
-  .sh-anim-sang, .sh-anim-rate, .sh-anim-banc, .sh-anim-conf { display: none; }
+  .sh-anim-sang, .sh-anim-rate { display: none; }
 }

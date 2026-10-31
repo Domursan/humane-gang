@@ -2,16 +2,20 @@
 /*
  * Rôle : HTML de l'encart de fin du Monopoly : classement par fortune (argent, terrains, maisons)
  *   et titres de chacun, groupés par couleur. Le classement général et les récompenses sont à part (écran commun).
- *   Fin vécue en direct (la table vient de se fermer sur cette partie, voir effets.js) : bandeau « Partie terminée »,
- *   confettis (CSS seulement, sans mouvement réduit) et son « Victoire ». Une seule fois : la fin consommée ne rejoue pas.
- * Dépendances : core.js (esc, initials), ../../api.js (nomDe), commun/sons-jeux.js (jouerSonJeu), ./effets.js (finEnDirect, mouvementOk).
+ *   Fin vécue en direct (la table vient de se fermer sur cette partie, voir effets.js) : pour le gagnant, bandeau « Partie
+ *   terminée », confettis (CSS seulement, sans mouvement réduit) et son « Victoire » ; pour les autres, bandeau sobre « Partie
+ *   perdue » et S02 (MP1) ; pour un joueur parti, bandeau neutre et S04. Une seule fois : la fin consommée ne rejoue pas.
+ * Dépendances : core.js (esc, initials), ../../api.js (nomDe), commun/sons-jeux.js (jouerSonJeu), commun/effets-duels.js (anime, son),
+ *   ../../vues/fin-fx.js (fxFin, gagnantsDe, issuePlateau), ./effets.js (finEnDirect) ; styles : ../../monopoly.css (classes mo-fin, mo-classe…).
  * Exporte : recap(etat, contenus) -> HTML (chaîne).
  *   La fortune vient de etat.jeu.fortunes[user_id] (sinon de joueur.etat.fortune). Les titres viennent de etat.jeu.proprietes.
  */
 import { esc, initials } from '../../../../commun/core.js';
 import { nomDe } from '../../api.js';
 import { jouerSonJeu } from '../../../../commun/sons-jeux.js';
-import { finEnDirect, mouvementOk } from './effets.js';
+import { anime as finAnimee, son } from '../../../../commun/effets-duels.js';
+import { fxFin, gagnantsDe, issuePlateau } from '../../vues/fin-fx.js';
+import { finEnDirect } from './effets.js';
 
 const JEU = 'monopoly';
 const EUR = (n) => `${Math.round(Number(n) || 0).toLocaleString('fr-FR')} €`;
@@ -34,6 +38,34 @@ function feteHtml() {
     <div class="mo-fete-banc">Partie terminée<small>Le plus riche gagne</small></div>
     <div class="mo-fete-confettis">${confettis}</div>
   </div>`;
+}
+
+/** « Alice est la plus riche » ; deux gagnants à égalité : « Alice et Bruno sont les plus riches ». */
+function ligneFin(etat) {
+  const g = gagnantsDe(etat.joueurs || []).map((j) => j.pseudo);
+  if (!g.length) return '';
+  return g.length > 1 ? `${g.slice(0, -1).join(', ')} et ${g[g.length - 1]} sont les plus riches` : `${g[0]} est la plus riche`;
+}
+
+/**
+ * Effets d'une fin vue en direct. Son et bandeau sobre partent d'ici ; la fête du gagnant est dans le HTML de l'encart.
+ * @param {object} etat état final de la partie.
+ * @returns {string} HTML de la fête, vide si elle n'est pas pour moi.
+ */
+function effetsFin(etat) {
+  const issue = issuePlateau(etat);
+  if (issue === 'gagnant') {
+    jouerSonJeu(JEU, 5);
+    return finAnimee() ? feteHtml() : '';
+  }
+  if (issue === 'perdant') {
+    son('S02');
+    fxFin.bandeau('Partie perdue', ligneFin(etat), { ton: 'd' });
+  } else if (issue) {
+    son('S04');
+    fxFin.bandeau('Partie terminée', ligneFin(etat), { ton: 'n' });
+  }
+  return '';
 }
 
 /** Fortune d'un joueur : d'après jeu.fortunes, sinon d'après son état. */
@@ -76,10 +108,8 @@ function classement(etat) {
  */
 export function recap(etat, contenus) {
   const liste = classement(etat);
-  // Fin en direct : une seule fois (finEnDirect consomme le signal), son et bandeau si le mouvement est permis.
-  const enDirect = finEnDirect(etat?.partie?.id);
-  if (enDirect) jouerSonJeu(JEU, 5);
-  const fete = enDirect && mouvementOk() ? feteHtml() : '';
+  // Fin en direct : une seule fois (finEnDirect consomme le signal).
+  const fete = finEnDirect(etat?.partie?.id) ? effetsFin(etat) : '';
   if (!liste.length) return fete;
   const lignes = liste.map(({ j, fortune }, i) => {
     const titres = titresDe(etat, contenus, j.user_id);
@@ -90,7 +120,7 @@ export function recap(etat, contenus) {
       `<span class="mo-titre-info">${t.maisons >= 5 ? 'hôtel' : t.maisons ? `${t.maisons} maison${t.maisons > 1 ? 's' : ''}` : ''}${t.hypo ? ' · hypothèque' : ''}</span></li>`
     )).join('');
     const etiquettes = [j.elimine ? '<span class="mo-etiquette">ruiné</span>' : '', j.invite ? '<span class="mo-etiquette">invité</span>' : ''].join('');
-    return `<li class="mo-classe${j.elimine ? ' is-elimine' : ''}">
+    return `<li class="mo-classe${j.gagne ? ' is-gagnant' : ''}${j.elimine ? ' is-elimine' : ''}">
       <span class="mo-rang" aria-label="Rang ${i + 1}">${i + 1}</span>
       <span class="mo-classe-avatar" style="background:${esc(couleur)}" aria-hidden="true">${esc(initials(j.pseudo))}</span>
       <div class="mo-classe-corps">

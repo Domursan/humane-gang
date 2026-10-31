@@ -36,7 +36,6 @@
 .duels-p4 .duels-p4-valider.is-joue-fx { animation: duels-p4-pouls 1.2s ease-in-out 4; }
 .duels-p4-case.is-ligne-fx { animation: duels-p4-ligne 1.2s ease-in-out 3; }
 @keyframes duels-p4-ligne { 50% { box-shadow: 0 0 0 4px var(--sand), 0 0 30px rgba(226, 199, 126, .9); transform: scale(1.06); } }
-.duels-p4-fin-fx { animation: duels-p4-pouls 1.2s ease-in-out 4; }
 .duels-p4-bandeau { position: fixed; left: 50%; top: 72%; transform: translate(-50%, -50%) scale(.5); opacity: 0; z-index: 9000;
   pointer-events: none; white-space: nowrap; font: 400 clamp(30px, 5vw, 56px) var(--font-display, 'Archivo Black', sans-serif); color: #fff;
   text-shadow: 0 4px 0 rgba(0, 0, 0, .6), 0 0 30px rgba(226, 199, 126, .9);
@@ -55,11 +54,11 @@
 /* Mouvement réduit (préférence du site, ou de l'appareil) : les effets sont coupés, l'écran final s'affiche directement */
 body.duels-calme .duels-p4-jeton.is-chute, body.duels-calme .duels-p4 .duels-face-j.is-a-toi-fx,
 body.duels-calme .duels-p4 .duels-p4-colonne.is-libre-fx, body.duels-calme .duels-p4 .duels-p4-valider.is-joue-fx,
-body.duels-calme .duels-p4-case.is-ligne-fx, body.duels-calme .duels-p4-fin-fx { animation: none; }
+body.duels-calme .duels-p4-case.is-ligne-fx { animation: none; }
 body.duels-calme .duels-p4-bandeau, body.duels-calme .duels-p4-conf { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .duels-p4-jeton.is-chute, .duels-p4 .duels-face-j.is-a-toi-fx, .duels-p4 .duels-p4-colonne.is-libre-fx,
-  .duels-p4 .duels-p4-valider.is-joue-fx, .duels-p4-case.is-ligne-fx, .duels-p4-fin-fx { animation: none; }
+  .duels-p4 .duels-p4-valider.is-joue-fx, .duels-p4-case.is-ligne-fx { animation: none; }
   .duels-p4-bandeau, .duels-p4-conf { display: none; }
 }
 

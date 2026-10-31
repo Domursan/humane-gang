@@ -3,30 +3,47 @@
  * Rôle : HTML de l'encart de fin de Shadow Hunters, façon maquette shadow-s7 : grand titre du camp gagnant,
  *   une carte par personnage (portrait, camp, vivant ou mort, PV, victoire, gagnant), et le bilan de la partie.
  *   Le classement et les récompenses sont dans l'écran de fin commun (plateaux/vues/fin.js).
- *   Au passage, la victoire est jouée (bandeau, confettis, son) par ./effets.js, une seule fois, si la table a suivi la partie.
+ *   Au passage, la fin est jouée (bandeau au titre du camp, confettis pour les gagnants, son) par ./effets.js, une seule fois, si la table a suivi la partie.
  * Dépendances : core.js (esc), ../../api.js (nomDe), ../../vues/commun.js (imagePlateau),
- *   ./plateau.js (campDe, CAMP_LIBELLE, couleurCamp, PV_MAX, persoVisuelHtml), ./effets.js (jouerVictoire).
+ *   ./plateau.js (campDe, CAMP_LIBELLE, couleurCamp, PV_MAX, persoVisuelHtml), ./effets.js (jouerFin).
  * Exporte : recap(etat, contenus) -> HTML (chaîne).
  *   etat.joueurs[i] = { user_id, pseudo, elimine, gagne, etat: { revele, perso, camp, degats } } ;
- *   etat.partie.raison = 'hunters' | 'shadows' | 'neutre' (camp qui a gagné, fixé par le serveur).
+ *   Le titre vient de la liste réelle des gagnants et de leur camp, publics à la fin. etat.partie.raison ne suffit pas : le serveur y
+ *   met 'hunters' même si les Shadows gagnent aussi, et 'neutre' pour un ou plusieurs Neutres (migration 127).
  */
 import { esc } from '../../../../commun/core.js';
 import { nomDe } from '../../api.js';
 import { imagePlateau } from '../../vues/commun.js';
 import { campDe, CAMP_LIBELLE, couleurCamp, PV_MAX, persoVisuelHtml } from './plateau.js';
-import { jouerVictoire } from './effets.js';
+import { jouerFin } from './effets.js';
 
-/** Titre et couleur du camp qui a gagné la partie (fixés par le serveur). */
+/** Titres et couleurs de la fin de partie. */
 const ISSUE = {
+  deux: { titre: 'Hunters et Shadows gagnent', couleur: '#E2C77E' },
   hunters: { titre: 'Les Hunters gagnent', couleur: '#7FA3D6' },
   shadows: { titre: 'Les Shadows gagnent', couleur: '#E0909A' },
   neutre: { titre: 'Un Neutre gagne seul', couleur: '#E2C77E' },
+  neutres: { titre: 'Des Neutres gagnent', couleur: '#E2C77E' },
+  inconnue: { titre: 'Les personnages', bandeau: 'Partie terminée', couleur: '#B7C4DA' },
 };
+
+/** Issue d'après les gagnants réels : un camp qui gagne prime sur les Neutres qui gagnent avec lui, montrés sur leur carte. */
+function issueDe(etat) {
+  const camps = (etat?.joueurs || []).filter((j) => j.gagne).map((j) => j.etat?.camp || campDe(j.etat?.perso));
+  const hunters = camps.includes('hunter');
+  const shadows = camps.includes('shadow');
+  if (hunters && shadows) return ISSUE.deux;
+  if (hunters) return ISSUE.hunters;
+  if (shadows) return ISSUE.shadows;
+  const neutres = camps.filter((c) => c === 'neutre').length;
+  if (!neutres) return ISSUE.inconnue;
+  return neutres > 1 ? ISSUE.neutres : ISSUE.neutre;
+}
 
 /** Encart de fin : grand titre, une carte par personnage, bilan. */
 export function recap(etat, contenus) {
-  try { jouerVictoire(etat); } catch (err) { console.warn('[shadow] victoire', err); }
-  const issue = ISSUE[etat?.partie?.raison] || { titre: 'Les personnages', couleur: '#B7C4DA' };
+  const issue = issueDe(etat);
+  try { jouerFin(etat, issue.bandeau || issue.titre, issue.couleur); } catch (err) { console.warn('[shadow] fin', err); }
   const vivants = (etat?.joueurs || []).filter((j) => !j.parti);
   const cartes = vivants.map((j, i) => {
     const s = j.etat || {};

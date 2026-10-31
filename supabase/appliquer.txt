@@ -47,3 +47,5 @@ supabase/migrations/180_adrep_carte_mystere.sql
 supabase/migrations/181_jeux_gain_affiche.sql
 supabase/migrations/182_arcade_prises.sql
 supabase/migrations/183_jeux_programme.sql
+supabase/migrations/184_jeux_programme_jour.sql
+supabase/migrations/185_duel_coups_manques.sql

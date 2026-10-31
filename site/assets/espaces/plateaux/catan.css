@@ -161,6 +161,9 @@ circle.ct-zone { stroke-width: 0; }   /* sans contour : la zone reste celle du r
 @keyframes ct-lance { 0% { transform: rotate(0deg); } 70% { transform: rotate(540deg); } 100% { transform: rotate(720deg); } }
 .ct-table .ct-produit { animation: ct-produit 1.2s ease-in-out 2; }
 @keyframes ct-produit { 50% { filter: brightness(1.35); stroke: #FFF6DA; stroke-width: .14px; } }
+/* Fin de partie (CT1) : chaque tuile s'allume une fois, l'une après l'autre (avantFin de table.js ; rien sans animation). */
+.ct-table .ct-tuile-fin { animation: ct-tuile-fin .8s ease-in-out both; }
+@keyframes ct-tuile-fin { 50% { filter: brightness(1.35); stroke: #FFF6DA; stroke-width: .14px; } }
 .ct-table .ct-neuf { animation: ct-neuf .6s ease-out; transform-box: fill-box; transform-origin: center; }
 .ct-table .ct-route.ct-neuf, .ct-table .ct-route-fond.ct-neuf { animation-name: ct-neuf-trait; }
 @keyframes ct-neuf { 0% { opacity: 0; transform: scale(.3); } 100% { opacity: 1; transform: scale(1); } }

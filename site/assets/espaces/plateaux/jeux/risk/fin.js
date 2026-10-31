@@ -6,12 +6,12 @@
  * Exporte : recap(etat, contenus) -> HTML (chaîne).
  *   etat.joueurs[i] = { user_id, pseudo, etat: {armee}, gagne, elimine } ; etat.jeu.territoires = {id: {j, a}} ;
  *   etat.jeu.missions_fin = {user_id: {id, type, cible}} ; etat.partie.raison = 'mission' | 'monde' (autres : fin anticipée).
- *   Effet de victoire (bandeau, confettis, son) : ./effets.js (victoireFin), déclenché ici seulement si la partie a été vue en cours.
- * Dépendances (ajout) : ./effets.js (victoireFin).
+ *   Effets de fin (la fête du gagnant, le bandeau sobre du perdant) : ./effets.js (jouerFin), déclenchés ici seulement si la partie a été vue en cours.
+ * Dépendances (ajout) : ./effets.js (jouerFin).
  */
 import { esc } from '../../../../commun/core.js';
 import { avatarHtml } from '../../vues/commun.js';
-import { victoireFin } from './effets.js';
+import { jouerFin } from './effets.js';
 
 /** Armée (nom et couleur) d'un joueur, d'après ses contenus. */
 function armeeDe(etat, contenus, uid) {
@@ -21,7 +21,7 @@ function armeeDe(etat, contenus, uid) {
 
 /** Encart de fin de partie (vainqueur, missions, carte finale en chiffres). */
 export function recap(etat, contenus) {
-  try { victoireFin(etat); } catch (err) { console.warn('[risk] victoire', err); }
+  try { jouerFin(etat); } catch (err) { console.warn('[risk] fin', err); }
   const joueurs = etat?.joueurs || [];
   const jeu = etat?.jeu || {};
   const raison = etat?.partie?.raison;

@@ -5,7 +5,7 @@
  * Suit la préférence « Sons des jeux » (sonTour, active par défaut) et le volume des préférences ; jamais avant un geste
  * de l'utilisateur (le navigateur l'exige) ; silencieux si WebAudio manque. Anti-rafale : un même son 60 ms au plus.
  * Dépendances : aucune (lit localStorage « hg_prefs »).
- * Exporte : jouerSonJeu, reveillerSons, sonsPrets, SONS_JEUX (liste par jeu : numéro → nom ; « quotidien » : codes de effets-jour.js ; « uno » : UN1 à UN14, joués par espaces/uno).
+ * Exporte : jouerSonJeu, reveillerSons, sonsPrets, SONS_JEUX (liste par jeu : numéro → nom ; « quotidien » : codes de effets-jour.js ; « uno » : UN1 à UN14, joués par espaces/uno ; « duels » : S01 à S20, duels, plateaux et salles, voir commun/effets-duels.js).
  */
 let A = null; let M = null; const dernier = {};
 function prefs() {
@@ -297,6 +297,28 @@ const SONS = {
     UN13: () => { bruit(0, .05, 1300, .7, 1.2); note(120, 0, .14, { vol: .26, f2: 60 }); arpege([659, 880, 1109, 1319], .07, .34); cloche(1760, .3, .9, .08); }, // Main vide
     UN14: () => { [392, 523, 659].forEach((f, i) => { note(f / 4, i * .42, .16, { type: 'triangle', vol: .2, f2: f / 6 }); note(f, i * .42, .28, { type: 'triangle', vol: .14 }); }); [523, 659, 784, 1047].forEach((f) => { note(f, 1.26, .7, { type: 'triangle', vol: .08 }); }); cloche(1319, 1.26, 1, .09); }, // Podium
   },
+  'duels': { // Duels, plateaux et salles : codes de la maquette validée (S01 à S20)
+    S01: () => { arpege([523, 659, 784, 1047], .1, .5, .15); cloche(1319, .42, 1, .11); }, // Victoire de plateau
+    S02: () => { note(392, 0, .32, { type: 'triangle', vol: .13 }); note(311, .26, .7, { type: 'triangle', vol: .13, f2: 294 }); }, // Défaite de plateau
+    S03: () => { [523, 659, 880].forEach((f, i) => cloche(f, i * .26, .7, .12)); }, // Podium
+    S04: () => { cloche(659, 0, 1.1, .14); }, // Fin neutre
+    S05: () => { [0, .12, .24].forEach((t) => { bruit(t, .05, 2500, .5, 1.4); note(1200, t, .06, { type: 'triangle', vol: .06 }); }); }, // Accent Blackjack
+    S06: () => { [0, .1, .2, .3].forEach((t) => { bruit(t, .05, 2500, .5, 1.4); note(1200, t, .06, { type: 'triangle', vol: .06 }); }); }, // Accent Poker
+    S07: () => { note(784, 0, .25, { type: 'triangle', vol: .14 }); note(1047, .18, .4, { type: 'triangle', vol: .14 }); }, // Accent Catan
+    S08: () => { arpege([659, 784, 1047], .1, .45, .16); }, // Accent Pictionary
+    S09: () => { bruit(0, .25, 1800, .12, .7); note(523, .03, .16, { type: 'triangle', vol: .13 }); note(659, .17, .4, { type: 'triangle', vol: .13 }); }, // Abandon adverse
+    S10: () => { note(330, 0, .4, { vol: .1, f2: 247 }); }, // J’abandonne
+    S11: () => { cloche(392, 0, .9, .12); note(294, .3, .6, { type: 'triangle', vol: .1 }); }, // Forfait
+    S12: () => { note(880, 0, .08, { type: 'square', vol: .05 }); note(660, .1, .16, { type: 'square', vol: .05 }); }, // Temps écoulé
+    S13: () => { note(523, 0, .2, { type: 'triangle', vol: .1 }); note(440, .2, .4, { type: 'triangle', vol: .1 }); }, // Défi sans réponse
+    S14: () => { bruit(0, .018, 3200, .18, 2.5, 'highpass'); note(1250, 0, .04, { type: 'square', vol: .035 }); }, // Tic d’alerte
+    S15: () => { note(1250, 0, .05, { type: 'square', vol: .05 }); note(1568, .06, .1, { type: 'square', vol: .05 }); }, // Dernier tic
+    S16: () => { [392, 330, 262].forEach((f, i) => note(f, i * .2, .45, { type: 'triangle', vol: .12 })); }, // Défaite de duel
+    S17: () => { note(600, 0, .12, { type: 'square', vol: .07 }); note(600, .18, .12, { type: 'square', vol: .07 }); }, // Nulle
+    S18: () => { bruit(0, .05, 2600, .25, 1.5); note(660, .02, .08, { type: 'triangle', vol: .1 }); note(880, .08, .14, { type: 'triangle', vol: .1 }); }, // Joueur rejoint
+    S19: () => { cloche(784, 0, .7, .1); cloche(1175, .12, .6, .07); }, // Tout le monde prêt
+    S20: () => { arpege([523, 659, 784, 1047], .07, .22, .07, 'square'); cloche(1568, .3, .9, .1); }, // Départ
+  },
 };
 /** Noms des sons (pour les réglages et la documentation). */
 export const SONS_JEUX = {
@@ -561,6 +583,28 @@ export const SONS_JEUX = {
   "UN12": "Défi perdu",
   "UN13": "Main vide",
   "UN14": "Podium"
+ },
+ "duels": {
+  "S01": "Victoire de plateau",
+  "S02": "Défaite de plateau",
+  "S03": "Podium",
+  "S04": "Fin neutre",
+  "S05": "Accent Blackjack",
+  "S06": "Accent Poker",
+  "S07": "Accent Catan",
+  "S08": "Accent Pictionary",
+  "S09": "Abandon adverse",
+  "S10": "J’abandonne",
+  "S11": "Forfait",
+  "S12": "Temps écoulé",
+  "S13": "Défi sans réponse",
+  "S14": "Tic d’alerte",
+  "S15": "Dernier tic",
+  "S16": "Défaite de duel",
+  "S17": "Nulle",
+  "S18": "Joueur rejoint",
+  "S19": "Tout le monde prêt",
+  "S20": "Départ"
  }
 };
 

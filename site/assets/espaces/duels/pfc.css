@@ -114,3 +114,11 @@
 body.duels-calme .duels-face-j.duels-pfc-fx-tour, body.duels-calme .duels-pfc-geste.duels-pfc-fx-leve,
 body.duels-calme .duels-pfc-cartes .duels-pfc-face.duels-pfc-fx-gagnant, body.duels-calme .duels-pfc-cartes .duels-pfc-face.duels-pfc-fx-secoue,
 body.duels-calme .duels-pfc-fx-ban.is-anime { animation: none; }
+
+/* PC1 : les mains du dernier lancer sur l'écran de fin (perdant en direct). L'état final vaut sans animation : ma main reste affaissée. */
+.duels-pfc-finmains { margin-bottom: 14px; }
+.duels-pfc-finmains .is-gauche .duels-pfc-svg { filter: grayscale(1); opacity: .6; transform: translateY(8px) rotate(-14deg); }
+.duels-pfc-finmains.is-anime .is-gauche .duels-pfc-svg { animation: duels-pfc-baisse .6s .1s both; }
+@keyframes duels-pfc-baisse { from { transform: none; filter: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .duels-pfc-finmains.is-anime .is-gauche .duels-pfc-svg { animation: none; } }
+body.duels-calme .duels-pfc-finmains.is-anime .is-gauche .duels-pfc-svg { animation: none; }

@@ -1,17 +1,33 @@
 // ===== Humane Gang — Catan du gang : encart de fin (plateaux/jeux/catan/fin.js) =====
 /*
- * Rôle : encart de fin de Catan du gang : le bilan de chacun (points, colonies, villes, routes, cartes restantes).
+ * Rôle : encart de fin de Catan du gang : le bilan de chacun, au vrai rang (points, colonies, villes, routes, cartes restantes).
  *   Le classement et les récompenses sont à part, dans l'écran de fin commun (plateaux/vues/fin.js).
- * Dépendances : core.js (esc).
- * Exporte : recap(etat) -> HTML (chaîne).
+ *   finFx : couleurs et textes de la fin de Catan (CT1, PV1 à PV3).
+ * Dépendances : core.js (esc), commun/effets-duels.js (PALETTES), ../../vues/fin-fx.js (rangReel).
+ * Exporte : recap(etat) -> HTML (chaîne) ; finFx (voir vues/fin.js).
  *   etat.joueurs[i].etat = { points, colonies, villes, routes, cartes, rang } ; etat.jeu.objectif (10 ou 8).
  */
 import { esc } from '../../../../commun/core.js';
+import { PALETTES } from '../../../../commun/effets-duels.js';
+import { rangReel } from '../../vues/fin-fx.js';
 
 /** Couleur de profil sûre (sinon crème). */
 const couleurDe = (j) => (/^#[0-9a-f]{6}$/i.test(j?.couleur || '') ? j.couleur : '#F2EFEA');
 /** Pluriel simple : « 1 ville », « 2 villes ». */
 const nombre = (n, mot, pluriel) => `${n} ${n > 1 ? pluriel : mot}`;
+
+/** Points d'un joueur en toutes lettres. */
+const pointsDe = (j) => nombre(Number(j?.etat?.points) || 0, 'point', 'points');
+
+/** Fin de Catan : accent S07, confettis aux couleurs des terrains. */
+export const finFx = {
+  ac: 'S07',
+  c: '#E8B04B',
+  conf: PALETTES.ct,
+  ligne: (e) => pointsDe((e.joueurs || []).find((j) => j.user_id === e.moi?.user_id)),
+  mesure: (j) => pointsDe(j),
+  perdu: (j) => `à ${pointsDe(j)}`,
+};
 
 /**
  * Encart de fin : bilan de chaque joueur, du premier au dernier.
@@ -22,7 +38,7 @@ export function recap(etat) {
   const joueurs = (etat?.joueurs || []).filter((j) => !j.parti).map((j) => {
     const e = j.etat || {};
     return { j, points: Number(e.points) || 0, colonies: Number(e.colonies) || 0, villes: Number(e.villes) || 0,
-      routes: Number(e.routes) || 0, cartes: Number(e.cartes) || 0, rang: Number(e.rang ?? j.rang) || null };
+      routes: Number(e.routes) || 0, cartes: Number(e.cartes) || 0, rang: Number(rangReel(j)) || null };
   }).sort((a, b) => (a.rang ?? 99) - (b.rang ?? 99) || b.points - a.points);
 
   const lignes = joueurs.map(({ j, points, colonies, villes, routes, cartes, rang }, i) => {

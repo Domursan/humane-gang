@@ -108,13 +108,16 @@
 @keyframes mm-fx-gagne { 50% { box-shadow: inset 0 0 0 2px #E2C77E, 0 0 26px rgba(226, 199, 126, .7); scale: 1.02; } }
 .duels-fin-joueur.mm-fx-fin { animation: mm-fx-fin 1.2s ease-in-out 4; }
 @keyframes mm-fx-fin { 50% { box-shadow: 0 0 0 3px #E2C77E, 0 0 26px rgba(226, 199, 126, .7); } }
+/* MM1, MM3 : les codes de l'écran de fin se révèlent pion par pion */
+.duels-fin-pastille.mm-fx-saut { animation: mm-fx-saut .45s cubic-bezier(.2, 1.5, .4, 1) both; }
+@keyframes mm-fx-saut { from { transform: scale(.2); opacity: 0; } }
 
 body.duels-calme .mm-fx-ban, body.duels-calme .mm-fx-conf { display: none; }
 body.duels-calme .duels-mm .mm-fx-joue, body.duels-calme .duels-mm .mm-rangee.mm-fx-libre, body.duels-calme .duels-mm .mm-palette.mm-fx-palette,
 body.duels-calme .duels-mm .mm-case-btn.mm-fx-pose, body.duels-calme .duels-mm .mm-fb.mm-fx-pop, body.duels-calme .duels-mm .mm-rangee.mm-fx-gagne,
-body.duels-calme .duels-fin-joueur.mm-fx-fin { animation: none; }
+body.duels-calme .duels-fin-joueur.mm-fx-fin, body.duels-calme .duels-fin-pastille.mm-fx-saut { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   .mm-fx-ban, .mm-fx-conf { display: none; }
   .duels-mm .mm-fx-joue, .duels-mm .mm-rangee.mm-fx-libre, .duels-mm .mm-palette.mm-fx-palette, .duels-mm .mm-case-btn.mm-fx-pose,
-  .duels-mm .mm-fb.mm-fx-pop, .duels-mm .mm-rangee.mm-fx-gagne, .duels-fin-joueur.mm-fx-fin { animation: none; }
+  .duels-mm .mm-fb.mm-fx-pop, .duels-mm .mm-rangee.mm-fx-gagne, .duels-fin-joueur.mm-fx-fin, .duels-fin-pastille.mm-fx-saut { animation: none; }
 }

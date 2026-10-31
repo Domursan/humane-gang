@@ -81,7 +81,7 @@ const dernierRpc = async (p, fn) => (await log(p)).filter((e) => e[0] === 'rpc' 
   // ----- Partie terminée : une carte par joueur -----
   p = await openPage(browser, { page: 'blackjack', fixture: FIX, scenario: { jeu: 'blackjack', fin: true }, hash: '#partie/HGBJK-1234', width: 1280, height: 900 });
   await p.waitForSelector('.bf-carte', { timeout: 6000 }).catch(() => {});
-  check((await p.locator('.plat-fin h1').innerText()) === 'Partie terminée', 'fin : titre « Partie terminée »');
+  check((await p.locator('.plat-fin h1').innerText()) === 'Défaite', 'fin : titre « Défaite », je ne gagne pas');
   check((await p.locator('.bf-carte').count()) === 3, 'fin : une carte par joueur (trois)');
   check((await p.locator('.bf-carte.is-gagnant').innerText()).includes('Alice'), 'fin : Alice, première avec 1 225 jetons, est gagnante');
   check((await p.locator('.bf-carte').first().textContent()).includes('1er'), 'fin : rang « 1er » en tête');

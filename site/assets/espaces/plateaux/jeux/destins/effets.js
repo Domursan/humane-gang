@@ -5,7 +5,7 @@
  *     ainsi que le bouton « Tourner la roue » (s'il est actif), la petite roue et le panneau d'action (cadre doré).
  *     Le son « Pièce arcade » et le titre d'onglet viennent déjà de commun/tour-signal.js : ils ne sont pas repris ici ;
  *   - fin de partie : la table est démontée quand la partie se termine (vues/partie.js), c'est l'encart de fin (fin.js) qui
- *     affiche alors le bandeau « Victoire ! » et les confettis. Il ne les montre que si la table a vu la partie en cours dans
+ *     affiche alors le bandeau et, pour le gagnant, les confettis. Il ne les montre que si la table a vu la partie en cours dans
  *     cette page (marquerEnCours / avaitEnCours) : ouvrir une partie déjà finie ne rejoue rien.
  * Le premier état reçu n'anime rien, et un tour déjà annoncé ne rejoue pas. Mouvement réduit (body.plat-calme) : pas
  * d'animation (le son de fin reste joué par fin.js). Les classes sont retirées après leur durée (moins de 3 s), les

@@ -14,10 +14,13 @@
  *   mon tour commence : mon nom pulse, la zone des questions s'éclaire, et la bulle « À toi de demander ? » si je pose la question ;
  *   personnages nouvellement baissés : ils basculent (dos « HG ») un à un ; question nouvelle : cloche (son 4) ; réponse
  *   arrivée : oui (son 2) ou non (son 3), la réponse rebondit dans l'historique ; manche gagnée par moi : bandeau
- *   « Personnage trouvé ! », son 5, confettis. Animations coupées par mouvement réduit (matchMedia), préférence « effets »
+ *   « Personnage trouvé ! », son 5, confettis ; défaite vue en direct (QE1, effetsFin) : mon portrait de l'écran de fin est désigné,
+ *   puis son « non » (S39), S16 et bandeau sobre, d'après la vraie dernière ligne « devine » du journal (une mauvaise proposition
+ *   de ma part ne désigne rien). Animations coupées par mouvement réduit (matchMedia), préférence « effets »
  *   ou body.duels-calme ; les sons restent. Le signal « à toi de jouer » (son + titre) reste celui du cadre (commun/tour-signal.js).
  * Dépendances : core.js (esc, toast, motionAllowed), ../api.js (duel, erreurTexte), ./commun.js (creerCadre, nomJoueur, deNom),
- *   ./portrait.js (portraitSvg : SVG viewBox 100 × 120 d'après les attributs), ../../../commun/sons-jeux.js (jouerSonJeu).
+ *   ./portrait.js (portraitSvg : SVG viewBox 100 × 120 d'après les attributs), ../../../commun/sons-jeux.js (jouerSonJeu),
+ *   ../../../commun/effets-duels.js (anime, son), ./fin-fx.js.
  * Exporte : creer, effetsFin (fin de duel, via ./fin-fx.js).
  */
 import { esc, toast, motionAllowed } from '../../../commun/core.js';
@@ -27,7 +30,8 @@ import { boutonReponses } from '../../../commun/core/admin-reponses.js';
 import { portraitSvg } from './portrait.js';
 import { voisinSpatial } from '../../../commun/grille-clavier.js';
 import { jouerSonJeu } from '../../../commun/sons-jeux.js';
-import { vuEnCours, effetsFinDuel } from './fin-fx.js';
+import { anime as animePermis, son as sonDuels } from '../../../commun/effets-duels.js';
+import { vuEnCours, effetsFinDuel, fxFin } from './fin-fx.js';
 
 const DELAI_ENVOI = 600;
 const ANNONCE_MS = 6000;
@@ -40,6 +44,11 @@ const DUREE_TOUR = 2400;      // « à toi » : pulsation de mon nom et zone des
 const DUREE_BULLE = 2600;     // bulle « À toi de demander ? »
 const DUREE_BANDEAU = 2300;   // bandeau « Personnage trouvé ! »
 const DECALAGE_BASC = 120;    // retard entre deux portraits qui basculent (ms)
+/** Attente des portraits de l'écran de fin : fin.js les charge après son premier rendu (nombre d'essais, écart en ms). */
+const ESSAIS_PORTRAIT = 25;
+const PAS_PORTRAIT = 60;
+/** Parties (ids) où mon portrait a été désigné : fin.js redessine son bloc à chaque état, effetsFin le redésigne, sans animation. */
+const DESIGNES = new Set();
 const COULEURS_CONFETTI = ['#FE3104', '#FCA301', '#FBD32D', '#159946', '#2B5AE2', '#4E2398', '#E2C77E'];
 /** Groupes des questions toutes prêtes ; les clés absentes d'ici vont dans « Autres ». */
 const GROUPES = [
@@ -659,11 +668,64 @@ export function creer(root, ctx) {
   };
 }
 
-/** Fin de duel vue en direct (appelé par vues/fin.js) : « Personnage trouvé ! », son, gagnant qui brille, confettis. */
+/**
+ * Dernière proposition de la partie, lue dans le journal (hg_duel__qec_deviner ; le journal arrive du plus récent au plus ancien).
+ * @returns {{trouve: boolean, prenom: string}|null} trouve : la proposition était juste ; prenom : le vrai personnage.
+ */
+function derniereProposition(e) {
+  const texte = String((e.journal || []).find((l) => l.type === 'devine')?.texte || '');
+  const juste = texte.match(/ pense que c'est (.+) : gagné !$/);
+  if (juste) return { trouve: true, prenom: juste[1] };
+  const fausse = texte.match(/ : perdu, c'était (.+)\.$/);
+  return fausse ? { trouve: false, prenom: fausse[1] } : null;
+}
+
+/** Désigne mon portrait sur l'écran de fin (ma carte, pas forcément la première). Rend false s'il n'est pas encore là. */
+function designer(root, e, vif) {
+  const c = root.querySelectorAll('.duels-fin-perso')[(e.joueurs || []).findIndex((j) => j.user_id === e.moi?.user_id)];
+  if (!c) return false;
+  c.classList.add('qec-fx-trouve');
+  if (vif) fxFin.classe(c, 'fxd-secoue', 500);
+  return true;
+}
+
+/**
+ * QE1 : défaite vue en direct. L'adversaire a trouvé : mon portrait est désigné, puis S39, S16 et bandeau. J'ai proposé le mauvais
+ * personnage : personne n'a deviné le mien, rien à désigner ; mêmes sons, bandeau qui dit le vrai.
+ */
+function defaite(root, e) {
+  const adv = (e.joueurs || []).find((j) => j.user_id !== e.moi?.user_id);
+  const nom = adv?.robot ? 'Le robot' : (adv?.pseudo || 'Ton adversaire');
+  const prop = derniereProposition(e);
+  const texte = !prop ? ['Duel perdu', `${nom} gagne le duel`]
+    : prop.trouve ? ['Personnage découvert', `${nom} a deviné ${prop.prenom}`] : ['Duel perdu', `C’était ${prop.prenom}`];
+  const suite = () => {
+    jouerSonJeu(SON, 3);
+    fxFin.plus(() => {
+      sonDuels('S16');
+      fxFin.plus(() => fxFin.bandeau(texte[0], texte[1], { ton: 'd' }), 300);
+    }, 400);
+  };
+  if (!prop?.trouve) { suite(); return; }
+  const id = e.partie?.id;
+  if (id) DESIGNES.add(id);
+  const tenter = (n) => {
+    if (designer(root, e, animePermis()) || !n) suite();
+    else fxFin.plus(() => tenter(n - 1), PAS_PORTRAIT);
+  };
+  tenter(root.querySelector('[data-grille]')?.hidden ? 0 : ESSAIS_PORTRAIT);   // invité : pas de portraits
+}
+
+/** Fin de duel vue en direct (appelé par vues/fin.js à chaque état) : gagnant : « Personnage trouvé ! », son, brillance, confettis ;
+ *  perdant : QE1. son() n'est appelé qu'une fois, partie vue en direct : c'est là que part l'effet. */
 export function effetsFin(root, e) {
+  if (DESIGNES.has(e.partie?.id)) designer(root, e, false);
   effetsFinDuel(root, e, {
-    jeu: 'qui-est-ce',
-    son: (issue) => (issue === 'gagnant' ? 5 : null),
+    jeu: SON,
+    son: (issue) => {
+      if (issue === 'perdant') defaite(root, e);
+      return issue === 'gagnant' ? 5 : null;
+    },
     titre: (issue) => (issue === 'gagnant' ? ['Personnage trouvé !', 'Duel gagné'] : null),
   });
 }

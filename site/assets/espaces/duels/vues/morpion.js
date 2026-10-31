@@ -12,8 +12,12 @@
  *   « Manche gagnée ! » avec le score, et confettis pour le gagnant (son 2 ; perdant : son 3 ; nulle : son 4). Le premier état
  *   reçu n'anime rien. Coupés par mouvement réduit (body.duels-calme ou prefers-reduced-motion), sauf les sons.
  *   Le signal « à toi de jouer » (son + titre d'onglet) reste celui du cadre (commun/tour-signal.js).
+ *   Fin de duel (effetsFin, sur la petite grille de vues/fin.js, la table n'est plus affichée) : gagnant fêté ; MR1, défaite : la
+ *   ligne adverse se trace en rose, mes marques s'éteignent, bandeau sobre ; MR2, nulle : une vague passe sur la grille, puis « = »,
+ *   bandeau neutre, S17. Après l'effet, la vraie grille revient. Mouvement réduit : la grille reste telle quelle, les sons restent.
  * Dépendances : core.js (esc, toast, motionAllowed), ../api.js (duel, erreurTexte), ./commun.js (creerCadre, nomJoueur),
- *   ../../../commun/grille-clavier.js, ../../../commun/sons-jeux.js (jouerSonJeu).
+ *   ../../../commun/grille-clavier.js, ../../../commun/sons-jeux.js (jouerSonJeu), ../../../commun/effets-duels.js (anime),
+ *   ./fin-fx.js (vuEnCours, effetsFinDuel, fxFin).
  * Exporte : effetsFin (fin de duel, via ./fin-fx.js) ; creer(root, ctx) → { maj(etat), message(msg), detruire() } (contrat de vues/partie.js).
  */
 import { esc, toast, motionAllowed } from '../../../commun/core.js';
@@ -21,13 +25,15 @@ import { duel, erreurTexte } from '../api.js';
 import { creerCadre, nomJoueur } from './commun.js';
 import { voisinGrille } from '../../../commun/grille-clavier.js';
 import { jouerSonJeu } from '../../../commun/sons-jeux.js';
-import { vuEnCours, effetsFinDuel } from './fin-fx.js';
+import { anime } from '../../../commun/effets-duels.js';
+import { vuEnCours, effetsFinDuel, fxFin } from './fin-fx.js';
 
 const CROIX = '#6FB3F2';
 const ROND = '#E8B04B';
 const DUREE_RECAP = 3500;
 const DELAI_FIN = 450;    // bandeau, confettis et son de fin de manche : après le tracé de la ligne
 const DUREE_TOUR = 2600;  // pulsation de mon nom et éclairage des cases libres (moins de 3 s)
+const DUREE_FIN = 3400;   // effets de la grille de fin : la vraie grille revient ensuite, sous le bandeau déjà parti
 const SON_MARQUE = 1;     // son « marque posée (craie) » de la maquette
 const COULEURS_CONFETTI = ['#FE3104', '#FCA301', '#FBD32D', '#159946', '#2B5AE2', '#4E2398', '#E2C77E'];
 const POS = ['en haut à gauche', 'en haut', 'en haut à droite', 'à gauche', 'au centre', 'à droite',
@@ -44,9 +50,9 @@ const REGLES = {
     'Le dernier coup est marqué d’un point.'],
 };
 
-/** Marque d'une case : '1' croix bleue, '2' rond doré. anime : apparition animée (dernier coup). */
-function svgMarque(c, anime) {
-  const trace = anime ? ' is-trace' : '';
+/** Marque d'une case : '1' croix bleue, '2' rond doré. tracee : apparition animée (dernier coup). */
+function svgMarque(c, tracee) {
+  const trace = tracee ? ' is-trace' : '';
   return c === '1'
     // Deux traits séparés (et non un seul chemin à deux morceaux) : certains navigateurs ne traçaient que le premier.
     ? `<svg class="morpion-marque${trace}" viewBox="0 0 32 32" aria-hidden="true"><path d="M8 8L24 24" fill="none" stroke="${CROIX}" stroke-width="4" stroke-linecap="round"/><path d="M24 8L8 24" fill="none" stroke="${CROIX}" stroke-width="4" stroke-linecap="round"/></svg>`
@@ -455,15 +461,64 @@ export function creer(root, ctx) {
   };
 }
 
-/** Fin de duel vue en direct (appelé par vues/fin.js) : la dernière manche n'est plus jouée sur la table,
- *  donc son de victoire, défaite ou égalité, gagnant qui brille, bandeau « Duel gagné ! » et confettis pour le gagnant. */
+/** MR1 : la ligne adverse se trace en rose sur la petite grille, de sa première à sa dernière case, et mes marques s'éteignent. */
+function effetDefaite(root, e, ligne) {
+  const mini = root.querySelector('.duels-fin-mini');
+  if (!mini || !anime()) return;
+  const a = mini.querySelector(`[data-c="${Math.min(...ligne)}"]`);
+  const b = mini.querySelector(`[data-c="${Math.max(...ligne)}"]`);
+  if (ligne.length && a && b) {
+    const r = mini.getBoundingClientRect();
+    const pos = (el) => { const c = el.getBoundingClientRect(); return [(c.left + c.width / 2 - r.left) / r.width * 100, (c.top + c.height / 2 - r.top) / r.height * 100]; };
+    const [x1, y1] = pos(a).map((v) => v.toFixed(1));
+    const [x2, y2] = pos(b).map((v) => v.toFixed(1));
+    mini.insertAdjacentHTML('beforeend', `<svg class="fxd-trace" viewBox="0 0 100 100" aria-hidden="true"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"></line></svg>`);
+    const trace = mini.lastElementChild;
+    fxFin.plus(() => trace.remove(), DUREE_FIN);
+  }
+  const miennes = [...mini.querySelectorAll(`.duels-fin-marque[data-m="${Number(e.moi?.place)}"]`)];
+  miennes.forEach((m) => m.classList.add('fxd-eteint', 'fxd-bris'));
+  fxFin.rendre(miennes, ['fxd-eteint', 'fxd-bris'], DUREE_FIN);
+}
+
+/** MR2 : une vague parcourt la petite grille, qui s'éteint, puis un « = » s'y pose. */
+function effetNulle(root) {
+  const mini = root.querySelector('.duels-fin-mini');
+  if (!mini || !anime()) return;
+  const cases = [...mini.children].filter((c) => c.dataset.c !== undefined);
+  const pas = Math.min(70, 630 / Math.max(1, cases.length)); // le gomoku a 225 cases : même durée totale
+  cases.forEach((c, i) => { c.style.animationDelay = `${Math.round(i * pas)}ms`; c.classList.add('fxd-vague'); });
+  fxFin.plus(() => cases.forEach((c) => c.classList.add('fxd-eteint')), 750);
+  mini.insertAdjacentHTML('beforeend', '<span class="fxd-egal" aria-hidden="true">=</span>');
+  const egal = mini.lastElementChild;
+  fxFin.plus(() => egal.remove(), DUREE_FIN);
+  fxFin.rendre(cases, ['fxd-vague', 'fxd-eteint'], DUREE_FIN);
+}
+
+/** Fin de duel vue en direct (appelé par vues/fin.js) : la dernière manche n'est plus jouée sur la table. Gagnant : son, lueur,
+ *  bandeau « Duel gagné ! » et confettis. Perdant : MR1, S21 (son 3 du jeu). Nulle : MR2, S17. Spectateur : le gagnant brille. */
 export function effetsFin(root, e) {
   const js = e.joueurs || [];
-  const score = Number(e.partie?.format) > 1
+  const p = e.partie || {};
+  const score = Number(p.format) > 1
     ? `Score final ${js.find((j) => j.place === 1)?.manches ?? 0} – ${js.find((j) => j.place === 2)?.manches ?? 0}` : 'Le duel est terminé';
+  // son() n'est appelé que pour une fin vue en direct, une seule fois : il dit aussi si les effets de la grille doivent jouer.
+  let vue = null;
   effetsFinDuel(root, e, {
     jeu: 'morpion',
-    son: (issue) => ({ gagnant: 2, perdant: 3, nulle: 4 }[issue] || null),
-    titre: (issue) => (issue === 'gagnant' ? ['Duel gagné !', score] : issue === 'nulle' ? ['Match nul', score] : null),
+    son: (issue) => { vue = issue; return { gagnant: 2, perdant: 3, nulle: 'S17' }[issue] || null; },
+    titre: (issue) => (issue === 'gagnant' ? ['Duel gagné !', score] : null),
   });
+  const d = (p.historique || [])[(p.historique || []).length - 1] || null;
+  const quoi = p.variante === 'ultime' ? '3 grilles' : `${Number(p.n) || 3} marques`;
+  if (vue === 'perdant') {
+    const adv = js.find((j) => j.user_id !== e.moi?.user_id);
+    const ligne = d?.gagnant === adv?.user_id ? (d?.ligne || []).map(Number) : [];
+    effetDefaite(root, e, ligne);
+    const nom = adv?.robot ? 'Le robot' : adv?.pseudo || 'Ton adversaire';
+    fxFin.plus(() => fxFin.bandeau('Duel perdu', ligne.length ? `${nom} aligne ${quoi}` : score, { ton: 'd' }), DELAI_FIN);
+  } else if (vue === 'nulle') {
+    effetNulle(root);
+    fxFin.plus(() => fxFin.bandeau('Match nul', d && !d.gagnant ? `Personne n’aligne ${quoi}` : score, { ton: 'n' }), 1000);
+  }
 }

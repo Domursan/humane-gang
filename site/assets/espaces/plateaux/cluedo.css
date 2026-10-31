@@ -236,24 +236,8 @@ button.ch-room { font: inherit; }
   white-space: nowrap; pointer-events: none; animation: ch-anim-tampon .5s ease forwards; }
 @keyframes ch-anim-tampon { to { opacity: 1; transform: translate(-50%, -50%) rotate(-10deg) scale(1); } }
 
-/* Fin : bandeau « Enquête résolue » et confettis. */
-.ch-anim-ban { position: fixed; left: 50%; top: 70%; transform: translate(-50%, -50%) scale(.5); opacity: 0; z-index: 9002; pointer-events: none; white-space: nowrap;
-  font: 400 clamp(26px, 4.5vw, 52px) 'Archivo Black', Inter, sans-serif; color: #fff; text-shadow: 0 4px 0 rgba(0, 0, 0, .6), 0 0 30px rgba(226, 199, 126, .9);
-  animation: ch-anim-ban 2.6s cubic-bezier(.2, 1.4, .4, 1) forwards; }
-.ch-anim-ban small { display: block; text-align: center; font: 700 15px Inter, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
-@keyframes ch-anim-ban {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(.5) rotate(-6deg); }
-  20% { opacity: 1; transform: translate(-50%, -50%) scale(1.06) rotate(-2deg); }
-  35% { transform: translate(-50%, -50%) scale(1) rotate(-2deg); }
-  85% { opacity: 1; }
-  100% { opacity: 0; }
-}
-.ch-anim-conf { position: fixed; top: -10px; width: 8px; height: 14px; z-index: 8999; pointer-events: none;
-  animation-name: ch-anim-tombe; animation-timing-function: linear; animation-fill-mode: forwards; }
-@keyframes ch-anim-tombe { to { transform: translateY(105vh) rotate(720deg); } }
-
 /* Mouvement réduit : rien ne pulse ni ne glisse (effets.js n'ajoute rien non plus). */
 body.plat-calme .ch-anim-joue, body.plat-calme .ch-anim-sel, body.plat-calme .ch-anim-surligne { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
-  .ch-anim-joue, .ch-anim-sel, .ch-anim-surligne, .ch-anim-conf { animation: none !important; }
+  .ch-anim-joue, .ch-anim-sel, .ch-anim-surligne { animation: none !important; }
 }

@@ -6,14 +6,39 @@
  *   Le CSS est dans assets/espaces/nom-de-code/nom-de-code.css (section « Effets »), classes ndc-fx-*.
  *   Rien n'est animé quand le mouvement est réduit ou que les effets sont coupés (motionAllowed) : l'écran reste tel quel.
  *   Les sons ne dépendent que de la préférence « Sons des jeux » (sons-jeux.js).
+ *   arreterEffets() retire les calques et annule leurs minuteurs : à appeler quand une vue se détruit.
  * Dépendances : commun/core.js (esc, motionAllowed), commun/sons-jeux.js (jouerSonJeu).
- * Exporte : animationsOk, son, banniere, grandIndice, flashRouge, secouer, confettis, brille.
+ * Exporte : animationsOk, son, banniere, grandIndice, flashRouge, secouer, confettis, brille, arreterEffets.
  */
 import { esc, motionAllowed } from '../../../commun/core.js';
 import { jouerSonJeu } from '../../../commun/sons-jeux.js';
 
 /** Vrai quand les animations sont jouées (préférence « effets » et pas de mouvement réduit). */
 export const animationsOk = () => motionAllowed();
+
+const noeuds = new Set();      // calques posés sur <body>
+const minuteurs = new Set();   // leurs minuteurs
+
+/** setTimeout suivi, annulé par arreterEffets(). */
+function plus(fn, ms) {
+  const t = setTimeout(() => { minuteurs.delete(t); fn(); }, ms);
+  minuteurs.add(t);
+}
+
+/** Pose un nœud sur <body> et le retire après ms. */
+function poser(n, ms) {
+  document.body.append(n);
+  noeuds.add(n);
+  plus(() => { n.remove(); noeuds.delete(n); }, ms);
+}
+
+/** Arrête tout : calques retirés, minuteurs annulés (la vue s'en va). */
+export function arreterEffets() {
+  minuteurs.forEach(clearTimeout);
+  minuteurs.clear();
+  noeuds.forEach((n) => n.remove());
+  noeuds.clear();
+}
 
 /**
  * Joue un son de Nom de code (numéros de la maquette : 1 indice donné, 2 carte de l'équipe, 3 carte passante,
@@ -32,8 +57,7 @@ function calque(classes, html, ms) {
   const d = document.createElement('div');
   d.className = classes;
   d.innerHTML = html;
-  document.body.append(d);
-  setTimeout(() => d.remove(), ms);
+  poser(d, ms);
   return d;
 }
 
@@ -71,7 +95,7 @@ export function flashRouge() {
 export function secouer(el) {
   if (!animationsOk() || !el) return;
   el.classList.add('ndc-fx-choc');
-  setTimeout(() => el.classList.remove('ndc-fx-choc'), 1000);
+  plus(() => el.classList.remove('ndc-fx-choc'), 1000);
 }
 
 /** Confettis aux couleurs des équipes (70 morceaux, chacun tombe en moins de 3 s). */
@@ -85,8 +109,7 @@ export function confettis() {
     d.style.background = couleurs[i % couleurs.length];
     d.style.animationDuration = `${(1.4 + Math.random()).toFixed(2)}s`;
     d.style.animationDelay = `${(Math.random() * 0.4).toFixed(2)}s`;
-    document.body.append(d);
-    setTimeout(() => d.remove(), 2900);
+    poser(d, 2900);
   }
 }
 
@@ -97,5 +120,5 @@ export function confettis() {
 export function brille(el) {
   if (!animationsOk() || !el) return;
   el.classList.add('ndc-fx-brille');
-  setTimeout(() => el.classList.remove('ndc-fx-brille'), 2500);
+  plus(() => el.classList.remove('ndc-fx-brille'), 2500);
 }

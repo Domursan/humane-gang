@@ -3,6 +3,12 @@
  * Rôle : résultat (titre, scores, avatars avec couronne sur le gagnant), dernière grille (Puissance 4, Morpion classique
  * et Gomoku, Ultime), codes (Mastermind), les deux flottes (Bataille navale), les personnages secrets (Qui est-ce ?),
  * détail des manches, Paillettes et badges gagnés, actions, chat.
+ * Les petites grilles gardent l'apparence de leur table : couleurs du Morpion, échiquier et damier avec les mêmes pièces, les
+ * mêmes cases et le même sens (mes pièces en bas). Chaque case porte data-c (son numéro dans la grille), chaque marque data-m et
+ * chaque jeton data-j (sa place) : les effets de fin des jeux s'y accrochent. Un nouvel état identique ne redessine pas la grille,
+ * pour ne pas couper ces effets.
+ * Abandon, forfait, défi refusé ou expiré : la bannière le dit (AB1, AB2, FO1, FO2, DF1, DF2, en texte, drapeau ou sablier), et
+ * le texte habituel du jeu (« Code percé ! », « Échec et mat »…) ne se joue pas (TX1) : effetsCause de fin-fx.js le remplace.
  * Membre joueur : Revanche (duel.rejouer → #partie/<nouveau code>), ou « Rejoindre la revanche » si partie.suite existe
  * (#partie/<suite> : vues/partie.js renvoie vers #rejoindre/ si je ne joue pas encore).
  * Spectateur : résultat et chat, sans action de revanche, sans Paillettes.
@@ -11,26 +17,45 @@
  *   à la demande par import dynamique : si ce module manque, seuls les prénoms s'affichent.
  * Contrat : export function creer(root, ctx) → { maj(etat), message(msg), detruire() } (vues/partie.js).
  * Dépendances : core.js (esc, toast), ../api.js (duel, erreurTexte, estInvite, COULEURS_MM), ./commun.js (avatarHtml, nomJoueur),
- *   ./chat.js (creerChat). Le cadre des tables n'est pas utilisé ici.
- * Exporte : creer.
+ *   ./chat.js (creerChat), ./fin-fx.js (causeFin, effetsCause). Le cadre des tables n'est pas utilisé ici.
+ * Exporte : creer, pionDames (pion du damier de fin, repris par l'effet de fin des Dames).
  */
 import { esc, toast } from '../../../commun/core.js';
 import { duel, erreurTexte, estInvite, COULEURS_MM } from '../api.js';
-import { avatarHtml, nomJoueur, deJoueur } from './commun.js';
+import { avatarHtml, nomJoueur, deJoueur, ICONE_DRAPEAU, ICONE_SABLIER } from './commun.js';
 import { creerChat } from './chat.js';
+import { causeFin, effetsCause } from './fin-fx.js';
 
-/** Couleurs des jetons par place (même code que la table) et symboles du Morpion. */
+/** Couleurs des jetons du Puissance 4 par place (vues/p4.js). */
 const COULEUR = { 1: '#D93A3F', 2: '#F2B705' };
+/** Couleurs des marques du Morpion par place (vues/morpion.js : croix bleues, ronds dorés) et leurs symboles. */
+const COULEUR_MARQUE = { 1: '#6FB3F2', 2: '#E8B04B' };
 const SYMBOLE = { 1: 'X', 2: 'O' };
 /** Libellé de la colonne « coups » du détail des manches, selon le jeu. */
 const LIBELLE_COUPS = { mastermind: 'Essais', bataille: 'Tirs', quiestce: 'Questions', pfc: 'Lancers' };
-/** Lettres des pièces d'échecs (notation française) et noms des gestes du pierre-feuille-ciseaux. */
-const LETTRE_PIECE = { k: 'R', q: 'D', r: 'T', b: 'F', n: 'C', p: 'P' };
+/** Symboles pleins des pièces d'échecs (comme vues/echecs.js ; U+FE0E : affichage en texte, pas en emoji). */
+const SYMBOLE_PIECE = { k: '♚︎', q: '♛︎', r: '♜︎', b: '♝︎', n: '♞︎', p: '♟︎' };
+/** Couronne des dames (comme vues/dames.js). */
+const COURONNE_DAME = '<svg class="duels-fin-dame" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 18h18l1.5-11-5.5 5L12 5l-4 7-5.5-5z"/></svg>';
+/** Noms des gestes du pierre-feuille-ciseaux. */
 const NOM_GESTE = { pierre: 'Pierre', feuille: 'Feuille', ciseaux: 'Ciseaux' };
 /** Icône de médaille (badge débloqué). */
 const MEDAILLE = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#121212" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 20L20 4M4 4h4M4 4v4M20 20h-4M20 20v-4"/></svg>';
 /** Couronne du gagnant. */
 const COURONNE = '<svg class="duels-fin-couronne" width="30" height="20" viewBox="0 0 30 20" aria-hidden="true"><path d="M2 18L6 4l7 7 7-9 7 9 5-7 1 14z" fill="currentColor"/></svg>';
+
+/** Une marque du Morpion, à la couleur de sa table. c : '1' ou '2'. */
+const marqueHtml = (c, classe = '') => `<b class="duels-fin-marque${classe}" data-m="${c}" style="color:${COULEUR_MARQUE[c]}">${SYMBOLE[c]}</b>`;
+
+/**
+ * Pion du damier de fin. Couleurs de la table : crème pour le camp 1, rouge brun pour le camp 2, couronne pour une dame.
+ * @param {string} ch caractère de la grille ('1', '2', 'A', 'B').
+ * @returns {string} HTML du pion.
+ */
+export function pionDames(ch) {
+  const dame = ch === 'A' || ch === 'B';
+  return `<i class="duels-fin-dpion is-${ch === '1' || ch === 'A' ? '1' : '2'}">${dame ? COURONNE_DAME : ''}</i>`;
+}
 
 /** Titre du résultat selon le statut, le gagnant et moi. */
 function titreDuel(p, gagnant, moiJ) {
@@ -40,11 +65,40 @@ function titreDuel(p, gagnant, moiJ) {
   return `${esc(gagnant.pseudo || '?')} gagne le duel`;
 }
 
-/** Un joueur dans la bannière : couronne si gagnant, avatar, pseudo. */
-function joueurFin(j, gagnant) {
+/**
+ * Fin qui ne vient pas du jeu : abandon, forfait, défi refusé ou expiré. Textes déjà échappés.
+ * @returns {{ico: string, bon: boolean, ton: string, titre: string, sous: string}|null} null : fin normale.
+ */
+function finSpeciale(e, gagnant, moiJ, parUid) {
+  const p = e.partie;
+  const cause = causeFin(e);
+  const nomG = gagnant?.pseudo || '?'; // textes bruts : échappés à l'affichage
+  if (cause === 'refus' || cause === 'expire') {
+    const qui = e.defie_pseudo || 'Ton adversaire';
+    const defie = !!e.moi?.defie;
+    return cause === 'refus'
+      ? { ico: ICONE_SABLIER, ton: 'neutre', titre: 'Défi refusé', sous: defie ? 'Tu as refusé ce défi.' : `${qui} a refusé ton défi.` }
+      : { ico: ICONE_SABLIER, ton: 'neutre', titre: 'Défi expiré', sous: defie ? 'Tu n’as pas répondu à temps.' : `${qui} n’a pas répondu à temps.` };
+  }
+  if (cause !== 'abandon' && cause !== 'forfait') return null;
+  const parti = parUid(p.abandon || p.forfait);
+  const nomP = parti?.pseudo || 'Un joueur';
+  const moiParti = !!moiJ && parti === moiJ;
+  const ton = moiParti ? 'perdu' : moiJ ? '' : 'neutre';
+  if (cause === 'abandon') {
+    return { ico: ICONE_DRAPEAU, bon: !moiParti, ton, titre: moiParti ? 'Tu as abandonné' : `${nomP} a abandonné`,
+      sous: moiParti ? `${nomG} gagne le duel.` : `${moiJ ? 'Tu gagnes' : `${nomG} gagne`} le duel par abandon.` };
+  }
+  if (moiParti) return { ico: ICONE_SABLIER, ton, titre: 'Forfait', sous: `Tu as manqué 3 coups d’affilée. ${nomG} gagne le duel.` };
+  return { ico: ICONE_SABLIER, bon: true, ton, titre: `${nomP} ne joue plus`,
+    sous: `${moiJ ? 'Tu gagnes' : `${nomG} gagne`} le duel par forfait : 3 coups manqués d’affilée.` };
+}
+
+/** Un joueur dans la bannière : couronne si gagnant, avatar, pseudo. attenue : le joueur parti (abandon, forfait). */
+function joueurFin(j, gagnant, attenue = false) {
   if (!j) return '';
   const gagne = !!gagnant && j === gagnant;
-  return `<div class="duels-fin-joueur${gagne ? ' is-gagnant' : ''}">
+  return `<div class="duels-fin-joueur${gagne ? ' is-gagnant' : ''}${attenue && !gagne ? ' is-parti' : ''}">
     ${gagne ? COURONNE : ''}
     ${avatarHtml(j, { taille: 64 })}
     <strong class="duels-fin-nom">${nomJoueur(j)}</strong>
@@ -62,9 +116,9 @@ function blocGrilleSimple(p, d, js) {
     const ch = g[i] === '1' || g[i] === '2' ? g[i] : '';
     const gg = gagnantes.has(i) ? ' is-gagnante' : '';
     const contenu = !ch ? ''
-      : p4 ? `<i class="duels-fin-jeton" style="--j:${COULEUR[ch]}"></i>`
-        : `<b class="duels-fin-marque" style="color:${COULEUR[ch]}">${SYMBOLE[ch]}</b>`;
-    return `<span class="duels-fin-case${gg}">${contenu}</span>`;
+      : p4 ? `<i class="duels-fin-jeton" data-j="${ch}" style="--j:${COULEUR[ch]}"></i>`
+        : marqueHtml(ch);
+    return `<span class="duels-fin-case${gg}" data-c="${i}">${contenu}</span>`;
   }).join('');
   const [a, b] = p4 ? ['Rouge', 'Jaune'] : ['X', 'O'];
   const j1 = js.find((j) => j.place === 1);
@@ -80,7 +134,7 @@ function blocGrilleSimple(p, d, js) {
     <p class="duels-fin-note">${esc(note)}</p>`;
 }
 
-/** Grille d'un jeu de cases (Othello, Dames, Échecs), lecture seule : pions en rond, dames marquées D, pièces en lettres. */
+/** Grille d'un jeu de cases (Othello, Dames, Échecs), lecture seule. Dames et Échecs : comme leur table, mes pièces en bas. */
 function blocCases(p, e, d, js) {
   const w = p.w || 8, h = p.h || 8;
   const g = String(d.grille || '').padEnd(w * h, '.');
@@ -91,8 +145,14 @@ function blocCases(p, e, d, js) {
   let legende;
   if (p.jeu === 'othello') legende = `Noirs : ${nom1} (${compte(['1'])}) · Blancs : ${nom2} (${compte(['2'])})`;
   else if (p.jeu === 'echecs') legende = `Blancs : ${nom1} · Noirs : ${nom2}`;
-  else legende = `${nom1} (${compte(['1', 'A'])} pions) · ${nom2} (${compte(['2', 'B'])} pions)`;
-  const cellules = Array.from({ length: w * h }, (_, i) => {
+  else {
+    const n1 = compte(['1', 'A']), n2 = compte(['2', 'B']);
+    legende = `Pions crème : ${nom1}, ${n1} pièce${n1 > 1 ? 's' : ''} · Pions rouge brun : ${nom2}, ${n2} pièce${n2 > 1 ? 's' : ''}`;
+  }
+  // Même sens que la table : retournée quand je joue le camp 2 (les noirs aux Échecs).
+  const retourne = p.jeu !== 'othello' && !!e.moi?.joue && String(pions[e.moi.user_id]) === '2';
+  const cellules = Array.from({ length: w * h }, (_, d) => {
+    const i = retourne ? w * h - 1 - d : d;
     const x = g[i];
     const r = Math.floor(i / w), c = i % w;
     let classe = 'is-vert', contenu = '';
@@ -100,19 +160,22 @@ function blocCases(p, e, d, js) {
       if (x === '1' || x === '2') contenu = `<i class="duels-fin-pion ${x === '1' ? 'is-noir' : 'is-blanc'}"></i>`;
     } else if (p.jeu === 'dames') {
       classe = (r + c) % 2 === 1 ? 'is-sombre' : 'is-clair';
-      if (['1', '2', 'A', 'B'].includes(x)) {
-        contenu = `<i class="duels-fin-pion ${x === '1' || x === 'A' ? 'is-noir' : 'is-blanc'}"></i>${x === 'A' || x === 'B' ? '<b class="duels-fin-dame" aria-hidden="true">D</b>' : ''}`;
-      }
+      if (['1', '2', 'A', 'B'].includes(x)) contenu = pionDames(x);
     } else {
       classe = (r + c) % 2 === 0 ? 'is-clair' : 'is-sombre';
-      if (x !== '.' && LETTRE_PIECE[x.toLowerCase()]) {
-        contenu = `<b class="duels-fin-piece ${x === x.toUpperCase() ? 'is-blanc' : 'is-noir'}">${esc(LETTRE_PIECE[x.toLowerCase()])}</b>`;
+      const type = x.toLowerCase();
+      if (SYMBOLE_PIECE[type]) {
+        contenu = `<b class="duels-fin-piece ${x === x.toUpperCase() ? 'is-blanc' : 'is-noir'}" data-p="${esc(type)}">${SYMBOLE_PIECE[type]}</b>`;
       }
+      // Coordonnées sur les bords de l'affichage, comme la table : rangs à gauche, fichiers en bas.
+      if (d % w === 0) contenu += `<span class="duels-fin-coord is-rang" aria-hidden="true">${h - r}</span>`;
+      if (Math.floor(d / w) === h - 1) contenu += `<span class="duels-fin-coord is-fichier" aria-hidden="true">${'abcdefgh'[c]}</span>`;
     }
-    return `<span class="duels-fin-case ${classe}">${contenu}</span>`;
+    return `<span class="duels-fin-case ${classe}" data-c="${i}">${contenu}</span>`;
   }).join('');
+  const modele = p.jeu === 'othello' ? '' : ` duels-fin-mini--${p.jeu}`;
   return `<h2 id="duels-fin-grille-titre" class="duels-h3">Dernière grille</h2>
-    <div class="duels-fin-mini duels-fin-mini--cases" role="img" aria-label="Grille de ${w} colonnes sur ${h}" style="grid-template-columns:repeat(${w}, minmax(0, 1fr))">${cellules}</div>
+    <div class="duels-fin-mini duels-fin-mini--cases${modele}" role="img" aria-label="Grille de ${w} colonnes sur ${h}" style="grid-template-columns:repeat(${w}, minmax(0, 1fr))">${cellules}</div>
     <p class="duels-fin-note">${legende}</p>`;
 }
 
@@ -136,17 +199,17 @@ function blocUltime(p, d, js) {
   const tuiles = Array.from({ length: 9 }, (_, k) => {
     const s = petites[k];
     let contenu;
-    if (s === '1' || s === '2') contenu = `<b class="duels-fin-marque duels-fin-gros" style="color:${COULEUR[s]}" aria-hidden="true">${SYMBOLE[s]}</b>`;
+    if (s === '1' || s === '2') contenu = marqueHtml(s, ' duels-fin-gros');
     else if (s === '=') contenu = '<b class="duels-fin-marque duels-fin-gros" aria-hidden="true">=</b>';
     else {
       const mini = Array.from({ length: 9 }, (_, i) => {
         const ch = g[k * 9 + i];
-        return `<span class="duels-fin-case">${ch === '1' || ch === '2' ? `<b class="duels-fin-marque" style="color:${COULEUR[ch]}">${SYMBOLE[ch]}</b>` : ''}</span>`;
+        return `<span class="duels-fin-case">${ch === '1' || ch === '2' ? marqueHtml(ch) : ''}</span>`;
       }).join('');
       contenu = `<span class="duels-fin-mini3">${mini}</span>`;
     }
     const etat = s === '1' || s === '2' ? `gagnée par ${SYMBOLE[s]}` : s === '=' ? 'nulle' : 'en cours';
-    return `<span class="duels-fin-tuile" role="img" aria-label="Petite grille ${k + 1}, ${etat}">${contenu}</span>`;
+    return `<span class="duels-fin-tuile" data-c="${k}" role="img" aria-label="Petite grille ${k + 1}, ${etat}">${contenu}</span>`;
   }).join('');
   const j1 = js.find((j) => j.place === 1);
   const j2 = js.find((j) => j.place === 2);
@@ -156,16 +219,16 @@ function blocUltime(p, d, js) {
     <p class="duels-fin-note">Une grille gagnée reçoit X ou O, une grille nulle reçoit =.</p>`;
 }
 
-/** Mastermind : les deux codes de la dernière manche (indexés par celui qui devait les percer), en pastilles avec leur nom. */
-function blocCodes(d, js) {
+/** Mastermind : les deux codes de la dernière manche (indexés par celui qui devait les percer), le mien d'abord, en pastilles avec leur nom. */
+function blocCodes(d, js, moiUid) {
   const titre = '<h2 id="duels-fin-grille-titre" class="duels-h3">Derniers codes</h2>';
-  const entrees = Object.entries((d && d.codes) || {});
+  const entrees = Object.entries((d && d.codes) || {}).sort(([a], [b]) => Number(b === moiUid) - Number(a === moiUid));
   if (!entrees.length) return `${titre}<p class="duels-fin-note">Aucun code à afficher.</p>`;
   return titre + entrees.map(([uid, secret]) => {
     const j = js.find((x) => x.user_id === uid);
     const cs = [...String(secret || '')].map((c) => COULEURS_MM.find((x) => x.c === c)).filter(Boolean);
     return `<div class="duels-fin-code">
-      <p class="duels-fin-note">Code que ${nomJoueur(j)} devait percer</p>
+      <p class="duels-fin-note">${uid === moiUid ? 'Le code que tu devais percer' : `Code que ${nomJoueur(j)} devait percer`}</p>
       <ol class="duels-fin-pastilles">${cs.map((k) => `<li class="duels-fin-pastille" style="background:${k.hex};color:${['o', 'y'].includes(k.c) ? '#121212' : '#FFFFFF'}" aria-label="${esc(k.nom)}"><span aria-hidden="true">${esc(k.lettre)}</span></li>`).join('')}</ol>
       <p class="duels-fin-noms">${cs.map((k) => esc(k.nom)).join(' · ')}</p>
     </div>`;
@@ -282,9 +345,11 @@ function blocGains(e, moiJ, js) {
   const robot = js.some((j) => j.robot);
   const paillettes = Number(moiJ.paillettes || 0);
   const badges = e.badges || [];
+  const p = e.partie || {};
   let texte;
   if (robot) texte = '<p class="duels-fin-note">Contre le robot, pas de Paillettes.</p>';
   else if (paillettes > 0) texte = `<p class="duels-fin-gros-chiffre">+${paillettes} Paillettes</p>`;
+  else if ((p.abandon || p.forfait) && !(p.historique || []).length) texte = '<p class="duels-fin-note">Pas de Paillettes : le duel s’est arrêté avant la fin de la première manche.</p>';
   else texte = '<p class="duels-fin-note">Aucune Paillette pour ce duel.</p>';
   const medailles = badges.map((b) => `<div class="duels-fin-badge">
       <span class="duels-fin-medaille">${MEDAILLE}</span>
@@ -319,6 +384,8 @@ export function creer(root, ctx) {
   /** Qui est-ce : undefined tant que chargé, puis {plateau, portrait}, ou null si le chargement échoue. */
   let quiEst;
   let chargement = null;
+  /** HTML de la grille affichée : elle n'est réécrite que s'il change, les effets de fin y sont posés. */
+  let grilleHtml = null;
   root.innerHTML = `
     <div class="duels-fin" data-fin>
       <section class="card duels-fin-bandeau" data-bandeau aria-labelledby="duels-fin-titre"></section>
@@ -381,20 +448,24 @@ export function creer(root, ctx) {
     const derniere = historique[historique.length - 1] || null;
     const format = p.format > 1 ? `Au meilleur des ${p.format}` : 'Manche unique';
 
-    const pills = [];
-    if (p.forfait) pills.push('par forfait');
-    if (p.abandon) pills.push(`${esc(parUid(p.abandon)?.pseudo || 'Un joueur')} a abandonné`);
+    const special = finSpeciale(e, gagnant, moiJ, parUid);
+    const contexte = `${esc(p.nom || 'Duel')} · ${esc(format.charAt(0).toLowerCase() + format.slice(1))}`;
+    const pills = special ? `<p class="duels-fin-pills"><span class="duels-fin-pill">${contexte}</span><span class="duels-fin-pill duels-code">${esc(p.code || '')}</span></p>` : '';
+    const annule = p.statut === 'annulee';
+    const bandeau = q('[data-bandeau]');
+    bandeau.classList.toggle('is-perdu', special?.ton === 'perdu');
+    bandeau.classList.toggle('is-neutre', special?.ton === 'neutre');
 
-    q('[data-bandeau]').innerHTML = `
+    bandeau.innerHTML = `
       <div class="duels-fin-titres">
-        <h1 id="duels-fin-titre" class="duels-titre">${titreDuel(p, gagnant, moiJ)}</h1>
-        <p class="duels-fin-sous">${esc(p.nom || 'Duel')} · ${js.map((j) => esc(j.pseudo || '?')).join(' contre ')} · ${esc(format)} · <span class="duels-code">${esc(p.code || '')}</span></p>
-        ${pills.length ? `<p class="duels-fin-pills">${pills.map((t) => `<span class="duels-fin-pill">${t}</span>`).join('')}</p>` : ''}
+        <h1 id="duels-fin-titre" class="duels-titre${special ? ' duels-fin-cause' : ''}">${special ? `<span class="duels-fin-ico${special.bon ? ' is-bon' : ''}">${special.ico}</span>${esc(special.titre)}` : titreDuel(p, gagnant, moiJ)}</h1>
+        <p class="duels-fin-sous">${special ? esc(special.sous) : `${esc(p.nom || 'Duel')} · ${js.map((j) => esc(j.pseudo || '?')).join(' contre ')} · ${esc(format)} · <span class="duels-code">${esc(p.code || '')}</span>`}</p>
+        ${pills}
       </div>
       ${j1 || j2 ? `<div class="duels-fin-score">
-        ${joueurFin(j1, gagnant)}
-        <p class="duels-fin-chiffres"><span class="visually-hidden">Score : ${j1?.manches ?? 0} à ${j2?.manches ?? 0}</span><span aria-hidden="true">${j1?.manches ?? 0} – ${j2?.manches ?? 0}</span></p>
-        ${joueurFin(j2, gagnant)}
+        ${joueurFin(j1, gagnant, special && !annule)}
+        <p class="duels-fin-chiffres">${annule ? '<span class="visually-hidden">Pas de score</span><span aria-hidden="true">–</span>' : `<span class="visually-hidden">Score : ${j1?.manches ?? 0} à ${j2?.manches ?? 0}</span><span aria-hidden="true">${j1?.manches ?? 0} – ${j2?.manches ?? 0}</span>`}</p>
+        ${joueurFin(j2, gagnant, special && !annule)}
       </div>` : ''}`;
 
     q('[data-grille]').hidden = invite;
@@ -403,7 +474,7 @@ export function creer(root, ctx) {
     q('[data-chat-boite]').hidden = invite;
     if (!invite) {
       if (p.jeu === 'quiestce' && quiEst === undefined) chargerQuiEst();
-      q('[data-grille]').innerHTML = p.jeu === 'mastermind' ? blocCodes(derniere, js)
+      const grille = p.jeu === 'mastermind' ? blocCodes(derniere, js, moiJ?.user_id)
         : p.jeu === 'bataille' ? blocFlottes(e, js, moiJ?.user_id)
           : p.jeu === 'quiestce' ? blocPersos(e, js, quiEst)
             : p.jeu === 'pfc' ? blocLancers(e, js)
@@ -411,6 +482,7 @@ export function creer(root, ctx) {
                 : p.variante === 'ultime' ? blocUltime(p, derniere, js)
                   : ['othello', 'dames', 'echecs'].includes(p.jeu) ? blocCases(p, e, derniere, js)
                     : blocGrilleSimple(p, derniere, js);
+      if (grille !== grilleHtml) { grilleHtml = grille; q('[data-grille]').innerHTML = grille; }
       q('[data-manches]').innerHTML = blocManches(p, js, p.jeu === 'pfc' ? (e.pfc?.lancers || []) : null);
       q('[data-gains]').innerHTML = blocGains(e, moiJ, js);
       q('[data-actions]').innerHTML = blocActions(p, joue);
@@ -427,7 +499,8 @@ export function creer(root, ctx) {
       // Effets de fin propres à certains jeux (son, gagnant qui brille) : seulement pour une partie vue en direct.
       const jeuFx = { p4: './p4.js', othello: './othello.js', bataille: './bataille.js', mastermind: './mastermind.js',
         dames: './dames.js', echecs: './echecs.js', morpion: './morpion.js', pfc: './pfc.js', quiestce: './quiestce.js' }[e.partie?.jeu];
-      if (jeuFx) import(jeuFx).then((m) => m.effetsFin?.(root, e)).catch(() => {});
+      // Abandon, forfait, défi ou duel annulé : pas de victoire normale, ni son, ni texte du jeu (TX1).
+      if (!effetsCause(root, e) && jeuFx) import(jeuFx).then((m) => m.effetsFin?.(root, e)).catch(() => {});
       chat?.maj(e);
     },
     /** Ajoute un message au chat. */

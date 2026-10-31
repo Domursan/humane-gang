@@ -671,30 +671,180 @@ function xa1Rpc(fn, args = {}) {
       status: b.cancelled_at ? 'annulee' : b.sent_at ? 'envoyee' : 'programmee', by: 'Ethan', detail: b.body, channels: b.channels, game: b.game_slug ? 'Campagne Serge (CK3)' : null, route: 'pilotage/bot' });
     return { data: out, error: null };
   }
-  // Programmation des jeux (migration 183). S.programme : { <cle>: [{ n, statut, titre, par }] (n : décalage en jours depuis
-  // aujourd'hui) } remplace les jours par défaut ; S.programmeReserves : { <cle>: [reserve, reserve_totale] }.
-  if (fn === 'hg_jeux_programme') {
-    if (!hasP('souvenirs') && !hasP('quiz')) return denied;
-    if (args.p_days < 1 || args.p_days > 92) return xErr('Période trop longue (92 jours au plus)');
+  // Programmation des jeux (migrations 183 et 184). S.programme : { <cle>: [{ n, statut, titre, par, ... }] } (n : décalage en
+  // jours depuis aujourd'hui ; champs du contenu : joueurs, vus, definition…) remplace les jours par défaut ; S.programmeReserves :
+  // { <cle>: [reserve, reserve_totale] } ; S.programmeCourants.geo : décalage du jour courant de GeoGuessr (-1 : avant 6 h). Avec
+  // S.programme, les listes de choix et les écritures sont simulées avec les règles des RPC (sans lui, d'autres fixtures gardent
+  // la main). window.__PG_REFUS : { <rpc>: message } force un refus.
+  if (['hg_jeux_programme', 'hg_jeux_programme_jour'].includes(fn) || (S.programme && ['hg_sutom_admin', 'hg_heardle_admin', 'hg_framed_admin', 'hg_geo_admin_list', 'hg_geo_reserve',
+    'hg_sutom_program', 'hg_heardle_round_save', 'hg_framed_round_save', 'hg_geo_round_save', 'hg_geo_programme', 'hg_geo_active', 'hg_quiz_daily_plan'].includes(fn))) {
+    const ko = (m) => xErr(m);
+    if (window.__PG_REFUS?.[fn]) return ko(window.__PG_REFUS[fn]);
     const zday = (n) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zurich' }).format(Date.now() + n * 864e5);
-    const today = zday(0), from = args.p_from || today;
-    const to = new Date(Date.parse(from) + (args.p_days - 1) * 864e5).toISOString().slice(0, 10);
-    const std = { sutom: [{ n: 0, statut: 'auto', titre: 'PATATE' }, { n: 1, statut: 'programme', titre: 'FROMAGE', par: 'Ethan' }, { n: 2, statut: 'programme', titre: 'RACLETTE', par: 'Ethan' }],
-      heardle: Array.from({ length: 20 }, (_, n) => ({ n, statut: 'programme', titre: `Artiste — Titre ${n}`, par: 'Bruno' })), framed: [], geo: [], quiz: [] };
-    const jours = (c) => (S.programme?.[c] ?? std[c]).map((j) => ({ day: zday(j.n), statut: j.statut, titre: j.titre, par: j.par ?? null })).filter((j) => j.day >= from && j.day <= to);
-    const res = (c, d) => { const [reserve, reserve_totale] = S.programmeReserves?.[c] ?? d; return { reserve, reserve_totale }; };
-    const date = (cle, titre, route, filet, d) => ({ cle, titre, mode: 'date', route, filet, jours: jours(cle), ...res(cle, d) });
-    const reserve = (cle, titre, d) => ({ cle, titre, mode: 'reserve', route: null, jours: [], ...res(cle, d) });
-    const genere = (cle, titre) => ({ cle, titre, mode: 'genere', route: null, jours: [], reserve: null, reserve_totale: null });
-    const jeux = [];
-    if (hasP('souvenirs')) jeux.push(date('sutom', 'Sutom du gang', 'fete/sutom', true, [120, 200]), date('heardle', 'Heardle', 'fete/framed-heardle/heardle', false, [12, 40]),
-      date('framed', 'Framed', 'fete/framed-heardle/framed', false, [8, 30]), date('geo', 'GeoGuessr', 'fete/geoguessr', true, [15, 22]));
-    if (hasP('quiz')) jeux.push(date('quiz', 'Question du jour', 'fete/questions/jour', true, [60, 90]));
-    if (hasP('souvenirs')) jeux.push(reserve('carte', 'Carte mystère', [300, 320]), reserve('jv', 'Jeu vidéo du jour', [90, 100]), reserve('pochette', 'Pochette du jour', [10, 80]),
-      reserve('replique', 'Réplique du jour', [90, 100]), reserve('pays', 'Pays du jour', [190, 197]), reserve('plat', 'Plat du jour', [50, 60]), reserve('connexions', 'Connexions', [30, 30]),
-      reserve('motscroises', 'Mots croisés', [30, 30]), reserve('motmele', 'Mot mêlé', [30, 30]), reserve('anagramme', 'Anagramme', [500, 500]),
-      genere('nerdle', 'Nerdle du gang'), genere('code_jour', 'Code du jour'), genere('sudoku', 'Sudoku du jour'));
-    return { data: { today, jeux }, error: null };
+    const today = zday(0);
+    const geoAuj = zday(S.programmeCourants?.geo ?? 0);
+    if (!window.__PG) {
+      const std = { sutom: [{ n: 0, statut: 'auto', titre: 'PATATE' }, { n: 1, statut: 'programme', titre: 'FROMAGE', par: 'Ethan' }, { n: 2, statut: 'programme', titre: 'RACLETTE', par: 'Ethan' }],
+        heardle: Array.from({ length: 20 }, (_, n) => ({ n, statut: 'programme', titre: `Artiste — Titre ${n}`, par: 'Bruno' })), framed: [], geo: [], quiz: [] };
+      const G = { j: {}, n: 0 };
+      for (const c of ['sutom', 'heardle', 'framed', 'geo', 'quiz']) {
+        G.j[c] = new Map((S.programme?.[c] ?? std[c]).map((x) => [zday(x.n), { joueurs: 0, ...x, id: `r-${++G.n}`, active: x.statut !== 'annule' }]));
+      }
+      G.tracks = [{ id: 't1', artist: 'Stromae', title: 'Papaoutai', youtube_id: 'oiKj0Z_Xnjc', start_s: 12, status: 'valide', day: null },
+        { id: 't2', artist: 'Refusé', title: 'Non validé', youtube_id: 'oiKj0Z_Xnjd', start_s: 0, status: 'propose', day: null }];
+      G.films = [{ id: 'f1', title: 'Amélie', active: true, frames: ['framed/f1/1.webp', 'framed/f1/2.webp', 'framed/f1/3.webp'], day: null },
+        { id: 'f2', title: 'Deux images', active: true, frames: ['framed/f2/1.webp', 'framed/f2/2.webp'], day: null }];
+      G.geo = [{ id: 'g1', day: null, label: 'Gare de Lausanne', event_title: 'Sortie vaudoise', image_path: '11111111-1111-4111-8111-111111111111/geo/a.webp', lat: 46.5, lon: 6.6, photo_id: null, event_id: null, active: true, guesses: 0 },
+        { id: 'g2', day: null, label: 'Lac de Joux', event_title: null, image_path: '11111111-1111-4111-8111-111111111111/geo/c.webp', lat: 46.6, lon: 6.2, photo_id: null, event_id: null, active: true, guesses: 0 },
+        { id: 'g3', day: null, label: 'Photo désactivée', event_title: null, image_path: '11111111-1111-4111-8111-111111111111/geo/d.webp', lat: 46.7, lon: 6.3, photo_id: null, event_id: null, active: false, guesses: 0 }];
+      G.bank = [{ word: 'FONDUE', definition: 'Le plat du gang', active: true }, { word: 'CHALET', definition: null, active: false }];
+      if (S.programme) DB.hg_quiz_questions.push({ id: 'q1', prompt: 'Qui a gagné la raclette ?', difficulty: 'facile', qtype: 'choix_unique', active: true, secret: false, created_at: new Date().toISOString() },
+        { id: 'q2', prompt: 'Question secrète', difficulty: 'facile', qtype: 'choix_unique', active: true, secret: true, created_at: new Date().toISOString() });
+      window.__PG = G;
+    }
+    const G = window.__PG;
+    const lit = (c, k) => { const m = G.j[c]; return m.get(k); };
+    if (fn === 'hg_jeux_programme') {
+      if (!hasP('souvenirs') && !hasP('quiz')) return denied;
+      if (args.p_days < 1 || args.p_days > 92) return ko('Période trop longue (92 jours au plus)');
+      const from = args.p_from || today;
+      const to = new Date(Date.parse(from) + (args.p_days - 1) * 864e5).toISOString().slice(0, 10);
+      const jours = (c) => [...G.j[c]].filter(([d]) => d >= from && d <= to).sort(([a], [b]) => a.localeCompare(b)).map(([day, x]) => ({ day, statut: x.statut, titre: x.titre, par: c === 'geo' ? undefined : x.par ?? null }));
+      const res = (c, d) => { const [reserve, reserve_totale] = S.programmeReserves?.[c] ?? d; return { reserve, reserve_totale }; };
+      const date = (cle, titre, route, filet, d, plus) => ({ cle, titre, mode: 'date', route, filet, ...plus, jours: jours(cle), ...res(cle, d) });
+      const reserve = (cle, titre, d) => ({ cle, titre, mode: 'reserve', route: null, jours: [], ...res(cle, d) });
+      const genere = (cle, titre) => ({ cle, titre, mode: 'genere', route: null, jours: [], reserve: null, reserve_totale: null });
+      const jeux = [];
+      if (hasP('souvenirs')) jeux.push(date('sutom', 'Sutom du gang', 'fete/sutom', true, [120, 200]), date('heardle', 'Heardle', 'fete/framed-heardle/heardle', false, [12, 40]),
+        date('framed', 'Framed', 'fete/framed-heardle/framed', false, [8, 30]), date('geo', 'GeoGuessr', 'fete/geoguessr', true, [15, 22], { jour_courant: geoAuj }));
+      if (hasP('quiz')) jeux.push(date('quiz', 'Question du jour', 'fete/questions/jour', true, [60, 90]));
+      if (hasP('souvenirs')) jeux.push(reserve('carte', 'Carte mystère', [300, 320]), reserve('jv', 'Jeu vidéo du jour', [90, 100]), reserve('pochette', 'Pochette du jour', [10, 80]),
+        reserve('replique', 'Réplique du jour', [90, 100]), reserve('pays', 'Pays du jour', [190, 197]), reserve('plat', 'Plat du jour', [50, 60]), reserve('connexions', 'Connexions', [30, 30]),
+        reserve('motscroises', 'Mots croisés', [30, 30]), reserve('motmele', 'Mot mêlé', [30, 30]), reserve('anagramme', 'Anagramme', [500, 500]),
+        genere('nerdle', 'Nerdle du gang'), genere('code_jour', 'Code du jour'), genere('sudoku', 'Sudoku du jour'));
+      return { data: { today, jeux }, error: null };
+    }
+    if (fn === 'hg_jeux_programme_jour') {
+      if (!hasP('souvenirs') && !hasP('quiz')) return denied;
+      const k = args.p_day, jeux = {}, courants = {};
+      if (hasP('souvenirs')) {
+        Object.assign(courants, { sutom: today, heardle: today, framed: today, geo: geoAuj });
+        const s = lit('sutom', k), h = lit('heardle', k), f = lit('framed', k), g = lit('geo', k);
+        jeux.sutom = s ? { word: s.titre, definition: s.definition ?? null, par: s.par ?? null, joueurs: s.joueurs } : null;
+        jeux.heardle = h ? { track_id: h.id, artist: h.titre.split(' — ')[0], title: h.titre.split(' — ')[1], youtube_id: 'oiKj0Z_Xnjc', start_s: 30, cancelled: h.statut === 'annule', par: h.par ?? null, joueurs: h.joueurs } : null;
+        jeux.framed = f ? { film_id: f.id, title: f.titre, year: 2001, frames: f.frames ?? ['framed/x/1.webp', 'framed/x/2.webp', 'framed/x/3.webp'], par: f.par ?? null, joueurs: f.joueurs } : null;
+        jeux.geo = g ? { id: g.id, day: k, label: g.titre, image_path: g.image_path ?? '11111111-1111-4111-8111-111111111111/geo/b.webp', lat: 46, lon: 6, photo_id: null, event_id: null, event_title: g.event_title ?? null, active: g.active, auteur: g.auteur ?? null, tentatives: g.joueurs } : null;
+      }
+      if (hasP('quiz')) {
+        courants.quiz = today;
+        const q = lit('quiz', k);
+        jeux.quiz = q ? { question_id: q.id, prompt: q.titre, qtype: 'choix_unique', difficulty: 'facile', category: null, options: [{ id: 'a', text: 'Bruno' }, { id: 'b', text: 'Ethan' }], bonnes: ['b'], solution: 'Ethan', explanation: null, par: q.par ?? null, vus: q.vus ?? 0, reponses: 0 } : null;
+      }
+      return { data: { day: k, courants, jeux }, error: null };
+    }
+    const souv = 'Réservé au Staff « souvenirs »';
+    if (fn === 'hg_sutom_admin') return hasP('souvenirs') ? { data: { today, dict: 1, bank: G.bank, planned: [] }, error: null } : ko(souv);
+    if (fn === 'hg_heardle_admin') return hasP('souvenirs') ? { data: { today, tracks: G.tracks, rounds: [] }, error: null } : ko(souv);
+    if (fn === 'hg_framed_admin') return hasP('souvenirs') ? { data: { today, films: G.films, rounds: [] }, error: null } : ko(souv);
+    if (fn === 'hg_geo_admin_list') return hasP('souvenirs') ? { data: G.geo, error: null } : ko(souv);
+    if (fn === 'hg_geo_reserve') return hasP('souvenirs') ? { data: G.geo.filter((r) => r.active && !r.guesses).map(({ id, label, event_title }) => ({ id, label, event_title })), error: null } : ko(souv);
+    if (fn === 'hg_quiz_daily_plan') {
+      if (!hasP('quiz')) return denied;
+      if (args.p_day < today) return ko('Choisis un jour entre aujourd\'hui et dans un an');
+      const x = G.j.quiz.get(args.p_day);
+      if (args.p_day === today && x?.vus) return ko('La question d\'aujourd\'hui a déjà été vue : programme un autre jour');
+      if (!args.p_question) { G.j.quiz.delete(args.p_day); return { data: null, error: null }; }
+      const q = DB.hg_quiz_questions.find((y) => y.id === args.p_question);
+      G.j.quiz.set(args.p_day, { id: q.id, statut: 'programme', titre: q.prompt, par: 'Ethan', vus: 0, joueurs: 0 });
+      return { data: null, error: null };
+    }
+    if (!hasP('souvenirs')) return ko(souv);
+    if (fn === 'hg_sutom_program') {
+      if (!args.p_day || args.p_day <= today) return ko('Choisis un jour entre demain et dans un an');
+      if (!args.p_word) { G.j.sutom.delete(args.p_day); return { data: null, error: null }; }
+      const w = String(args.p_word).trim().toUpperCase();
+      if (!/^[A-Z]{5,9}$/.test(w)) return ko('Un mot de 5 à 9 lettres, sans espace ni tiret');
+      G.j.sutom.set(args.p_day, { id: `r-${++G.n}`, statut: 'programme', titre: w, par: 'Ethan', definition: args.p_definition ?? G.bank.find((b) => b.word === w)?.definition ?? null, joueurs: 0 });
+      return { data: null, error: null };
+    }
+    if (fn === 'hg_heardle_round_save') {
+      if (!args.p_day || args.p_day < today) return ko('Choisis aujourd\'hui ou un jour à venir');
+      const x = G.j.heardle.get(args.p_day);
+      if (args.p_cancel) {
+        if (!x) return ko('Pas de manche ce jour-là');
+        x.statut = 'annule';
+        return { data: null, error: null };
+      }
+      if (x?.joueurs) return ko('Des membres ont déjà joué cette manche : elle ne change plus');
+      if (x?.track) x.track.day = null;
+      if (!args.p_track) { G.j.heardle.delete(args.p_day); return { data: null, error: null }; }
+      const t = G.tracks.find((y) => y.id === args.p_track);
+      if (!t || t.status !== 'valide') return ko('Choisis un morceau validé');
+      if (t.day && t.day !== args.p_day) return ko('Ce morceau a déjà sa manche');
+      t.day = args.p_day;
+      G.j.heardle.set(args.p_day, { id: t.id, track: t, statut: 'programme', titre: `${t.artist} — ${t.title}`, par: 'Ethan', joueurs: 0 });
+      return { data: null, error: null };
+    }
+    if (fn === 'hg_framed_round_save') {
+      if (!args.p_day || args.p_day < today) return ko('Choisis aujourd\'hui ou un jour à venir');
+      const x = G.j.framed.get(args.p_day);
+      if (x?.joueurs) return ko('Des membres ont déjà joué cette manche : elle ne change plus');
+      if (x?.film) x.film.day = null;
+      if (!args.p_film) { G.j.framed.delete(args.p_day); return { data: null, error: null }; }
+      const f = G.films.find((y) => y.id === args.p_film);
+      if (f.frames.length < 3) return ko('Ce film a besoin d\'au moins 3 images');
+      if (f.day && f.day !== args.p_day) return ko('Ce film a déjà sa manche (un film ne revient pas)');
+      f.day = args.p_day;
+      G.j.framed.set(args.p_day, { id: f.id, film: f, frames: f.frames, statut: 'programme', titre: f.title, par: 'Ethan', joueurs: 0 });
+      return { data: null, error: null };
+    }
+    // hg_geo_programme : mêmes refus, dans le même ordre, que la migration 184. Tout ou rien, et seul le jour change.
+    if (fn === 'hg_geo_programme') {
+      const { p_day: d, p_round: nv, p_avant: av } = args;
+      if (!d) return ko('Choisis un jour');
+      if (d < geoAuj) return ko('Choisis aujourd\'hui ou un jour à venir');
+      if (!nv && !av) return ko('Rien à retirer ce jour-là');
+      if (nv === av) return ko('Cette manche est déjà sur ce jour');
+      const a = G.j.geo.get(d);
+      if ((a?.id ?? null) !== (av ?? null)) return ko('Ce jour a changé entre-temps : regarde sa manche avant de recommencer');
+      if (a?.joueurs) return ko('Cette manche a déjà été jouée : elle ne change plus de jour');
+      const r = nv ? G.geo.find((y) => y.id === nv) : null;
+      if (nv && !r && ![...G.j.geo.values()].some((y) => y.id === nv)) return ko('Manche introuvable');
+      if (nv && (!r || !r.active)) return ko('Cette photo n\'est plus en réserve');
+      if (r?.guesses) return ko('Cette manche a déjà été jouée : elle ne change plus de jour');
+      if (a) { G.j.geo.delete(d); G.geo.push({ id: a.id, day: null, label: a.titre, event_title: a.event_title ?? null, image_path: a.image_path, lat: 46, lon: 6, photo_id: null, event_id: null, active: a.active, guesses: 0 }); }
+      if (r) {
+        G.geo = G.geo.filter((y) => y !== r);
+        G.j.geo.set(d, { id: r.id, statut: 'programme', titre: r.label, auteur: 'Bruno', image_path: r.image_path, event_title: r.event_title, active: true, joueurs: 0 });
+      }
+      return { data: nv ?? null, error: null };
+    }
+    // hg_geo_active : mêmes refus que la migration 184 ; seule l'activation change (et le statut qui en découle dans le calendrier).
+    if (fn === 'hg_geo_active') {
+      if (!args.p_round || typeof args.p_active !== 'boolean') return ko('Données manquantes');
+      const e = [...G.j.geo].find(([, y]) => y.id === args.p_round);
+      const r = e?.[1] ?? G.geo.find((y) => y.id === args.p_round);
+      if (!r) return ko('Manche introuvable');
+      if (e && e[0] < geoAuj && !r.joueurs) return ko('Choisis aujourd\'hui ou un jour à venir');
+      r.active = args.p_active;
+      if (e) r.statut = args.p_active ? 'programme' : 'annule';
+      return { data: args.p_round, error: null };
+    }
+    // hg_geo_round_save : une manche du jour (G.j.geo) ou de la réserve (G.geo). Rien n'y remet active à vrai sans qu'on le demande.
+    const p = args.p, res = G.geo.find((r) => r.id === args.p_id);
+    const jour = [...G.j.geo].find(([, x]) => x.id === args.p_id);
+    if (p.day && p.day < geoAuj) return ko('Choisis aujourd\'hui ou un jour à venir');
+    if (p.day && G.j.geo.has(p.day) && jour?.[0] !== p.day) return ko('Une manche est déjà programmée ce jour-là');
+    if (jour) {
+      const [d, x] = jour;
+      if (x.joueurs && p.day !== d) return ko('Cette manche a déjà été jouée : seuls le nom du lieu et l\'activation peuvent changer');
+      x.active = p.active; x.statut = p.active ? 'programme' : 'annule';
+      if (p.day !== d) { G.j.geo.delete(d); if (p.day) G.j.geo.set(p.day, x); else G.geo.push({ id: x.id, day: null, label: x.titre, event_title: null, image_path: p.image_path, lat: p.lat, lon: p.lon, photo_id: null, event_id: null, active: p.active, guesses: 0 }); }
+    } else if (res) {
+      G.geo = G.geo.filter((r) => r !== res);
+      G.j.geo.set(p.day, { id: res.id, statut: 'programme', titre: res.label, auteur: 'Bruno', image_path: res.image_path, event_title: res.event_title, active: true, joueurs: 0 });
+    }
+    return { data: args.p_id, error: null };
   }
   if (fn === 'hg_bot_schedule_save') {
     if (!hasP('bot')) return denied;

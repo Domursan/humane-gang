@@ -5,13 +5,23 @@
  * pour avoir le même cadre ; elles ne dessinent que leur plateau.
  * Classes CSS : assets/espaces/duels/table.css (cadre), assets/espaces/duels/duels.css (avatar, chrono, chat).
  * Signal « à toi de jouer » (son + titre d'onglet) : commun/tour-signal.js, branché sur le cadre (maj / detruire).
- * Dépendances : core.js (esc, toast), ../api.js (duel, erreurTexte, estInvite), ./chat.js (creerChat), ../../../commun/tour-signal.js.
- * Exporte : avatarHtml, couleurJoueur, nomJoueur, creerCadre.
+ * Le cadre signale aussi tout seul : partie vue en cours (fin-fx.js, pour les effets de fin), tic des 5 dernières secondes à mon
+ * tour (CH1, S14 et S15, le chrono bat très légèrement), « Le jeu a joué pour toi » quand mon temps est écoulé (TP1, S12, ligne
+ * « auto » du journal ; les points de coups manqués demandent joueurs[].manques, migration 185, et s'effacent sans elle).
+ * Dépendances : core.js (esc, toast), ../api.js (duel, erreurTexte, estInvite), ./chat.js (creerChat), ../../../commun/tour-signal.js,
+ *   ../../../commun/effets-duels.js (son, creerEffets, creerTicChrono), ./fin-fx.js (vuEnCours).
+ * Exporte : avatarHtml, couleurJoueur, nomJoueur, deJoueur, deNom, creerCadre, ICONE_DRAPEAU, ICONE_SABLIER.
  */
 import { esc, toast } from '../../../commun/core.js';
 import { duel, erreurTexte, estInvite } from '../api.js';
 import { creerChat } from './chat.js';
 import { creerSignalTour } from '../../../commun/tour-signal.js';
+import { creerEffets, creerTicChrono, son } from '../../../commun/effets-duels.js';
+import { vuEnCours } from './fin-fx.js';
+
+/** Icônes de l'abandon, du forfait et du temps écoulé. */
+export const ICONE_DRAPEAU = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 21V4"/><path d="M6 5c4-2 7 2 12 0v9c-5 2-8-2-12 0" fill="currentColor" fill-opacity=".18"/></svg>';
+export const ICONE_SABLIER = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10M7 21h10M8 3c0 6 8 6 8 9s-8 3-8 9M16 3c0 6-8 6-8 9s8 3 8 9"/></svg>';
 
 /** Couleur d'affichage d'un joueur : couleur de profil, gris pour un invité ou le robot. */
 export function couleurJoueur(j) {
@@ -85,7 +95,9 @@ export function creerCadre(root, ctx, { classe = '' } = {}) {
   };
   const chat = creerChat(q('[data-chat]'), { code: ctx.code, moi: ctx.moi });
   const signal = creerSignalTour();
-  const st = { etat: null, mancheVue: null, nonlus: 0, panneauOuvert: false, timerManche: null };
+  const fx = creerEffets();
+  const ticChrono = creerTicChrono();
+  const st = { etat: null, mancheVue: null, nonlus: 0, panneauOuvert: false, timerManche: null, aAgir: false, journalVu: null };
 
   const joueurMoi = (e) => (e?.joueurs || []).find((j) => j.user_id === e?.moi?.user_id) || null;
   const adversaire = (e) => (e?.joueurs || []).find((j) => j.user_id !== e?.moi?.user_id) || null;
@@ -118,8 +130,27 @@ export function creerCadre(root, ctx, { classe = '' } = {}) {
     el.arc.style.strokeDashoffset = String(CIRC * (1 - Math.min(1, reste / Math.max(1, total))));
     el.chrono.classList.toggle('is-urgent', reste <= 5);
     el.chrono.setAttribute('aria-label', `${reste} secondes restantes`);
+    ticChrono(reste, st.aAgir && !!e.moi?.joue, fin, el.chrono);
   };
   const tic = setInterval(peindreChrono, 500);
+
+  /** Mon temps est écoulé (ligne « auto » du journal à mon nom, jamais vue) : message bref, une fois même après une rafale. */
+  const signalerTemps = (e) => {
+    const lignes = e.journal || [];
+    const vu = st.journalVu ?? 0;
+    const premier = st.journalVu === null;
+    st.journalVu = Math.max(vu, ...lignes.map((x) => Number(x.id) || 0));
+    if (premier || !e.moi?.joue || e.partie.statut !== 'en_cours') return;
+    if (!lignes.some((x) => Number(x.id) > vu && x.type === 'auto' && x.user_id === e.moi.user_id)) return;
+    toast('Temps écoulé : le jeu a joué pour toi.', '', 'duels-toast-temps');
+    const t = [...document.querySelectorAll('.duels-toast-temps')].pop();
+    t?.insertAdjacentHTML('afterbegin', ICONE_SABLIER);
+    const n = Number(joueurMoi(e)?.manques);
+    if (t && n >= 1) {
+      t.insertAdjacentHTML('beforeend', `<span class="duels-manques" role="img" aria-label="${n} coup${n > 1 ? 's' : ''} manqué${n > 1 ? 's' : ''} sur 3">${[1, 2, 3].map((i) => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</span>`);
+    }
+    son('S12');
+  };
 
   /** Bandeau de fin de manche (affiché quelques secondes quand une manche se termine). */
   const montrerManche = (e) => {
@@ -143,8 +174,10 @@ export function creerCadre(root, ctx, { classe = '' } = {}) {
     /** Met à jour la barre, le statut, le journal et le chat. */
     maj(e, aAgir = monTour(e)) {
       st.etat = e;
+      st.aAgir = !!aAgir;
       const p = e.partie;
       const js = e.joueurs || [];
+      vuEnCours(p);
       el.nom.textContent = p.nom;
       el.code.textContent = p.code;
       const [a, b] = [js.find((j) => j.place === 1), js.find((j) => j.place === 2)];
@@ -170,6 +203,7 @@ export function creerCadre(root, ctx, { classe = '' } = {}) {
       chat.maj(e);
       peindreChrono();
       montrerManche(e);
+      signalerTemps(e);
       signal.maj(!!aAgir);
     },
     /** Texte de statut sous la barre (lu par les lecteurs d'écran). */
@@ -182,6 +216,7 @@ export function creerCadre(root, ctx, { classe = '' } = {}) {
     },
     detruire() {
       clearInterval(tic); clearTimeout(st.timerManche);
+      fx.nettoyer();
       signal.arreter();
       try { chat.detruire(); } catch { /* sans effet */ }
       root.innerHTML = '';

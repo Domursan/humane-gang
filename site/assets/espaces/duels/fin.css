@@ -38,37 +38,53 @@
 .duels-fin-actions .btn { min-height: 52px; justify-content: center; }
 
 /* Mini-grilles : Puissance 4, Morpion, Ultime */
-.duels-fin-mini { width: 100%; max-width: 360px; margin: 0 auto; display: grid; gap: 4px; padding: 8px; box-sizing: border-box; }
+.duels-fin-mini { position: relative; width: 100%; max-width: 360px; margin: 0 auto; display: grid; gap: 4px; padding: 8px; box-sizing: border-box; }
 .duels-fin-mini--p4 { background: #1E3FA8; border-radius: 12px; box-shadow: 0 8px 20px rgba(0, 0, 0, .5); }
-.duels-fin-mini--morpion { background: var(--border); gap: 2px; padding: 2px; border-radius: 10px; }
+.duels-fin-mini--morpion { background: #15182B; gap: 4px; padding: 6px; border: 1px solid var(--border); border-radius: 12px; }
 .duels-fin-case { position: relative; aspect-ratio: 1; min-width: 0; display: grid; place-items: center; }
 .duels-fin-mini--p4 .duels-fin-case { border-radius: 50%; background: #0E1430; }
-.duels-fin-mini--morpion .duels-fin-case { background: var(--surface-2); }
+.duels-fin-mini--morpion .duels-fin-case { background: #1F1F23; border-radius: 6px; }
 .duels-fin-jeton { position: absolute; inset: 0; border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, .35) 0, rgba(255, 255, 255, 0) 45%), var(--j, #F2EFEA); }
 .duels-fin-mini--p4 .duels-fin-case.is-gagnante { box-shadow: 0 0 0 3px var(--sand); }
 .duels-fin-mini--morpion .duels-fin-case.is-gagnante { box-shadow: inset 0 0 0 3px var(--sand); }
 .duels-fin-mini--cases { max-width: 420px; background: #3D5A47; border-radius: 12px; box-shadow: 0 8px 20px rgba(0, 0, 0, .5); }
 .duels-fin-mini--cases .duels-fin-case { background: #4C6D57; border-radius: 2px; }
-.duels-fin-mini--cases .duels-fin-case.is-clair { background: #E6DCC6; }
-.duels-fin-mini--cases .duels-fin-case.is-sombre { background: #7A5C43; }
+/* Échiquier et damier : mêmes bois, cases et pièces que leur table (echecs.css, dames.css, chargés seulement avec elle). */
+.duels-fin-mini--echecs, .duels-fin-mini--dames { gap: 0; padding: 0; overflow: hidden; border: 2px solid #3B2A1E; border-radius: 10px; container-type: inline-size; }
+.duels-fin-mini--echecs .duels-fin-case, .duels-fin-mini--dames .duels-fin-case { border-radius: 0; }
+.duels-fin-mini--echecs .duels-fin-case.is-clair { background: #E9D9B4; }
+.duels-fin-mini--echecs .duels-fin-case.is-sombre { background: #B58863; }
+.duels-fin-mini--dames .duels-fin-case.is-clair { background: #EADBBE; }
+.duels-fin-mini--dames .duels-fin-case.is-sombre { background: #5E3F2C; }
+.duels-fin-dpion { position: relative; width: 76%; aspect-ratio: 1; box-sizing: border-box; display: grid; place-items: center; border-radius: 50%;
+  box-shadow: inset 0 -.4cqi 0 rgba(0, 0, 0, .18), 0 .2cqi .4cqi rgba(0, 0, 0, .35); }
+.duels-fin-dpion.is-1 { background: radial-gradient(circle at 35% 30%, #FFFBF1, #E9DCC0 70%); border: .5cqi solid #8C7A5A; }
+.duels-fin-dpion.is-2 { background: radial-gradient(circle at 35% 30%, #C25A43, #8E3424 72%); border: .5cqi solid #4D1A12; }
+.duels-fin-dpion.is-2::before { content: ''; position: absolute; left: 50%; top: 50%; width: 24%; height: 24%; transform: translate(-50%, -50%);
+  border-radius: 50%; background: #F3EAD6; box-shadow: 0 0 0 .25cqi #4D1A12; }
+.duels-fin-coord { position: absolute; font: 700 max(10px, 2.5cqi) / 1 'Inter', system-ui, sans-serif; color: rgba(40, 28, 18, .8); pointer-events: none; }
+.duels-fin-case.is-sombre .duels-fin-coord { color: rgba(255, 246, 230, .9); }
+.duels-fin-coord.is-rang { left: 2px; top: 2px; }
+.duels-fin-coord.is-fichier { right: 2px; bottom: 2px; }
 .duels-fin-pion { display: block; width: 78%; aspect-ratio: 1; border-radius: 50%; box-shadow: 0 2px 3px rgba(0, 0, 0, .45), inset 0 -2px 0 rgba(0, 0, 0, .25); }
 .duels-fin-pion.is-noir { background: radial-gradient(circle at 35% 30%, #5b5b61 0, #17171a 60%, #050506 100%); }
 .duels-fin-pion.is-blanc { background: radial-gradient(circle at 35% 30%, #ffffff 0, #e9e6df 60%, #b9b5ac 100%); }
-.duels-fin-dame { position: absolute; font-family: 'Archivo Black', sans-serif; font-weight: 400; font-size: 11px; color: var(--sand); pointer-events: none; }
-.duels-fin-piece { font-family: 'Archivo Black', sans-serif; font-weight: 400; font-size: clamp(12px, 3.4vw, 20px); }
-.duels-fin-piece.is-blanc { color: #FFFFFF; }
-.duels-fin-piece.is-noir { color: #121212; }
+.duels-fin-dame { position: relative; z-index: 1; width: 56%; height: 56%; fill: #E8B04B; stroke: #3B2A12; stroke-width: .9; stroke-linejoin: round; }
+.duels-fin-piece { position: relative; z-index: 1; font-size: 10.5cqi; font-weight: 400; line-height: 1; pointer-events: none;
+  font-family: 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'Noto Sans Symbols', 'DejaVu Sans', 'Apple Symbols', serif; }
+.duels-fin-piece.is-blanc { color: #FFFFFF; -webkit-text-stroke: .8px #2A1D12; text-shadow: 0 1px 2px rgba(0, 0, 0, .45); }
+.duels-fin-piece.is-noir { color: #17120E; -webkit-text-stroke: .5px #EFE4CC; text-shadow: 0 0 3px rgba(255, 255, 255, .22); }
 .duels-fin-lancers { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 15px; }
 .duels-fin-lancers li { padding: 8px 0; border-bottom: 1px solid var(--border); }
 .duels-fin-marque { font-family: 'Archivo Black', sans-serif; font-weight: 400; font-size: clamp(12px, 3.4vw, 22px); line-height: 1; }
 .duels-fin-gros { font-size: clamp(26px, 7vw, 44px); }
-.duels-fin-mini3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--border); padding: 1px;
+.duels-fin-mini3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: #15182B; padding: 1px;
   width: 100%; aspect-ratio: 1; box-sizing: border-box; }
-.duels-fin-mini3 .duels-fin-case { background: var(--surface-2); }
+.duels-fin-mini3 .duels-fin-case { background: #1F1F23; }
 .duels-fin-mini3 .duels-fin-marque { font-size: 11px; }
 .duels-fin-mini--ultime { max-width: 420px; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; background: none; padding: 0; }
-.duels-fin-tuile { display: grid; place-items: center; aspect-ratio: 1; padding: 4px; box-sizing: border-box; background: var(--surface-2);
+.duels-fin-tuile { display: grid; place-items: center; aspect-ratio: 1; padding: 4px; box-sizing: border-box; background: #15182B;
   border: 1px solid var(--border); border-radius: 10px; }
 
 /* Manches */
@@ -119,3 +135,15 @@
   .duels-fin-score { justify-content: space-between; width: 100%; gap: 10px; }
   .duels-fin-chiffres { font-size: 30px; }
 }
+
+/* Abandon, forfait, défi refusé ou expiré (AB1, AB2, FO1, FO2, DF1, DF2) : icône dans le titre, joueur parti atténué */
+.duels-fin-cause { display: flex; align-items: center; gap: 12px; min-width: 0; overflow-wrap: anywhere; }
+.duels-fin-ico { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--border-strong);
+  color: var(--rose); flex: none; transform-origin: 30% 90%; }
+.duels-fin-ico.is-bon { color: var(--sand); }
+.duels-fin-ico.is-anime { animation: duels-fin-drapeau .9s ease-in-out both; }
+.duels-fin-joueur.is-parti { opacity: .5; }
+.duels-fin-bandeau.is-perdu { border-color: color-mix(in srgb, var(--rose) 45%, transparent); }
+.duels-fin-bandeau.is-neutre { border-color: var(--border-strong); }
+@keyframes duels-fin-drapeau { 30% { transform: rotate(-9deg); } 65% { transform: rotate(6deg); } }
+@media (prefers-reduced-motion: reduce) { .duels-fin-ico.is-anime { animation: none; } }

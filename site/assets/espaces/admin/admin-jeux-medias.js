@@ -10,7 +10,7 @@
  * Droits : Staff « souvenirs » et administrateur (contrôlés aussi par les RPC, journalisées).
  * Route : #fete/framed-heardle (branchée par admin.js). Section : <section id="jeux-medias">, conteneur #jeux-medias-root.
  * RPC : hg_framed_admin, hg_framed_film_save, hg_framed_round_save, hg_heardle_admin, hg_heardle_track_save, hg_heardle_round_save.
- * Exporte : mountJeuxMediasSection.
+ * Exporte : mountJeuxMediasSection, et pour la page Programmation (admin-programme.js) : filmsLibres, morceauxLibres, urlEcoute, urlsImages.
  */
 import { sb, toast, errMsg, esc } from '../../commun/core.js';
 import { prepareImage } from '../../commun/image-compress.js';
@@ -25,6 +25,23 @@ const newId = () => (crypto.randomUUID ? crypto.randomUUID()
 let root = null;
 // picker : sélecteur d'image source ouvert ({ q }) ; bulk : ajout en masse (confirm, puis run) ; manifest : affiches du site
 const S = { part: 'framed', F: null, H: null, edit: null, editT: null, urls: {}, files: {}, busy: false, picker: null, bulk: null, manifest: null };
+
+/** Films programmables : proposés, avec 3 images au moins, sans manche (un élément ne revient jamais). */
+export const filmsLibres = (F) => F.films.filter((f) => f.active && f.frames.length >= 3 && !f.day);
+/** Morceaux programmables : validés et sans manche. */
+export const morceauxLibres = (H) => H.tracks.filter((t) => t.status === 'valide' && !t.day);
+/** Adresse YouTube d'un morceau, à son instant de départ. */
+export const urlEcoute = (t) => `https://www.youtube.com/watch?v=${encodeURIComponent(t.youtube_id)}&t=${Number(t.start_s) || 0}s`;
+/**
+ * Adresses signées (10 min) d'images du bucket privé des jeux.
+ * @param {string[]} paths Chemins dans le bucket.
+ * @returns {Promise<Array<{path: string, signedUrl: string}>>}
+ */
+export async function urlsImages(paths) {
+  if (!paths.length) return [];
+  const { data } = await sb.storage.from(BUCKET).createSignedUrls(paths, 600);
+  return data || [];
+}
 
 /**
  * Monte la section.
@@ -46,10 +63,7 @@ async function load() {
   S.F = f.error || !f.data ? { error: f.error ? errMsg(f.error) : 'Données indisponibles' } : f.data;
   S.H = h.error || !h.data ? { error: h.error ? errMsg(h.error) : 'Données indisponibles' } : h.data;
   const paths = (S.F.films || []).flatMap((x) => x.frames || []).filter((p) => !S.urls[p]);
-  if (paths.length) {
-    const { data } = await sb.storage.from(BUCKET).createSignedUrls(paths, 600);
-    for (const r of data || []) if (r.signedUrl) S.urls[r.path] = r.signedUrl;
-  }
+  for (const r of await urlsImages(paths)) if (r.signedUrl) S.urls[r.path] = r.signedUrl;
   render();
 }
 
@@ -67,7 +81,7 @@ function render() {
 function framedHtml() {
   const F = S.F;
   if (F.error) return `<div class="empty">${esc(F.error)}</div>`;
-  const usable = F.films.filter((f) => f.active && f.frames.length >= 3 && !f.day);
+  const usable = filmsLibres(F);
   const rounds = F.rounds.map((r) => `<li class="jm-row"><span class="jm-day">${esc(day(r.day))}</span><span class="jm-t">${esc(r.title)}</span>
       <span class="small muted">${esc(r.players)} joueur${r.players > 1 ? 's' : ''}</span>
       ${r.day >= F.today && !r.players ? `<button type="button" class="btn btn-ghost" data-act="f-unround" data-day="${esc(r.day)}">Retirer</button>` : ''}</li>`).join('');
@@ -284,11 +298,10 @@ function heardleHtml() {
   if (H.error) return `<div class="empty">${esc(H.error)}</div>`;
   const props = H.tracks.filter((t) => t.status === 'propose');
   const ok = H.tracks.filter((t) => t.status === 'valide');
-  const free = ok.filter((t) => !t.day);
-  const yt = (t) => `https://www.youtube.com/watch?v=${encodeURIComponent(t.youtube_id)}&t=${t.start_s}s`;
+  const free = morceauxLibres(H);
   const row = (t, acts) => `<li class="jm-row"><span class="jm-t"><strong>${esc(t.artist)} — ${esc(t.title)}</strong></span>
       <span class="small muted">départ ${esc(t.start_s)} s${t.proposed_pseudo ? ` · proposé par ${esc(t.proposed_pseudo)}` : ''}${t.shared_on ? ` · ${esc(t.shared_on)}` : ''}${t.day ? ` · manche du ${esc(day(t.day))}` : ''}</span>
-      <a class="btn btn-ghost" href="${esc(yt(t))}" target="_blank" rel="noopener">Écouter</a>${acts}</li>`;
+      <a class="btn btn-ghost" href="${esc(urlEcoute(t))}" target="_blank" rel="noopener">Écouter</a>${acts}</li>`;
   const rounds = H.rounds.map((r) => `<li class="jm-row"><span class="jm-day">${esc(day(r.day))}</span><span class="jm-t">${esc(r.artist)} — ${esc(r.title)}${r.cancelled ? ' <span class="pill">annulée</span>' : ''}</span>
       <span class="small muted">${esc(r.players)} joueur${r.players > 1 ? 's' : ''}</span>
       ${r.day >= H.today && !r.cancelled ? `<button type="button" class="btn btn-ghost" data-act="h-cancel" data-day="${esc(r.day)}">Annuler la manche</button>` : ''}</li>`).join('');

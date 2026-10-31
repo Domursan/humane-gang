@@ -8,8 +8,10 @@
  *   La mise en page est dans assets/espaces/plateaux/catan.css ; ici, le contenu et les actions.
  * Dépendances : commun/tour-signal.js (creerSignalTour), core.js (esc, toast), ../../api.js (plat, erreurTexte), ../../vues/commun.js (bandeauHtml, brancherChrono,
  *   journalHtml, envoyer, moiJoueur, estMonTour, joueurDe), ../../vues/chat.js (creerChat, tiroirChat), ./plateau.js,
- *   ./effets.js (changements, jouerEffets : dés, production, ressources, constructions, voleur, « à toi »).
- * Exporte : creer(root, ctx) -> { maj(etat), message(msg), detruire() }.
+ *   ./effets.js (changements, jouerEffets : dés, production, ressources, constructions, voleur, « à toi »),
+ *   commun/effets-duels.js (anime), ../../vues/fin-fx.js (effetsFinPlateau, fxFin, issuePlateau), ./fin.js (finFx).
+ *   Fin de partie (CT1) : avantFin garde le plateau du gagnant le temps que les tuiles s'allument l'une après l'autre.
+ * Exporte : creer(root, ctx) -> { maj(etat), message(msg), detruire(), avantFin(etat) }.
  *   ctx = { code, naviguer, moi, suivi, contenus } ; suivi = retour de suivrePartie.
  *   etat.jeu = forme de hg_plat__catan_vue (geo, tuiles, voleur, colonies, villes, routes, phase, sous, dernier, de,
  *   objectif, mes_ressources, couts) ; etat.partie.tour = joueur dont c'est le tour.
@@ -21,6 +23,9 @@ import { creerChat, tiroirChat } from '../../vues/chat.js';
 import { creerSignalTour } from '../../../../commun/tour-signal.js';
 import { plateauSvg, RESSOURCES, nomTuile } from './plateau.js';
 import { changements, jouerEffets } from './effets.js';
+import { anime } from '../../../../commun/effets-duels.js';
+import { effetsFinPlateau, fxFin, issuePlateau } from '../../vues/fin-fx.js';
+import { finFx } from './fin.js';
 import { voisinSpatial } from '../../../../commun/grille-clavier.js';
 
 const ECRAN_GRAND = '(min-width: 761px)';
@@ -38,6 +43,8 @@ const AIDE_MODE = {
 const PHASE_TAG = { placement: 'Mise en place', lancer: 'Production', voleur: 'Le voleur bouge', action: 'Construire et échanger' };
 const ICONE_QUITTER = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H9"></path></svg>';
 const COULEUR = /^#[0-9a-f]{6}$/i;
+const PAS_TUILE_FIN = 110;      // ms entre deux tuiles qui s'allument à la fin de la partie (CT1)
+const DUREE_TUILE_FIN = 800;    // ms : allumage d'une tuile (catan.css, .ct-tuile-fin)
 
 /** Pastille colorée d'une ressource : « 2 bois » ; la couleur reprend celle de la tuile. */
 const pastille = (r, n) => {
@@ -134,6 +141,7 @@ export function creer(root, ctx) {
 
   let etat = null;
   let occupe = false;                 // un envoi est en cours
+  let finie = false;                  // état final reçu : la table reste à l'écran, plus d'action ni de rendu forcé (jamais remis à faux)
   let arretChrono = null;
   let mode = null;                    // 'route' | 'colonie' | 'ville' : construction choisie (phase action)
   let choixVoleur = null;             // { hexe, victimes: [uid] } : tuile choisie, reste à choisir la personne volée
@@ -171,7 +179,7 @@ export function creer(root, ctx) {
   /** Mon tour dans un état donné (sert à repérer le passage « à toi »). */
   const monTourDe = (x) => !!x?.moi?.user_id && estMonTour(x) && x?.partie?.statut === 'en_cours';
   const monTour = () => monTourDe(etat);
-  const peutAgir = () => monTour() && !occupe;
+  const peutAgir = () => !finie && monTour() && !occupe;
   const estMoi = (uid) => uid != null && String(uid) === String(monId());
   const pseudoDe = (uid) => (uid == null ? '' : (joueurDe(etat, uid)?.pseudo || '?'));
   const mesRes = () => jeu().mes_ressources || {};
@@ -281,6 +289,7 @@ export function creer(root, ctx) {
   }
 
   function rendrePlateau(force = false) {
+    if (finie) return;                // les tuiles qui s'allument restent en place
     const j = jeu();
     const html = plateauSvg({
       geo: j.geo, tuiles: j.tuiles, voleur: j.voleur, colonies: j.colonies || {}, villes: j.villes || {}, routes: j.routes || {},
@@ -384,7 +393,7 @@ export function creer(root, ctx) {
 
   /** Redessine le panneau si son contenu a changé (pas pendant un envoi, sauf forcé). */
   function rendrePanneau(force = false) {
-    if (occupe && !force) return;
+    if (finie || (occupe && !force)) return;
     const html = contenuPanneau();
     if (!force && cles.panneau === html) return;
     cles.panneau = html;
@@ -452,7 +461,7 @@ export function creer(root, ctx) {
    * @param {Function|null} apres appelé à la fin de l'envoi (arrête l'animation des dés).
    */
   function agir(bouton, action, args = {}, apres = null) {
-    if (occupe) return;
+    if (occupe || finie) return;
     occupe = true;
     envoyer(bouton, () => plat.agir(code, action, args), suivi).then((ok) => {
       occupe = false;
@@ -610,7 +619,7 @@ export function creer(root, ctx) {
 
   /** Clics de la quitter : confirmation puis départ de la partie. */
   function surQuitter(ev) {
-    if (occupe) return;
+    if (occupe || finie) return;
     if (!confirm('Quitter la partie ? Tu ne pourras plus jouer dans cette manche.')) return;
     envoyer(ev.currentTarget, () => plat.quitter(code), suivi);
   }
@@ -655,6 +664,19 @@ export function creer(root, ctx) {
         { aToi: !etaitMonTour && monTour() });
       chat.maj(e);
       signal.maj(monTour());
+    },
+    /** CT1 : le gagnant voit ses tuiles s'allumer, puis l'écran de fin. Sans animation, onglet masqué ou autre issue : rien à attendre. */
+    avantFin(e) {
+      finie = true;
+      refs.quitter.disabled = true;
+      if (document.hidden) return null;
+      const tuiles = [...refs.plateau.querySelectorAll('.ct-hex')];
+      const joue = effetsFinPlateau(e, { ...finFx,
+        apres: (issue) => {
+          if (issue === 'gagnant') fxFin.cascade(tuiles, (h) => fxFin.classe(h, 'ct-tuile-fin', DUREE_TUILE_FIN), PAS_TUILE_FIN);
+        } });
+      if (!joue || !anime() || issuePlateau(e) !== 'gagnant') return null;
+      return new Promise((ok) => { fxFin.plus(ok, 320 + Math.max(0, tuiles.length - 1) * PAS_TUILE_FIN + DUREE_TUILE_FIN); });
     },
     /** Message du chat (ancien ou nouveau). */
     message(msg) {

@@ -12,7 +12,8 @@
  *   est joué en plus, à chaque passage à « à moi d'agir ».
  * Effets des vrais changements (jamais au premier état reçu) : bandeau aux couleurs de l'équipe et bannière « Au tour des… »
  *   au changement de tour ; indice en grand et son à chaque nouvel indice ; carte qui se retourne, son, et flash + secousse
- *   pour l'assassin. Mise en forme : mot trop long réduit (jamais coupé). Voir vues/effets.js et nom-de-code.css.
+ *   pour l'assassin (le texte du résultat, qui dépend de mon équipe, vient de l'écran de fin). Mise en forme : mot trop long réduit
+ *   (jamais coupé). Voir vues/effets.js et nom-de-code.css. Calques et minuteurs des effets arrêtés avec la vue (arreterEffets).
  * Dépendances : core.js (esc, initials, toast), nom-de-code/api.js (ndc, erreurTexte, EQUIPES),
  *   ./chat.js (creerChat), ./effets.js (effets), commun/tour-signal.js.
  * Exporte : creer(root, ctx) -> { maj(etat), message(msg), detruire() }.
@@ -21,7 +22,7 @@
 import { esc, initials, toast } from '../../../commun/core.js';
 import { ndc, erreurTexte, EQUIPES } from '../api.js';
 import { creerChat } from './chat.js';
-import { animationsOk, son, banniere, grandIndice, flashRouge, secouer } from './effets.js';
+import { animationsOk, son, banniere, grandIndice, flashRouge, secouer, arreterEffets } from './effets.js';
 import { creerSignalTour } from '../../../commun/tour-signal.js';
 import { boutonReponses } from '../../../commun/core/admin-reponses.js';
 
@@ -338,7 +339,7 @@ export function creer(root, ctx) {
 
   /**
    * Retourne une case qui vient d'être révélée : elle se couche (ancien aspect), change de couleur au milieu du mouvement,
-   * puis se relève. Pour l'assassin, flash rouge, secousse de la grille et bannière « Assassin ! » à la fin du mouvement.
+   * puis se relève. Pour l'assassin, flash rouge et secousse de la grille à la fin du mouvement.
    * @param {HTMLElement} b case.
    * @param {object} carte carte révélée.
    */
@@ -357,7 +358,6 @@ export function creer(root, ctx) {
       if (c.couleur === 'assassin') {
         flashRouge();
         secouer(refs.grille);
-        banniere('Assassin !', 'Partie perdue', 'rouge');
       }
     }, 260);
   }
@@ -397,7 +397,7 @@ export function creer(root, ctx) {
 
     const nomEq = teinte && teinte !== 'neutre' && teinte !== 'assassin' ? EQUIPES[teinte].nom : (teinte ? NOM_TYPE[teinte] : null);
     let libelle = carte.mot;
-    if (revelee && teinte === 'assassin') libelle += ', assassin. Partie perdue';
+    if (revelee && teinte === 'assassin') libelle += ', assassin';
     else if (revelee && teinte === 'neutre') libelle += ', passant';
     else if (revelee && nomEq) libelle += `, mot de l'équipe ${nomEq}`;
     else if (espion && teinte) libelle += `, mot ${teinte === 'assassin' ? 'assassin' : `de l'équipe ${nomEq}`}`;
@@ -711,6 +711,7 @@ export function creer(root, ctx) {
     detruire() {
       detruit = true;
       clearInterval(minuterie);
+      arreterEffets();
       window.removeEventListener('resize', recalculerMots);
       signal.arreter();
       chat.detruire();

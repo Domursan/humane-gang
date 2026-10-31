@@ -7,13 +7,15 @@
  *   radar (une fois par manche), salve (tirs restants), restants des deux côtés dans la colonne latérale.
  *   Spectateur : les deux grilles avec les tirs, aucune action.
  *   Effets (ajouts visuels et sonores, sur les seuls nouveaux tirs ou tours) : « à toi » (face et cases libres),
- *   tir dans l'eau, touché, coulé (secousse et bandeau), tir reçu (viseur), victoire (effetsFin, appelé par fin.js).
+ *   tir dans l'eau, touché, coulé (secousse et bandeau), tir reçu (viseur). Fin de duel (effetsFin, appelé par fin.js) : victoire ;
+ *   défaite (BN1) : ma flotte s'enfonce case par case sur l'écran de fin, son « Coulé », bandeau sobre.
  *   Le signal « à toi » (son et titre) reste dans commun.js. Mouvement réduit : pas d'animation, les sons restent.
  *   Exporte aussi : effetsFin.
  * Dessin : navires vus de dessus en SVG (symboles définis une fois dans la vue), feu et éclaboussure sur les cases.
  * Accessibilité : chaque case de tir est un <button> avec aria-label « B7 : pas encore visée » ; l'état n'est
  *   jamais donné par la couleur seule (icônes et texte). Animations coupées par body.duels-calme.
- * Dépendances : core.js (esc, toast), ../api.js (duel, erreurTexte, estInvite, FLOTTE, nomCase), ./commun.js (creerCadre, nomJoueur).
+ * Dépendances : core.js (esc, toast, motionAllowed), ../api.js (duel, erreurTexte, FLOTTE, nomCase), ./commun.js (creerCadre, nomJoueur),
+ *   ./fin-fx.js (effetsFinDuel, fxFin), ../../../commun/effets-duels.js (anime).
  * Exporte : creer.
  */
 import { esc, toast, motionAllowed } from '../../../commun/core.js';
@@ -22,6 +24,8 @@ import { creerCadre, nomJoueur, deJoueur, deNom } from './commun.js';
 import { boutonReponses } from '../../../commun/core/admin-reponses.js';
 import { voisinGrille } from '../../../commun/grille-clavier.js';
 import { jouerSonJeu } from '../../../commun/sons-jeux.js';
+import { anime as animePermis } from '../../../commun/effets-duels.js';
+import { effetsFinDuel, fxFin } from './fin-fx.js';
 
 const TAILLE = 10;
 const NB_CASES = 100;
@@ -120,10 +124,6 @@ function typeEn(pose, c) {
 
 /* ---------- Effets (ajouts visuels, aucun clic intercepté) ---------- */
 
-/** Parties (ids) dont une table a reçu un état « en cours » dans cette page : seules elles ont l'effet de fin. */
-const VUES_EN_COURS = new Set();
-const COULEURS_CONF = ['#FE3104', '#FCA301', '#FBD32D', '#159946', '#2B5AE2', '#4E2398', '#E2C77E'];
-
 /** Bandeau fixe au milieu de la page (sans clic, retiré après 2,3 s). Textes fixes ou déjà contrôlés. */
 function bandeau(titre, sous) {
   const b = document.createElement('div');
@@ -135,20 +135,6 @@ function bandeau(titre, sous) {
   b.append(s);
   document.body.append(b);
   setTimeout(() => b.remove(), 2300);
-}
-/** 70 confettis qui tombent (calque fixe, retirés après 4 s). */
-function confettis() {
-  for (let i = 0; i < 70; i++) {
-    const d = document.createElement('i');
-    d.className = 'bn-fx-conf';
-    d.setAttribute('aria-hidden', 'true');
-    d.style.left = `${Math.random() * 100}vw`;
-    d.style.background = COULEURS_CONF[i % COULEURS_CONF.length];
-    d.style.animationDuration = `${1.6 + Math.random() * 1.6}s`;
-    d.style.animationDelay = `${Math.random() * 0.5}s`;
-    document.body.append(d);
-    setTimeout(() => d.remove(), 4000);
-  }
 }
 /** Élément d'effet centré sur (x, y), retiré après `ms`. */
 function fxEn(classe, x, y, ms) {
@@ -173,24 +159,43 @@ function flash(el, classe, ms) {
 }
 
 /**
- * Effet de fin de duel (appelé par vues/fin.js) : seulement pour une partie vue en direct et gagnée par moi.
- * Le perdant voit l'écran de fin sans effet.
+ * BN1, défaite vue en direct : ma flotte réelle de l'écran de fin (ma grille, pas forcément la première) s'enfonce case par case,
+ * puis bandeau sobre ; mes cases reprennent ensuite leur état coulé. Mouvement réduit : les cases restent coulées, sans bandeau ; le son reste (joué par effetsFin).
+ */
+function flotteCoulee(root, e) {
+  const js = e.joueurs || [];
+  const adv = js.find((j) => j.user_id !== e.moi?.user_id);
+  if (animePermis()) {
+    const grille = root.querySelectorAll('.duels-fin-bgrille')[js.findIndex((j) => j.user_id === e.moi?.user_id)];
+    grille?.querySelectorAll('.is-coule').forEach((c, i) => {
+      c.style.setProperty('--bn-d', `${i * 80}ms`);
+      c.classList.add('bn-fx-sombre');
+    });
+    // Puis mes cases reviennent, rouges : la légende de l'écran de fin reste vraie.
+    const coulees = [...(grille?.querySelectorAll('.is-coule') || [])];
+    fxFin.rendre(coulees, ['bn-fx-sombre'], coulees.length * 80 + 1300);
+  }
+  fxFin.plus(() => fxFin.bandeau('Flotte coulée', `${adv?.robot ? 'Le robot' : (adv?.pseudo || 'Ton adversaire')} gagne le duel`, { ton: 'd' }), 700);
+}
+
+/**
+ * Fin de duel vue en direct (appelé par vues/fin.js) : gagnant : son, gagnant qui brille, bandeau et confettis ;
+ * perdant : son « Coulé » du site et flotteCoulee. son() n'est appelé qu'une fois, partie vue en direct : c'est là que part l'effet.
  * @param {HTMLElement} root conteneur de l'écran de fin.
  * @param {object} e état du duel terminé.
  */
 export function effetsFin(root, e) {
   const p = e.partie || {};
-  if (p.statut !== 'terminee' || !VUES_EN_COURS.has(p.id)) return;
-  VUES_EN_COURS.delete(p.id);
-  const js = e.joueurs || [];
-  const gagnant = js.find((j) => j.gagne) || js.find((j) => j.user_id === p.vainqueur) || null;
-  if (!gagnant || gagnant.user_id !== e.moi?.user_id) return;
-  jouerSonJeu('bataille-navale', 5);
-  if (!motionAllowed()) return;
-  flash(root.querySelector('.duels-fin-joueur.is-gagnant'), 'bn-fx-fin', 4800);
-  const tirs = (e.bataille?.tirs?.[e.moi.user_id] || []).length;
+  const tirs = (e.bataille?.tirs?.[e.moi?.user_id] || []).length;
   const format = p.format > 1 ? `Au meilleur des ${p.format}` : 'Manche unique';
-  setTimeout(() => { bandeau('Tu gagnes le duel !', `${format} · ${tirs} tir${tirs > 1 ? 's' : ''}`); confettis(); }, 300);
+  effetsFinDuel(root, e, {
+    jeu: 'bataille-navale',
+    son: (issue) => {
+      if (issue === 'perdant') flotteCoulee(root, e);
+      return { gagnant: 5, perdant: 3 }[issue] || null;
+    },
+    titre: (issue) => (issue === 'gagnant' ? ['Tu gagnes le duel !', `${format} · ${tirs} tir${tirs > 1 ? 's' : ''}`] : null),
+  });
 }
 
 /* ---------- Dessin ---------- */
@@ -1022,7 +1027,6 @@ export function creer(root, ctx) {
     maj(e) {
       const avant = st.etat;
       st.etat = e;
-      if (e.partie.statut === 'en_cours' && e.partie.id) VUES_EN_COURS.add(e.partie.id);
       // Bataille : en placement, j'ai à agir tant que ma flotte n'est pas prête ; en jeu, c'est mon tour de tirer.
       const aAgir = e.partie.phase === 'placement'
         ? !!e.moi?.joue && e.partie.statut === 'en_cours' && !moiJ(e)?.pret

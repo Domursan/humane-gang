@@ -10,18 +10,19 @@
  *   rebond (son, sauf pour mon propre coup, déjà joué au clic) ; les pions retournés changent de couleur un par un, du plus
  *   proche du coup au plus éloigné (son par pion) ; le compte pulse ; « à toi de jouer » (mon nom pulse, cases marquées
  *   éclairées) ; sur téléphone, la case choisie s'éclaire et « Jouer en … » pulse ; fin de partie : effetsFin (appelé par
- *   vues/fin.js) : son, gagnant qui brille, bandeau. Mouvement réduit ou préférence « effets » coupée (motionAllowed) :
- *   pas d'animation, les sons restent.
+ *   vues/fin.js) : son, gagnant qui brille, bandeau selon le résultat avec le compte des pions (OT1). Mouvement réduit ou
+ *   préférence « effets » coupée (motionAllowed) : pas d'animation, les sons restent.
  * Grille : 64 caractères, case 0 = a8 ; '1' = pion de celui qui commence la manche (noirs), '2' = blancs, '.' = vide.
  * Contrat (vues/partie.js) : export function creer(root, ctx) → { maj(etat), message(msg), detruire() }, ctx = { code, naviguer, moi, suivi }.
  * Dépendances : core.js (esc, toast, motionAllowed), ../api.js (duel, erreurTexte), ./commun.js (creerCadre, nomJoueur),
- *   ../../../commun/sons-jeux.js (jouerSonJeu).
+ *   ../../../commun/sons-jeux.js (jouerSonJeu), ./fin-fx.js (fxFin, issueDuel, finEnDirect, sonFin).
  * Exporte : creer, effetsFin.
  */
 import { esc, toast, motionAllowed } from '../../../commun/core.js';
 import { duel, erreurTexte } from '../api.js';
 import { creerCadre, nomJoueur } from './commun.js';
 import { jouerSonJeu } from '../../../commun/sons-jeux.js';
+import { fxFin, issueDuel, finEnDirect, sonFin } from './fin-fx.js';
 
 /** Durée pendant laquelle on attend l'état après un envoi réussi (ms), au cas où le temps réel tarde. */
 const DUREE_ATTENTE = 5000;
@@ -35,26 +36,12 @@ const CASES = COTE * COTE;
 
 /** Vrai sur ordinateur (souris, pointeur fin) : un clic joue directement. */
 const ordinateur = () => typeof matchMedia === 'function' && matchMedia('(hover: hover) and (pointer: fine)').matches;
-/** Parties (ids) dont une table Othello a reçu un état « en cours » dans cette page : seules elles ont l'effet de fin. */
-const VUES_EN_COURS = new Set();
 
 /** Ajoute une classe d'effet à un élément pendant quelques secondes (sans effet si l'élément n'existe plus). */
 function flash(el, classe, ms) {
   if (!el) return;
   el.classList.add(classe);
   setTimeout(() => el.classList.remove(classe), ms);
-}
-/** Bandeau fixe au milieu de la page (sans clic, retiré après 2,3 s). Textes fixes, sans saisie. */
-function bandeau(titre, sous) {
-  const b = document.createElement('div');
-  b.className = 'duels-oth-bandeau';
-  b.setAttribute('aria-hidden', 'true');
-  b.append(titre);
-  const s = document.createElement('small');
-  s.textContent = sous;
-  b.append(s);
-  document.body.append(b);
-  setTimeout(() => b.remove(), 2300);
 }
 /** Nom d'une case (0 → a8, 7 → h8, 63 → h1). */
 const nomCase = (i) => `${'abcdefgh'[i % COTE]}${COTE - Math.floor(i / COTE)}`;
@@ -336,7 +323,6 @@ export function creer(root, ctx) {
       if (!st.cases.length) construire();
       st.etat = e;
       st.attente = false;
-      if (e.partie.statut === 'en_cours' && e.partie.id) VUES_EN_COURS.add(e.partie.id);
       cadre.maj(e);
 
       if (!st.regle) {
@@ -393,16 +379,27 @@ export function creer(root, ctx) {
 
 /**
  * Effets de fin de partie, appelés par vues/fin.js une fois l'écran de fin dessiné. Seulement si cette partie a été vue
- * en cours dans cette page. Son « fin de partie », gagnant qui brille, bandeau « Partie terminée » (sauf mouvement réduit).
+ * en cours dans cette page. Même son pour tous, gagnant qui brille, bandeau selon le résultat avec le compte des pions (OT1),
+ * neutre pour un spectateur (sauf mouvement réduit).
  * @param {HTMLElement} root écran de fin.
  * @param {object} e état terminé du duel.
  */
 export function effetsFin(root, e) {
   const p = e.partie || {};
-  if (p.statut !== 'terminee' || !VUES_EN_COURS.has(p.id)) return;
-  VUES_EN_COURS.delete(p.id);
-  jouerSonJeu('othello', 4);
+  if (!finEnDirect(p)) return;
+  sonFin('othello', 4);
   if (!motionAllowed()) return;
-  flash(root.querySelector('.duels-fin-joueur.is-gagnant'), 'duels-oth-fin-fx', 4800);
-  setTimeout(() => bandeau('Partie terminée', 'Le plus de pions gagne'), 300);
+  fxFin.classe(root.querySelector('.duels-fin-joueur.is-gagnant'), 'duels-oth-fin-fx', 4800);
+  const h = p.historique || [];
+  const g = normaliser(h[h.length - 1]?.grille || p.grille);
+  const mien = String(e.pions?.[e.moi?.user_id]);
+  const moi = [...g].filter((c) => c === mien).length;
+  const lui = [...g].filter((c) => c === (mien === '1' ? '2' : '1')).length;
+  const compte = `${moi} pion${moi > 1 ? 's' : ''} contre ${lui}`;
+  const [titre, sous, ton] = {
+    gagnant: ['Partie gagnée !', compte, ''],
+    perdant: ['Partie perdue', compte, 'd'],
+    nulle: ['Partie nulle', `${moi} pion${moi > 1 ? 's' : ''} partout`, 'n'],
+  }[issueDuel(e)] || ['Partie terminée', 'Le plus de pions gagne', 'n'];
+  fxFin.plus(() => fxFin.bandeau(titre, sous, { ton }), 300);
 }

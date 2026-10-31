@@ -167,6 +167,8 @@ body.plat-pictionary { --plat-teinte: #3A2A16; --plat-or: #E8CC85; }
 .pi-devine, .pi-toile-zone { position: relative; }
 .pi-devine.is-joue { animation: pi-pouls-saisie 1.2s ease-in-out 2; }
 .pi-toile.is-joue { animation: pi-pouls-saisie 1.2s ease-in-out 2; }
+/* Fin de partie (PI1) : cadre doré de la dernière toile (avantFin de table.js ; rien sans animation). */
+.pi-toile.pi-toile-fin { border-color: var(--pi-or); box-shadow: 0 0 0 3px var(--pi-or), 0 0 26px rgba(232, 204, 133, .55); transition: border-color .4s, box-shadow .4s; }
 @keyframes pi-pouls-saisie {
   50% { box-shadow: 0 0 0 3px var(--pi-or), 0 0 22px rgba(232, 204, 133, .6); }
 }

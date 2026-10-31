@@ -45,3 +45,13 @@
   [data-abandon] { padding: 0 12px; }
 }
 @media (min-width: 901px) { [data-ouvrir-chat] { display: none; } }
+
+/* Temps écoulé (TP1) : message bref, points de coups manqués */
+.duels-toast-temps { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-color: var(--rose); font-size: 14px; margin-bottom: 56px; } /* au-dessus du bouton des amis */
+.duels-toast-temps svg { color: var(--rose); flex: none; }
+.duels-manques { display: inline-flex; gap: 4px; }
+.duels-manques i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--rose); }
+.duels-manques i.on { background: var(--rose); animation: duels-manque-saut .35s; }
+@keyframes duels-manque-saut { 40% { transform: translateY(-6px) scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { .duels-manques i.on { animation: none; } }
+html[data-fx="off"] .duels-manques i.on, body.duels-calme .duels-manques i.on { animation: none; }

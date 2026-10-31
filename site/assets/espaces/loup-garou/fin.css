@@ -111,3 +111,12 @@
 }
 .lg-fin-chat { padding: 20px 24px; }
 @media (max-width: 600px) { .lg-fin-chat { padding: 16px; } }
+
+/* Effet de fin (vues/fin.js, LG1 et LG2) : ciel bref au-dessus de l'écran, sans interaction. Il n'est posé qu'avec les animations permises. */
+.lg-fin-ciel { position: fixed; inset: 0; z-index: 8990; pointer-events: none; animation: lgFinCiel 2.4s ease both; }
+.lg-fin-ciel.jour { background: linear-gradient(#E2C77E55, #18241C00); }
+.lg-fin-ciel.nuit { background: linear-gradient(#0B0B2E, #2A1A1D00); }
+.lg-fin-ciel.neutre { background: linear-gradient(#B8B4C444, #18241C00); }
+@keyframes lgFinCiel { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
+html[data-fx="off"] .lg-fin-ciel { display: none; }
+@media (prefers-reduced-motion: reduce) { .lg-fin-ciel { display: none; } }

@@ -4,13 +4,17 @@
  *   Défi à un membre (partie.defie renseigné) : « En attente de la réponse de X », décompte de l'expiration,
  *     « Annuler le défi » (duel.quitter). Quand le défi expire, on demande au serveur de constater l'échéance (duel.avancer).
  *   Code à partager : le code en grand, « Copier le lien » (/pages/jeux/duels.html?code=CODE), réglages du duel, « Annuler ».
- * Quand l'adversaire rejoint, le statut passe à en_cours : partie.js change de vue tout seul. Pas de chat ici.
+ * Quand l'adversaire rejoint, le statut passe à en_cours : partie.js change de vue tout seul, et la salle lance en se fermant le
+ * départ (SA3 : 3, 2, 1, S20, bandeau « Bruno a rejoint », titre d'onglet). Pas de chat ici.
  * Contrat (vues/partie.js) : export function creer(root, ctx) → { maj(etat), message(msg), detruire() }, ctx = { code, naviguer, moi, suivi }.
- * Dépendances : core.js (esc, toast), duels/api.js (duel, erreurTexte, JEUX).
+ * Dépendances : core.js (esc, toast), duels/api.js (duel, erreurTexte, JEUX), commun/effets-duels.js (departPartie, premiereFois),
+ *   ./fin-fx.js (vuEnAttente : le refus ou l'expiration d'un défi vu ici sonne sur l'écran de fin).
  * Exporte : creer.
  */
 import { esc, toast } from '../../../commun/core.js';
 import { duel, erreurTexte, JEUX } from '../api.js';
+import { departPartie, premiereFois } from '../../../commun/effets-duels.js';
+import { vuEnAttente } from './fin-fx.js';
 
 const FORMATS = { 1: '1 manche', 3: 'Au meilleur des 3', 5: 'Au meilleur des 5' };
 
@@ -116,6 +120,7 @@ export function creer(root, ctx) {
     /** Nouvel état : redessine la salle (le décompte se met à jour tout seul). */
     maj(e) {
       etat = e;
+      vuEnAttente(e.partie);
       rendre(e);
     },
     /** Pas de chat dans la salle d'attente. */
@@ -123,6 +128,12 @@ export function creer(root, ctx) {
     detruire() {
       clearInterval(tic);
       root.innerHTML = '';
+      // Fermée parce que l'adversaire vient de rejoindre : le départ se joue par-dessus la table.
+      const e = suivi?.etat?.();
+      if (e?.partie?.statut === 'en_cours' && e.moi?.joue && premiereFois(`depart:${e.partie.id}`)) {
+        const autre = (e.joueurs || []).find((j) => j.user_id !== e.moi.user_id);
+        departPartie(autre ? `${autre.pseudo || '?'} a rejoint` : 'Bonne partie');
+      }
     },
   };
 }

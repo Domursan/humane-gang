@@ -2,15 +2,19 @@
 /*
  * Rôle : HTML de l'encart de fin de Destins : podium (fortune estimée de chacun) et « Le chemin de chacun »
  *   (métier, mariage, enfants, retraite). Le classement et les récompenses sont à part, dans l'écran de fin commun.
- *   Fête de fin (bandeau « Victoire ! », confettis, son Victoire) : seulement si la table a vu la partie en cours sur cette page
- *   (effets.js, avaitEnCours). Sous mouvement réduit (body.plat-calme) le bandeau et les confettis ne s'affichent pas.
- * Dépendances : core.js (esc), ../../api.js (nomDe), commun/sons-jeux.js (jouerSonJeu), ./effets.js (avaitEnCours).
+ *   Fin vue en direct (la table a vu la partie en cours sur cette page : effets.js, avaitEnCours) : pour le gagnant, bandeau
+ *   « Victoire ! », confettis, son Victoire ; pour le perdant, bandeau sobre « Partie perdue » et S02 (DT1) ; pour un joueur parti,
+ *   bandeau neutre et S04. Le podium ne change pas. Sous mouvement réduit, bandeaux et confettis ne s'affichent pas, le son reste.
+ * Dépendances : core.js (esc), ../../api.js (nomDe), commun/sons-jeux.js (jouerSonJeu), commun/effets-duels.js (anime, son),
+ *   ../../vues/fin-fx.js (fxFin, gagnantsDe, issuePlateau), ./effets.js (avaitEnCours).
  * Exporte : recap(etat, contenus) -> HTML (chaîne).
  *   etat.jeu.fortunes = {user_id: fortune estimée} ; etat.joueurs[i].etat = {metier, marie, enfants, maisons, argent, prets, retraite, retraite_lieu, pari}.
  */
 import { esc } from '../../../../commun/core.js';
 import { nomDe } from '../../api.js';
 import { jouerSonJeu } from '../../../../commun/sons-jeux.js';
+import { anime as finAnimee, son } from '../../../../commun/effets-duels.js';
+import { fxFin, gagnantsDe, issuePlateau } from '../../vues/fin-fx.js';
 import { avaitEnCours } from './effets.js';
 
 /** Montant en euros, format français. */
@@ -29,6 +33,34 @@ function feteHtml() {
     `<i class="ds-anim-conf" style="left:${(i * 37) % 100}vw;background:${COULEURS_CONFETTI[i % COULEURS_CONFETTI.length]};` +
     `animation-duration:${(1.2 + (i % 5) * 0.25).toFixed(2)}s;animation-delay:${((i % 4) * 0.1).toFixed(1)}s"></i>`).join('');
   return `<div class="ds-anim-fete" aria-hidden="true"><p class="ds-anim-banc">Victoire !<small>La fortune la plus grande gagne</small></p>${confettis}</div>`;
+}
+
+/** « Alice a la plus grande fortune » ; à égalité : « Alice et Bruno ont la plus grande fortune ». */
+function ligneFin(etat) {
+  const g = gagnantsDe(etat.joueurs || []).map((j) => j.pseudo);
+  if (!g.length) return '';
+  return g.length > 1 ? `${g.slice(0, -1).join(', ')} et ${g[g.length - 1]} ont la plus grande fortune` : `${g[0]} a la plus grande fortune`;
+}
+
+/**
+ * Effets d'une fin vue en direct. Son et bandeau sobre partent d'ici ; la fête du gagnant est dans le HTML de l'encart.
+ * @param {object} etat état final de la partie.
+ * @returns {string} HTML de la fête, vide si elle n'est pas pour moi.
+ */
+function effetsFin(etat) {
+  const issue = issuePlateau(etat);
+  if (issue === 'gagnant') {
+    jouerSonJeu('destins', 5);
+    return finAnimee() ? feteHtml() : '';
+  }
+  if (issue === 'perdant') {
+    son('S02');
+    fxFin.bandeau('Partie perdue', ligneFin(etat), { ton: 'd' });
+  } else if (issue) {
+    son('S04');
+    fxFin.bandeau('Partie terminée', ligneFin(etat), { ton: 'n' });
+  }
+  return '';
 }
 
 /** Lettres de l'avatar : initiales du pseudo. */
@@ -118,8 +150,7 @@ export function recap(etat, contenus) {
     <ul class="dp-liste-chemins">${lignes || '<li class="dp-vide">Aucun chemin à afficher.</li>'}</ul>
   </section>`;
 
-  // Fête : une seule fois, et seulement si la partie a été vue en cours sur cette page.
-  const fete = avaitEnCours(etat?.partie?.code);
-  if (fete) jouerSonJeu('destins', 5);
-  return `<div class="dp-fin">${fete ? feteHtml() : ''}${podiumHtml}${cheminsHtml}</div>`;
+  // Effets : une seule fois, et seulement si la partie a été vue en cours sur cette page.
+  const fete = avaitEnCours(etat?.partie?.code) ? effetsFin(etat) : '';
+  return `<div class="dp-fin">${fete}${podiumHtml}${cheminsHtml}</div>`;
 }

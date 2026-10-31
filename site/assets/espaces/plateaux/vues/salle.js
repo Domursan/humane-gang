@@ -6,13 +6,18 @@
  * Chat : colonne à droite sur ordinateur, tiroir sur téléphone (vues/chat.js). Les deux reçoivent les mêmes messages.
  * Un invité qui quitte voit un au revoir à la place de la salle.
  * Les zones ne sont réécrites que si leurs données changent (le focus reste en place).
- * Dépendances : core.js (esc, toast), plateaux/api.js (plat, erreurTexte, estInvite, jeu), vues/commun.js, vues/chat.js.
+ * Effets : un joueur rejoint, sa ligne glisse et S18 sonne (SA1) ; tout le monde est prêt, S19 pour l'hôte (SA2) ; la salle se ferme
+ * parce que la partie démarre, 3, 2, 1, S20, titre d'onglet (SA3). Jamais sur le premier état reçu, ni au retour de veille (fin-fx.js).
+ * Dépendances : core.js (esc, toast), plateaux/api.js (plat, erreurTexte, estInvite, jeu), vues/commun.js, vues/chat.js,
+ *   commun/effets-duels.js, ./fin-fx.js (estRecent).
  * Exporte : creer.
  */
 import { esc, toast } from '../../../commun/core.js';
 import { plat, estInvite, jeu } from '../api.js';
 import { avatarHtml, pseudoHtml, envoyer } from './commun.js';
 import { creerChat, tiroirChat } from './chat.js';
+import { creerEffets, departPartie, premiereFois, son } from '../../../commun/effets-duels.js';
+import { estRecent } from './fin-fx.js';
 
 /** Met à jour un bloc seulement si son contenu a changé (évite de casser le focus). */
 function zone(el, cle, html) {
@@ -36,6 +41,9 @@ export function creer(root, ctx) {
   const J = jeu();
   let fini = false;
   let dernierEtat = suivi.etat();
+  const fx = creerEffets();
+  let joueursVus = null;         // ids déjà dans la salle (null : aucun état encore)
+  let tousPrets = null;          // tout le monde était prêt à l'état précédent
 
   root.innerHTML = `
     <div class="plat-salle">
@@ -173,7 +181,7 @@ export function creer(root, ctx) {
       const retirer = estHote && j.user_id !== mon.user_id && j.user_id !== p.hote
         ? `<button type="button" class="plat-icone" data-exclure="${esc(j.user_id)}" data-pseudo="${esc(j.pseudo)}" aria-label="Retirer ${esc(j.pseudo)} de la partie">×</button>`
         : '';
-      return `<li class="plat-joueur${j.user_id === mon.user_id ? ' is-moi' : ''}">
+      return `<li class="plat-joueur${j.user_id === mon.user_id ? ' is-moi' : ''}" data-uid="${esc(j.user_id)}">
         ${avatarHtml(j, 40)}
         <div class="plat-joueur-infos">${pseudoHtml(j)} ${etiquettes.join(' ')}</div>
         ${statut}${retirer}
@@ -227,12 +235,27 @@ export function creer(root, ctx) {
     btnQuitter.textContent = estHote ? 'Annuler la partie' : 'Quitter la salle';
   }
 
+  /** SA1 et SA2 : compare à l'état précédent, après le dessin. Le premier état ne fait que retenir la salle. */
+  function effets(e) {
+    const joueurs = actifs(e);
+    const nouveaux = joueursVus ? joueurs.filter((j) => !joueursVus.has(j.user_id)) : [];
+    joueursVus = new Set(joueurs.map((j) => j.user_id));
+    if (nouveaux.length) {
+      son('S18');
+      nouveaux.forEach((j) => fx.classe([...zJoueurs.querySelectorAll('[data-uid]')].find((li) => li.dataset.uid === j.user_id), 'plat-arrive', 600));
+    }
+    const prets = joueurs.length >= J.min && joueurs.every((j) => j.pret);
+    if (prets && tousPrets === false && e.moi?.hote) son('S19');
+    tousPrets = prets;
+  }
+
   function maj(e) {
     if (fini || !e?.partie) return;
     dernierEtat = e;
     zTitre.textContent = e.partie.nom || `Partie de ${J.nom}`;
     rendreJoueurs(e);
     rendreActions(e);
+    effets(e);
     chatLarge.maj(e);
     chatTiroir.maj(e);
   }
@@ -248,9 +271,13 @@ export function creer(root, ctx) {
     },
     detruire() {
       fini = true;
+      fx.nettoyer();
       try { chatLarge.detruire(); } catch { /* sans effet */ }
       try { chatTiroir.detruire(); } catch { /* sans effet */ }
       root.innerHTML = '';
+      // Fermée parce que la partie vient de démarrer : le départ se joue par-dessus la table.
+      const e = suivi.etat();
+      if (e?.partie?.statut === 'en_cours' && estRecent(e.partie.started_at, e) && premiereFois(`depart:${e.partie.id}`)) departPartie('Bonne partie');
     },
   };
 }

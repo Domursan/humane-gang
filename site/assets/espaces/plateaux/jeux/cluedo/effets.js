@@ -12,22 +12,30 @@
  *     « Montrée en secret » apparaît pour tous ;
  *   - une accusation fausse (nouvelle accusation non juste) : son « Éliminé » (5) ;
  *   - fin : une partie vue en direct passe à « terminée » : animerFin() (appelé par fin.js) retourne les trois cartes de la
- *     solution une à une, puis affiche le bandeau « Enquête résolue » avec des confettis, et joue « Solution révélée » (4).
- *   Le premier état reçu n'anime rien. Une fin n'est animée que si la table était ouverte il y a moins de 30 s (une page
- *   de fin ouverte plus tard, ou rechargée, ne rejoue rien). Mouvement réduit (body.plat-calme ou prefers-reduced-motion) :
+ *     solution une à une (2 s), puis le bandeau arrive à 2,3 s. Quelqu'un a résolu l'enquête (raison « enquete ») : son
+ *     « Solution révélée » (4), « Enquête résolue » avec le nom, confettis pour lui seul (CL2). Personne n'a résolu (raison
+ *     « dernier » : le dernier enquêteur en lice gagne sans avoir rien trouvé ; « aucun » existe côté serveur mais n'est pas
+ *     atteignable) : son « Éliminé » (5), « Affaire classée », sans confettis (CL1). Le dernier enquêteur lui-même gagne la
+ *     partie : son « Solution révélée » (4), bandeau neutre « Dernier enquêteur en lice », sans confettis.
+ *   Le premier état reçu n'anime rien. Une fin n'est animée que si l'écran de fin suit la fermeture d'une table en cours,
+ *   quel que soit le temps passé sur le dernier geste (une page de fin ouverte plus tard, ou rechargée, ne rejoue rien). Mouvement réduit (body.plat-calme ou prefers-reduced-motion) :
  *   pas d'animation, les sons restent. Les éléments ajoutés sont retirés après leur durée (moins de 3 s, sauf la fin, 4,3 s),
- *   les minuteries annulées à detruire(). Aucun de ces éléments ne capte le clic (pointer-events: none).
- * Dépendances : commun/sons-jeux.js (jouerSonJeu, sons 'cluedo' 1 à 5) ; styles : ../../cluedo.css (classes ch-anim-*).
+ *   les minuteries annulées à detruire() ; celles de la fin passent par fxFin, nettoyé en quittant la partie. Aucun de ces
+ *   éléments ne capte le clic (pointer-events: none).
+ * Dépendances : commun/sons-jeux.js (jouerSonJeu, sons 'cluedo' 1 à 5), commun/effets-duels.js (anime, PALETTES),
+ *   ../../vues/fin-fx.js (fxFin, gagnantsDe, issuePlateau) ; styles : ../../cluedo.css (classes ch-anim-*).
  *   Le plan porte data-suspect et data-piece sur chaque pion (plateau.js). table.js appelle maj() après chaque rendu ;
  *   fin.js appelle animerFin() après avoir inséré l'encart de fin.
  * Exporte : creerEffets(table, code) -> { maj(etat, monId), detruire() } ; animerFin(etat).
  */
 import { jouerSonJeu } from '../../../../commun/sons-jeux.js';
+import { anime as finAnimee, PALETTES } from '../../../../commun/effets-duels.js';
+import { fxFin, gagnantsDe, issuePlateau } from '../../vues/fin-fx.js';
 import { centrePiece } from './plateau.js';
 
 const JEU = 'cluedo';
-const DUREE_FIN_ATTENTE = 30000;     // ms : une fin n'est animée que si la table était ouverte il y a moins de 30 s
-const FIN_ATTENDUE = new Map();      // code de partie -> instant de la dernière mise à jour « en cours » vue en direct
+const DELAI_SORTIE_FIN = 5000;       // ms : au-delà, l'écran de fin ne fait plus suite à la fermeture de la table
+const FIN_ATTENDUE = new Map();      // code de partie -> instant où la table a quitté cette partie encore en cours
 const DUREE_GLISSE = 700;            // ms : trajet d'un pion d'une pièce à l'autre
 const DELAI_RETOURNE = 150;          // ms : la carte montrée se retourne peu après son apparition
 const DUREE_VOLANT = 2800;           // ms : la carte montrée disparaît après son retournement
@@ -36,11 +44,9 @@ const DUREE_TAMPON = 2400;           // ms
 const DUREE_TOUR = 4800;             // ms : pulsation de mon nom (4 battements de 1,2 s)
 const DUREE_SELECTION = 3600;        // ms : pièces éclairées (3 battements de 1,2 s)
 const DUREE_PANNEAU = 3900;          // ms : panneau surligné (3 battements de 1,3 s)
-const DELAI_BANDEAU_FIN = 2300;      // ms : le bandeau « Enquête résolue » suit le début des retournements
-const DUREE_BANDEAU_FIN = 2700;      // ms
-const DUREE_CONFETTI = 4000;         // ms
-const NB_CONFETTIS = 60;
-const COULEURS_CONFETTI = ['#FE3104', '#FCA301', '#FBD32D', '#159946', '#2B5AE2', '#4E2398', '#E2C77E'];
+const DELAI_BANDEAU_FIN = 2300;      // ms : le bandeau attend la fin des retournements (le dernier finit vers 2,3 s)
+const DUREE_RETOURNE_FIN = 4300;     // ms : les cartes retournées laissent la place aux vraies
+const COULEUR_FIN = '#C9A24A';
 
 /** Code de partie normalisé (en majuscules). */
 const codeDe = (c) => String(c || '').toUpperCase();
@@ -90,6 +96,7 @@ export function creerEffets(table, code) {
   const corps = new Set();             // éléments ajoutés à la page (volants, tampons) : retirés à detruire()
   let prime = false;                   // premier état reçu
   let avant = null;                    // mesures de l'état précédent
+  let codeEnCours = null;              // code de la partie, tant qu'elle est vue en cours
   let montrerClic = null;              // carte choisie au clic sur « Montrer » (style, contenu, place)
 
   /** Lance fn après ms, en gardant la minuterie pour l'annuler à detruire(). */
@@ -220,7 +227,7 @@ export function creerEffets(table, code) {
       const accusations = Array.isArray(jeu.accusations) ? jeu.accusations : [];
       const pions = mesurerPions(table);
       const tourMoi = aToi(e, moi);
-      if (e.partie.statut === 'en_cours') FIN_ATTENDUE.set(codeDe(e.partie.code || code), Date.now());
+      codeEnCours = e.partie.statut === 'en_cours' ? codeDe(e.partie.code || code) : null;
 
       if (!prime) {
         prime = true;
@@ -261,8 +268,9 @@ export function creerEffets(table, code) {
       avant = { phase: jeu.phase, tourMoi, nbHisto: historique.length, nbAccus: accusations.length, pions };
     },
 
-    /** Annule les minuteries et retire les éléments ajoutés (la table est quittée). */
+    /** Annule les minuteries et retire les éléments ajoutés (la table est quittée) ; note qu'elle quitte une partie en cours. */
     detruire() {
+      if (codeEnCours) FIN_ATTENDUE.set(codeEnCours, Date.now());
       table.removeEventListener('click', surClic);
       minuteries.forEach((t) => clearTimeout(t));
       minuteries.clear();
@@ -272,13 +280,15 @@ export function creerEffets(table, code) {
   };
 }
 
-/** Retourne une carte de la solution (dos « ? » puis face), après delai ms. */
+/**
+ * Retourne une carte de la solution (dos « ? » puis face), après delai ms. Posée dans l'enveloppe, et non fixée à l'écran : elle
+ * reste sur sa carte quand la page défile, et disparaît avec l'écran.
+ */
 function retourneSolution(src, delai) {
-  const r = src.getBoundingClientRect();
   const v = document.createElement('div');
   v.className = 'ch-anim-vol';
   v.setAttribute('aria-hidden', 'true');
-  Object.assign(v.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+  Object.assign(v.style, { position: 'absolute', left: `${src.offsetLeft}px`, top: `${src.offsetTop}px`, width: `${src.offsetWidth}px`, height: `${src.offsetHeight}px` });
   const dos = document.createElement('i');
   dos.className = 'ch-anim-dos';
   const point = document.createElement('span');
@@ -288,48 +298,45 @@ function retourneSolution(src, delai) {
   face.classList.add('ch-anim-face');
   face.removeAttribute('id');
   v.append(dos, face);
-  document.body.append(v);
+  src.parentNode.append(v);
   src.style.visibility = 'hidden';
-  setTimeout(() => v.classList.add('tourne'), delai);
-  setTimeout(() => { v.remove(); src.style.visibility = ''; }, 4300);
-}
-
-/** Bandeau « Enquête résolue » et confettis. */
-function bandeauEtConfettis() {
-  const ban = document.createElement('div');
-  ban.className = 'ch-anim-ban';
-  ban.setAttribute('aria-hidden', 'true');
-  const petit = document.createElement('small');
-  petit.textContent = 'La solution est révélée';
-  ban.append('Enquête résolue', petit);
-  document.body.append(ban);
-  setTimeout(() => ban.remove(), DUREE_BANDEAU_FIN);
-  for (let i = 0; i < NB_CONFETTIS; i++) {
-    const c = document.createElement('i');
-    c.className = 'ch-anim-conf';
-    c.setAttribute('aria-hidden', 'true');
-    c.style.left = `${Math.random() * 100}vw`;
-    c.style.background = COULEURS_CONFETTI[i % COULEURS_CONFETTI.length];
-    c.style.animationDuration = `${(1.6 + Math.random() * 1.6).toFixed(2)}s`;
-    c.style.animationDelay = `${(Math.random() * 0.5).toFixed(2)}s`;
-    document.body.append(c);
-    setTimeout(() => c.remove(), DUREE_CONFETTI);
-  }
+  fxFin.plus(() => v.classList.add('tourne'), delai);
+  fxFin.plus(() => { v.remove(); src.style.visibility = ''; }, DUREE_RETOURNE_FIN);
 }
 
 /**
- * Effets de l'écran de fin, si la partie vient de se terminer sous mes yeux (table ouverte il y a moins de 30 s).
+ * Le bandeau de la fin : « Affaire classée » (CL1), « Dernier enquêteur en lice » pour celui qui gagne ainsi, ou « Enquête résolue »
+ * avec le nom, confettis pour le gagnant seul (CL2).
+ */
+function bandeauFin(etat) {
+  const gagnant = issuePlateau(etat) === 'gagnant';
+  if (etat.partie.raison !== 'enquete') {
+    if (gagnant) fxFin.bandeau('Dernier enquêteur en lice', 'Tu gagnes la partie', { ton: 'n' });
+    else fxFin.bandeau('Affaire classée', 'Personne n’a trouvé', { ton: 'n' });
+    return;
+  }
+  if (gagnant) {
+    fxFin.bandeau('Enquête résolue', 'Tu as trouvé', { couleur: COULEUR_FIN });
+    fxFin.confettis(PALETTES.ch);
+    return;
+  }
+  const qui = gagnantsDe(etat.joueurs || [])[0]?.pseudo;
+  fxFin.bandeau('Enquête résolue', qui ? `${qui} a trouvé` : 'La solution est révélée', { ton: 'n' });
+}
+
+/**
+ * Effets de l'écran de fin, si la partie vient de se terminer sous mes yeux (la table vient de se fermer sur une partie en cours).
  * Appelé par fin.js après l'insertion de l'encart de fin. Une seule fois par partie.
- * @param {object} etat état de la partie (etat.partie.code, etat.jeu.enveloppe).
+ * @param {object} etat état de la partie (etat.partie.code, etat.partie.raison, etat.jeu.enveloppe).
  */
 export function animerFin(etat) {
   const code = codeDe(etat?.partie?.code);
   const vu = FIN_ATTENDUE.get(code);
   FIN_ATTENDUE.delete(code);
-  if (vu === undefined || Date.now() - vu > DUREE_FIN_ATTENTE) return;
-  if (!etat?.jeu?.enveloppe) return;
-  jouerSonJeu(JEU, 4);
-  if (!mouvementOk()) return;
+  if (vu === undefined || Date.now() - vu > DELAI_SORTIE_FIN) return;
+  if (etat.partie.statut !== 'terminee' || !etat.jeu?.enveloppe) return;
+  jouerSonJeu(JEU, etat.partie.raison === 'enquete' || issuePlateau(etat) === 'gagnant' ? 4 : 5);
+  if (!finAnimee()) return;
   [...document.querySelectorAll('.ch-fin .ch-sol')].forEach((s, i) => retourneSolution(s, 400 + i * 500));
-  setTimeout(bandeauEtConfettis, DELAI_BANDEAU_FIN);
+  fxFin.plus(() => bandeauFin(etat), DELAI_BANDEAU_FIN);
 }

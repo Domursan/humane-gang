@@ -15,13 +15,18 @@
  *   « Glissement » et « Pièce prise » ; une pièce choisie s'éclaire, avec le bouton « Annuler la sélection ». Déclenché par la
  *   comparaison avec l'état précédent (même partie, nb_coups qui augmente) ; le premier état n'anime rien. Pas d'animation
  *   si le mouvement est réduit ou si les duels sont en mode calme. Le son « à toi de jouer » reste celui de commun/tour-signal.js.
- *   La fin de partie (victoire, nulle) est affichée par vues/fin.js, hors de ce fichier.
- * Dépendances : core.js (toast, motionAllowed), sons-jeux.js (jouerSonJeu), ../api.js (duel, erreurTexte), ../plateau-commun.js (chargerCss), ./commun.js (creerCadre, nomJoueur).
+ *   La fin de partie (victoire, nulle) est affichée par vues/fin.js, hors de ce fichier. Défaite (DA1, effetsFin) : mes dernières
+ *   pièces disparaissent de la petite grille, bandeau sobre, S16. La dernière grille ne les contient plus : la table retient la
+ *   dernière position vue en cours, et le chemin du dernier coup dit lesquelles ont été sautées (le serveur n'a rien à fournir).
+ * Dépendances : core.js (toast, motionAllowed), sons-jeux.js (jouerSonJeu), ../api.js (duel, erreurTexte), ../plateau-commun.js (chargerCss), ./commun.js (creerCadre, nomJoueur),
+ *   ../../../commun/effets-duels.js (anime), ./fin-fx.js (vuEnCours, effetsFinDuel, fxFin), ./fin.js (pionDames).
  * Exporte : creer, effetsFin (fin de duel, via ./fin-fx.js).
  */
 import { toast, motionAllowed } from '../../../commun/core.js';
 import { jouerSonJeu } from '../../../commun/sons-jeux.js';
-import { vuEnCours, effetsFinDuel } from './fin-fx.js';
+import { anime } from '../../../commun/effets-duels.js';
+import { vuEnCours, effetsFinDuel, fxFin } from './fin-fx.js';
+import { pionDames } from './fin.js';
 import { duel, erreurTexte } from '../api.js';
 import { chargerCss } from '../plateau-commun.js';
 import { creerCadre, nomJoueur } from './commun.js';
@@ -43,6 +48,8 @@ const jouable = (i) => (ligne(i) + colonne(i)) % 2 === 1;
 const camp = (ch) => (ch === '1' || ch === 'A' ? '1' : ch === '2' || ch === 'B' ? '2' : null);
 const estDame = (ch) => ch === 'A' || ch === 'B';
 const grilleDe = (e) => String(e?.partie?.grille || '').padEnd(100, '.').slice(0, 100);
+/** Dernière position vue en cours : { id, manche, grille } (DA1). */
+let positionVue = null;
 /** Mon camp ('1' ou '2'), ou null pour un spectateur. */
 const monCamp = (e) => (e?.moi?.joue ? e.pions?.[e.moi.user_id] || null : null);
 const adverse = (c) => (c === '1' ? '2' : c === '2' ? '1' : null);
@@ -448,6 +455,7 @@ export function creer(root, ctx) {
     /** Met à jour la table avec l'état du duel. */
     maj(e) {
       vuEnCours(e.partie);
+      if (e.partie.statut === 'en_cours') positionVue = { id: e.partie.id, manche: e.partie.manche, grille: grilleDe(e) };
       const prec = st.etat;
       st.etat = e;
       st.attente = false;
@@ -477,12 +485,55 @@ export function creer(root, ctx) {
   };
 }
 
-/** Fin de duel vue en direct (appelé par vues/fin.js) : cloches, gagnant qui brille, bandeau et confettis. */
+/**
+ * DA1 : mes pièces sautées par le dernier coup réapparaissent sur la petite grille, puis disparaissent l'une après l'autre.
+ * Seules les pièces du chemin joué comptent : contre le robot, mon coup et sa réponse arrivent dans le même état, et une pièce
+ * que je viens de déplacer manque à sa case sans avoir été prise.
+ * @param {HTMLElement} root écran de fin.
+ * @param {object} e état du duel terminé.
+ * @param {string} avant dernière position vue en cours.
+ * @param {string} finale dernière grille.
+ * @param {string} mien mon camp.
+ */
+function effetPrises(root, e, avant, finale, mien) {
+  if (!anime()) return;
+  const chemin = cheminDu(e) || [];
+  const prises = new Set(chemin.slice(1).flatMap((c, k) => sautees(chemin[k], c, avant, mien)));
+  let rang = 0;
+  prises.forEach((i) => {
+    const ch = avant[i];
+    const cel = root.querySelector(`.duels-fin-mini [data-c="${i}"]`);
+    if (camp(finale[i]) === mien || !cel || cel.childElementCount) return;
+    cel.insertAdjacentHTML('beforeend', pionDames(ch));
+    const delai = 450 + Math.min(rang, 8) * 200;
+    rang += 1;
+    const pion = cel.lastElementChild;
+    pion.style.animationDelay = `${delai}ms`;
+    pion.classList.add('fxd-pris');
+    fxFin.plus(() => pion.remove(), delai + 700);
+  });
+}
+
+/** Fin de duel vue en direct (appelé par vues/fin.js) : cloches, gagnant qui brille, bandeau et confettis ; perdant : DA1, S16. */
 export function effetsFin(root, e) {
+  // son() n'est appelé que pour une fin vue en direct, une seule fois : il dit aussi si les effets de la grille doivent jouer.
+  let vue = null;
   effetsFinDuel(root, e, {
     jeu: 'dames',
-    son: (issue) => (issue === 'spectateur' ? null : 4),
-    titre: (issue, x) => (issue === 'gagnant' ? ['Partie gagnée !', x.partie?.abandon ? 'Par abandon' : 'Fin de la partie']
-      : issue === 'nulle' ? ['Nulle', 'Fin de la partie'] : null),
+    son: (issue) => { vue = issue; return issue === 'spectateur' ? null : issue === 'perdant' ? 'S16' : 4; },
+    titre: (issue) => (issue === 'gagnant' ? ['Partie gagnée !', 'Fin de la partie'] : issue === 'nulle' ? ['Nulle', 'Fin de la partie'] : null),
   });
+  const pos = positionVue?.id === e.partie?.id ? positionVue : null;
+  if (pos) positionVue = null;
+  if (vue !== 'perdant') return;
+  const h = e.partie.historique || [];
+  const d = h[h.length - 1] || null;
+  const mien = monCamp(e);
+  const finale = String(d?.grille || e.partie.grille || '').padEnd(100, '.');
+  if (pos && (!d || d.manche === pos.manche)) effetPrises(root, e, pos.grille, finale, mien);
+  const adv = (e.joueurs || []).find((j) => j.user_id !== e.moi?.user_id);
+  const nom = adv?.robot ? 'Le robot' : adv?.pseudo || 'Ton adversaire';
+  // Le serveur finit la manche quand le camp suivant n'a plus de coup : plus de pièces, ou pièces bloquées.
+  const sous = !d?.gagnant ? 'Fin de la partie' : [...finale].some((c) => camp(c) === mien) ? 'Tu ne peux plus jouer' : `${nom} prend tes dernières pièces`;
+  fxFin.plus(() => fxFin.bandeau('Partie perdue', sous, { ton: 'd' }), 300);
 }

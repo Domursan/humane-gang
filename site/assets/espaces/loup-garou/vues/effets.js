@@ -2,7 +2,8 @@
 /*
  * Rôle : animations ajoutées aux écrans de partie, déclenchées par les VRAIS changements de l'état (jamais à l'ouverture
  * de la page) :
- *   - passage nuit / jour : ciel, lune ou soleil, titre ; à l'aube la victime tremble et sa carte se retourne au-dessus de son siège ;
+ *   - passage nuit / jour : ciel, lune ou soleil, titre ; à l'aube la victime tremble et sa carte se retourne au-dessus de son siège
+ *     (morts de la nuit, causes CAUSES_NUIT : le titre ne dit ni la cause ni le rôle) ;
  *   - votes : chaque nouveau vote vole en jeton vers le joueur visé avec un compteur, puis tampon « Éliminé » si éliminé ;
  *   - résultat de la voyante : carte retournée au-dessus du siège sondé (écran de la voyante seulement, son état seul) ;
  *   - révélation du rôle en grande carte (écran de révélation, appel grandeCarte) ;
@@ -20,6 +21,9 @@ import { estNuit } from '../ui.js';
 import { doitAgir } from './actions.js';
 
 const JEU = 'loup-garou';
+
+/** Morts de la nuit (hg_lg__tuer, migration 119) ; vote, chasseur et meneur n'en sont pas. */
+const CAUSES_NUIT = ['loups', 'poison', 'loup_blanc', 'chagrin'];
 
 /** Vrai si les animations sont permises (préférence « effets » et pas de mouvement réduit). */
 const anime = () => motionAllowed();
@@ -52,7 +56,7 @@ export function changements(avant, e) {
     c.nuit = estNuit(pn);
     if (!c.nuit) {
       c.victimes = (e.joueurs || [])
-        .filter((j) => !j.vivant && j.mort_cause === 'loups' && j.mort_manche === pn.manche)
+        .filter((j) => !j.vivant && j.mort_manche === pn.manche && CAUSES_NUIT.includes(j.mort_cause))
         .map((j) => ({ uid: j.user_id, pseudo: j.pseudo, role: j.role }));
     }
   }

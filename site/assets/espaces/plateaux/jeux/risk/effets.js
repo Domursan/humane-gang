@@ -7,17 +7,21 @@
  *   - bataille (nouveau combat) : son « Dés qui roulent » au lancer ; les dés gagnants s'entourent d'un anneau doré, chaque
  *     comparaison s'allume à son tour, puis le bloc Bataille secoue avec le son « Choc de bataille » s'il y a des pertes ;
  *   - territoire conquis (propriétaire changé) : son « Territoire conquis », le territoire clignote, bandeau « Territoire conquis » ;
- *   - victoire (fin de partie, voir victoireFin) : bandeau « Victoire ! », confettis, son « Victoire du monde ». N'est annoncée que
- *     si la partie a été vue en cours dans cette page ; une partie déjà finie à l'ouverture ne déclenche rien.
+ *   - fin de partie (voir jouerFin) : le gagnant a le bandeau « Victoire ! », les confettis et le son « Victoire du monde » ;
+ *     le perdant « Partie perdue » et S02, sobre (RK1) ; le joueur parti un bandeau neutre et S04. N'est annoncée que si la
+ *     partie a été vue en cours dans cette page ; une partie déjà finie à l'ouverture ne déclenche rien.
  *   Le premier état reçu n'anime rien. Mouvement réduit (body.plat-calme ou prefers-reduced-motion) : pas d'animation, les sons restent.
  *   Les animations durent moins de 3 s ; les classes sont retirées après leur durée, les éléments ajoutés au body retirés,
- *   les minuteries annulées à detruire().
- * Dépendances : commun/sons-jeux.js (jouerSonJeu, sons 'risk' 1 à 5), core.js (esc) ; styles : ../../risk.css (classes rk-anim-*).
- *   table.js appelle maj() après chaque rendu ; fin.js appelle victoireFin() depuis recap().
- * Exporte : creerEffets(el, { nomTerritoire, nomJoueur }) -> { maj(etat, monId), detruire() } ; victoireFin(etat).
+ *   les minuteries annulées à detruire() ; celles de la fin passent par fxFin, nettoyé en quittant la partie.
+ * Dépendances : commun/sons-jeux.js (jouerSonJeu, sons 'risk' 1 à 5), commun/effets-duels.js (anime, son), core.js (esc),
+ *   ../../vues/fin-fx.js (fxFin, gagnantsDe, issuePlateau) ; styles : ../../risk.css (classes rk-anim-*).
+ *   table.js appelle maj() après chaque rendu ; fin.js appelle jouerFin() depuis recap().
+ * Exporte : creerEffets(el, { nomTerritoire, nomJoueur }) -> { maj(etat, monId), detruire() } ; jouerFin(etat).
  */
 import { esc } from '../../../../commun/core.js';
 import { jouerSonJeu } from '../../../../commun/sons-jeux.js';
+import { anime as finAnimee, son } from '../../../../commun/effets-duels.js';
+import { fxFin, gagnantsDe, issuePlateau } from '../../vues/fin-fx.js';
 
 const JEU = 'risk';
 const CALME = '(prefers-reduced-motion: reduce)';
@@ -61,7 +65,7 @@ function ajouterCorps(classe, html = '') {
   return d;
 }
 
-/** Pluie de confettis, en calques du body, qui se retirent seuls (moins de 3 s). */
+/** Pluie de confettis, en calques du body, retirés seuls (moins de 3 s) ou en quittant la partie. */
 function confettis(nombre = 60) {
   for (let i = 0; i < nombre; i += 1) {
     const d = document.createElement('i');
@@ -71,8 +75,7 @@ function confettis(nombre = 60) {
     d.style.background = COULEURS[i % COULEURS.length];
     d.style.animationDuration = `${(1.2 + Math.random() * 1).toFixed(2)}s`;
     d.style.animationDelay = `${(Math.random() * 0.4).toFixed(2)}s`;
-    document.body.append(d);
-    setTimeout(() => d.remove(), 2600);
+    fxFin.vol(d, 2600);
   }
 }
 
@@ -243,20 +246,34 @@ export function creerEffets(el, { nomTerritoire = (t) => t, nomJoueur = () => ''
   };
 }
 
+/** Comment la partie a été gagnée, pour le bandeau des autres joueurs. */
+function ligneFin(etat) {
+  const qui = gagnantsDe(etat.joueurs || []).map((j) => j.pseudo).join(', ');
+  if (!qui) return '';
+  return { monde: `${qui} a conquis le monde`, mission: `${qui} a rempli sa mission` }[etat.partie.raison] || `${qui} gagne la partie`;
+}
+
 /**
- * Victoire, sur l'écran de fin : bandeau « Victoire ! », confettis et son « Victoire du monde ».
+ * Fin de partie, sur l'écran de fin : la fête pour le gagnant, un bandeau sobre pour le perdant, neutre pour un joueur parti.
  * N'agit qu'une fois, et seulement si la partie a été vue en cours dans cette page (sinon rien : état déjà fini).
  * @param {object} etat état de la partie (partie, joueurs).
  */
-export function victoireFin(etat) {
+export function jouerFin(etat) {
   const p = etat?.partie;
   if (!p || p.statut !== 'terminee') return;
   if (!vuesEnCours.delete(p.id)) return;
-  if (!(etat.joueurs || []).some((j) => j.gagne)) return;
-  jouerSonJeu(JEU, 5);
-  if (!mouvementOk()) return;
-  const sous = { monde: 'Le monde est conquis', mission: 'Mission accomplie' }[p.raison] || 'Partie gagnée';
-  const banc = ajouterCorps('rk-anim-banc', `Victoire !<small>${esc(sous)}</small>`);
-  setTimeout(() => banc.remove(), DUREE_BANC);
-  confettis();
+  const issue = issuePlateau(etat);
+  if (issue === 'gagnant') {
+    jouerSonJeu(JEU, 5);
+    if (!finAnimee()) return;
+    const sous = { monde: 'Le monde est conquis', mission: 'Mission accomplie' }[p.raison] || 'Partie gagnée';
+    fxFin.vol(ajouterCorps('rk-anim-banc', `Victoire !<small>${esc(sous)}</small>`), DUREE_BANC);
+    confettis();
+  } else if (issue === 'perdant') {
+    son('S02');
+    fxFin.bandeau('Partie perdue', ligneFin(etat), { ton: 'd' });
+  } else {
+    son('S04');
+    fxFin.bandeau('Partie terminée', ligneFin(etat), { ton: 'n' });
+  }
 }

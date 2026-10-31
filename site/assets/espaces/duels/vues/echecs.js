@@ -16,12 +16,16 @@
  *   nb_coups qui augmente) ; le premier état n'anime rien. Pas d'animation si le mouvement est réduit ou si les duels sont
  *   en mode calme. Le son « à toi de jouer » reste celui de commun/tour-signal.js. Le « Échec et mat » et la « Nulle » de fin
  *   de partie sont affichés par vues/fin.js, hors de ce fichier (la table ne voit plus l'état terminé).
- * Dépendances : core.js (toast, motionAllowed), sons-jeux.js (jouerSonJeu), ../api.js (duel, erreurTexte), ../plateau-commun.js (chargerCss), ./commun.js (creerCadre, nomJoueur).
+ *   Défaite au mat (EC1, effetsFin) : mon roi tombe sur la petite grille, gong grave, bandeau sobre. Abandon et forfait (EC2) ne
+ *   passent pas ici : vues/fin.js joue effetsCause de ./fin-fx.js, sans fanfare ni « Échec et mat ».
+ * Dépendances : core.js (toast, motionAllowed), sons-jeux.js (jouerSonJeu), ../api.js (duel, erreurTexte), ../plateau-commun.js (chargerCss), ./commun.js (creerCadre, nomJoueur),
+ *   ../../../commun/effets-duels.js (anime), ./fin-fx.js (vuEnCours, effetsFinDuel, fxFin).
  * Exporte : creer, effetsFin (fin de duel, via ./fin-fx.js).
  */
 import { toast, motionAllowed } from '../../../commun/core.js';
 import { jouerSonJeu } from '../../../commun/sons-jeux.js';
-import { vuEnCours, effetsFinDuel } from './fin-fx.js';
+import { anime } from '../../../commun/effets-duels.js';
+import { vuEnCours, effetsFinDuel, fxFin } from './fin-fx.js';
 import { duel, erreurTexte } from '../api.js';
 import { chargerCss } from '../plateau-commun.js';
 import { creerCadre, nomJoueur } from './commun.js';
@@ -621,14 +625,24 @@ export function creer(root, ctx) {
   };
 }
 
-/** Fin de duel vue en direct (appelé par vues/fin.js) : son du mat ou de la nulle, gagnant qui brille, bandeau, confettis. */
+/** Fin de duel vue en direct (appelé par vues/fin.js) : son du mat ou de la nulle, gagnant qui brille, bandeau, confettis.
+ *  Perdant (EC1) : gong grave S25 (son 3 du jeu), mon roi tombe, bandeau sobre. */
 export function effetsFin(root, e) {
-  const abandon = !!e.partie?.abandon;
+  const h = e.partie?.historique || [];
+  // Seul le mat donne une manche gagnée sur l'échiquier ; une dernière manche nulle peut clore un duel en plusieurs manches.
+  const mat = !!h[h.length - 1]?.gagnant;
+  // son() n'est appelé que pour une fin vue en direct, une seule fois : il dit aussi si les effets de la grille doivent jouer.
+  let vue = null;
   effetsFinDuel(root, e, {
     jeu: 'echecs',
-    son: (issue) => (issue === 'spectateur' ? null : issue === 'nulle' ? 5 : 4),
-    titre: (issue) => (issue === 'nulle' ? ['Nulle', 'Partie terminée']
-      : abandon ? (issue === 'gagnant' ? ['Victoire', 'Par abandon'] : null)
-      : issue === 'perdant' ? null : ['Échec et mat', 'Partie terminée']),
+    son: (issue) => { vue = issue; return issue === 'spectateur' ? null : issue === 'nulle' ? 5 : issue === 'perdant' ? 3 : 4; },
+    titre: (issue) => (issue === 'nulle' ? ['Nulle', 'Partie terminée'] : issue === 'perdant' ? null
+      : [mat ? 'Échec et mat' : 'Partie gagnée !', 'Partie terminée']),
   });
+  if (vue !== 'perdant') return;
+  if (mat && anime()) {
+    const couleur = String(e.pions?.[e.moi?.user_id]) === '1' ? 'blanc' : 'noir';
+    root.querySelector(`.duels-fin-mini .duels-fin-piece.is-${couleur}[data-p="k"]`)?.classList.add('duels-echecs-roi-tombe');
+  }
+  fxFin.plus(() => fxFin.bandeau(mat ? 'Échec et mat' : 'Partie perdue', mat ? 'Tu perds la partie' : 'Partie terminée', { ton: 'd' }), 500);
 }

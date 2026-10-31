@@ -17,8 +17,8 @@ const mqReduit = window.matchMedia('(prefers-reduced-motion: reduce)');
 export const mouvementReduit = () => document.body.classList.contains('uno-calme') || mqReduit.matches;
 
 // Les sons viennent surtout des états du serveur, hors de tout geste : le contexte audio se réveille sur le geste lui-même (iOS l'exige).
-document.addEventListener('pointerdown', reveillerSons, { capture: true, passive: true });
-document.addEventListener('keydown', reveillerSons, { capture: true, passive: true });
+// Au tactile, iOS ne compte le geste qu'à son relâchement : pointerup et click, en plus de pointerdown.
+['pointerdown', 'pointerup', 'click', 'keydown'].forEach((t) => document.addEventListener(t, reveillerSons, { capture: true, passive: true }));
 if (navigator.userActivation?.hasBeenActive) reveillerSons();   // arrivée à la table après un clic dans la salle
 
 /**

@@ -8,10 +8,13 @@
  *   Mise en page : assets/espaces/plateaux/poker.css. Les zones sont reconstruites seulement quand leur contenu change.
  *   Effets de la maquette (à toi de parler, cartes qui se retournent, mises vers le pot, pot au gagnant) : effets.js,
  *   appelé à chaque nouvel état avec l'état précédent, pour ne jouer que les vrais changements.
+ *   Fin de partie (PK1) : avantFin garde la table le temps que le pot rejoigne le dernier joueur à table. La table reste sur la dernière
+ *   mise : le serveur enchaîne l'abattage et la fin dans la même opération.
  * Dépendances : commun/tour-signal.js (creerSignalTour), core.js (esc, initials, toast), ../../api.js (plat, erreurTexte), ../../vues/commun.js (bandeauHtml,
  *   brancherChrono, journalHtml, envoyer, moiJoueur, joueurDe), ../../vues/chat.js (creerChat, tiroirChat),
+ *   commun/effets-duels.js (anime), ../../vues/fin-fx.js (effetsFinPlateau, fxFin, gagnantsDe, issuePlateau), ./fin.js (finFx),
  *   ../cartes.js (carteHtml), ./plateau.js (tableHtml, PHASES), ./effets.js (creerEffets).
- * Exporte : creer(root, ctx) -> { maj(etat), message(msg), detruire() }.
+ * Exporte : creer(root, ctx) -> { maj(etat), message(msg), detruire(), avantFin(etat) }.
  *   ctx = { code, naviguer, moi, suivi, contenus } ; suivi = retour de suivrePartie.
  */
 import { esc, initials, toast } from '../../../../commun/core.js';
@@ -22,8 +25,12 @@ import { creerSignalTour } from '../../../../commun/tour-signal.js';
 import { carteHtml } from '../cartes.js';
 import { tableHtml, PHASES } from './plateau.js';
 import { creerEffets } from './effets.js';
+import { anime } from '../../../../commun/effets-duels.js';
+import { effetsFinPlateau, fxFin, gagnantsDe, issuePlateau } from '../../vues/fin-fx.js';
+import { finFx } from './fin.js';
 
 const ECRAN_GRAND = '(min-width: 761px)';
+const GARDE_FIN = 1900;      // ms : la table reste à l'écran après la fin, le temps du vol du pot
 const ICONE_QUITTER = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H9"></path></svg>';
 
 /** Gabarit statique : les zones variables sont remplies à chaque mise à jour. */
@@ -83,6 +90,7 @@ export function creer(root, ctx) {
 
   let etat = null;
   let occupe = false;
+  let finie = false;               // état final reçu : la table reste un instant à l'écran, plus aucune action (jamais remis à faux)
   let arretChrono = null;
   const cles = {};                 // clé du dernier rendu de chaque zone
   let relanceChoisie = 0;          // curseur de relance, gardé entre deux rendus
@@ -114,7 +122,7 @@ export function creer(root, ctx) {
   const monTour = () => !!monId() && jeu().actif === monId() && etat?.partie?.tour === monId();
   const jeAiSorti = () => !!moiJoueur(etat)?.elimine;
   const jeSuisCouche = () => !!moiE().couche;
-  const peutAgir = () => !occupe && !jeAiSorti() && etat?.partie?.statut === 'en_cours';
+  const peutAgir = () => !finie && !occupe && !jeAiSorti() && etat?.partie?.statut === 'en_cours';
   const pseudoDe = (uid) => (uid == null ? '' : (joueurDe(etat, uid)?.pseudo || '?'));
   const acteurPseudo = () => pseudoDe(jeu().actif);
   const jetonsMoi = () => Number(moiE().jetons) || 0;
@@ -296,7 +304,7 @@ export function creer(root, ctx) {
 
   /** Redessine le panneau si son contenu a changé (pas pendant un envoi, sauf forcé). */
   function rendrePanneau(force = false) {
-    if (occupe && !force) return;
+    if (finie || (occupe && !force)) return;
     const cle = JSON.stringify([jeu().phase, jeu().actif, jeu().main, monId(), monTour(), jeAiSorti(), jeSuisCouche(),
       etat?.partie?.statut, jeu().mes_cartes, jeu().ma_force, miseMax(), relanceMin(), pot(), maMise(), jetonsMoi(), !!peutAgir(),
       jeu().board]);
@@ -320,7 +328,7 @@ export function creer(root, ctx) {
 
   /** Envoie une action de jeu : un seul envoi à la fois, boutons désactivés, puis relecture. */
   function agir(bouton, action, args = {}) {
-    if (occupe) return;
+    if (occupe || finie) return;
     occupe = true;
     envoyer(bouton, async () => {
       try {
@@ -364,7 +372,7 @@ export function creer(root, ctx) {
   }
 
   function surQuitter(ev) {
-    if (occupe) return;
+    if (occupe || finie) return;
     if (!confirm('Quitter la partie ? Tes jetons restent à la table, le jeu jouera pour toi.')) return;
     envoyer(ev.currentTarget, () => plat.quitter(code), suivi);
   }
@@ -407,6 +415,21 @@ export function creer(root, ctx) {
       chat.maj(e);
       signal.maj(monTour());
       effets.maj(avant, e);
+    },
+    /** PK1 : la partie est finie, le pot part vers le gagnant, puis l'écran de fin. Sans animation ou onglet masqué : rien à attendre. */
+    avantFin(e) {
+      finie = true;
+      refs.quitter.disabled = true;
+      if (document.hidden) return null;
+      const joue = effetsFinPlateau(e, { ...finFx,
+        apres: (issue) => {
+          if (issue !== 'gagnant' && issue !== 'perdant') return;
+          const uid = gagnantsDe(e.joueurs || [])[0]?.user_id;
+          fxFin.jetons('pk-jeton-vol', issue === 'gagnant' ? 7 : 5, q('.pk-pot'), q(`.pk-siege[data-uid="${CSS.escape(String(uid))}"]`));
+        } });
+      const issue = issuePlateau(e);
+      if (!joue || !anime() || (issue !== 'gagnant' && issue !== 'perdant')) return null;
+      return new Promise((ok) => { fxFin.plus(ok, GARDE_FIN); });
     },
     /** Message du chat (ancien ou nouveau). */
     message(msg) {

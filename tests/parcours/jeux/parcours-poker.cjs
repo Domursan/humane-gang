@@ -97,7 +97,7 @@ const attendreAction = (p, sel) => p.waitForSelector(sel, { timeout: 8000 }).cat
   // ----- Partie terminée : une carte par joueur -----
   p = await openPage(browser, { page: 'poker', fixture: FIX, scenario: { jeu: 'poker', fin: true }, hash: '#partie/HGPOK-1234', width: 1280, height: 900 });
   await p.waitForSelector('.pf-carte', { timeout: 6000 }).catch(() => {});
-  check((await p.locator('.plat-fin h1').innerText()) === 'Partie terminée', 'fin : titre « Partie terminée »');
+  check((await p.locator('.plat-fin h1').innerText()) === 'Victoire !', 'fin : titre « Victoire ! », à égalité je passe en tête');
   check((await p.locator('.pf-carte').count()) === 4, 'fin : une carte par joueur (quatre)');
   check((await p.locator('.pf-carte.is-gagnant').count()) === 1, 'fin : un seul gagnant mis en avant');
   check((await hscroll(p)) <= 0, 'fin 1280 px : pas de défilement horizontal');

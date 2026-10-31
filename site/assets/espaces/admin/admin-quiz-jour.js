@@ -6,11 +6,23 @@
 // RPC : hg_quiz_daily_calendar, hg_quiz_daily_plan (permission « quiz », migration 084). Questions : table
 // hg_quiz_questions (lecture Staff « quiz »).
 // Dépendances : core.js (sb, toast, esc, errMsg).
-// Exporte : mountQuizJour(container).
+// Exporte : mountQuizJour(container), et pour la page Programmation (admin-programme.js) : questionsProgrammables, libelleQuestion.
 import { sb, toast, esc, errMsg } from '../../commun/core.js';
 
 const JOUR = new Intl.DateTimeFormat('fr-CH', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 const DIFF = { facile: 'Facile', moyen: 'Moyen', difficile: 'Difficile', expert: 'Expert' };
+
+/**
+ * Questions proposées en question du jour : actives et non secrètes. Le serveur refuse celles à valider à la main.
+ * @returns {Promise<object[]>}
+ */
+export async function questionsProgrammables() {
+  const { data, error } = await sb.from('hg_quiz_questions').select('id, prompt, difficulty, qtype, active, secret').eq('active', true).order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).filter((x) => !x.secret);
+}
+/** Libellé d'une question dans une liste de choix. */
+export const libelleQuestion = (q) => `${q.prompt.slice(0, 90)} (${DIFF[q.difficulty] || q.difficulty})`;
 
 /**
  * Monte l'onglet dans son conteneur.
@@ -27,11 +39,11 @@ export async function mountQuizJour(root) {
     const from = new Date(Date.parse(today) - 7 * 864e5).toISOString().slice(0, 10);
     const [c, q] = await Promise.all([
       sb.rpc('hg_quiz_daily_calendar', { p_from: from, p_days: 28 }),
-      sb.from('hg_quiz_questions').select('id, prompt, difficulty, qtype, active, secret').eq('active', true).order('created_at', { ascending: false }),
+      questionsProgrammables().catch(() => []),
     ]);
     if (c.error) throw c.error;
     S.cal = c.data || { days: [] };
-    S.questions = (q.data || []).filter((x) => !x.secret);
+    S.questions = q;
   }
 
   /** Une ligne du calendrier. */
@@ -42,7 +54,7 @@ export async function mountQuizJour(root) {
     const qui = d.prompt ? (d.auto ? 'tirage automatique' : `programmée par ${esc(d.picked_by || 'le Staff')}`) : '';
     const score = d.answered ? `${d.correct} / ${d.answered} juste${d.correct > 1 ? 's' : ''}` : '';
     const modifiable = !passe && !(auj && d.answered);
-    const opts = S.questions.map((q) => `<option value="${esc(q.id)}"${q.id === d.question_id ? ' selected' : ''}>${esc(q.prompt.slice(0, 90))} (${esc(DIFF[q.difficulty] || q.difficulty)})</option>`).join('');
+    const opts = S.questions.map((q) => `<option value="${esc(q.id)}"${q.id === d.question_id ? ' selected' : ''}>${esc(libelleQuestion(q))}</option>`).join('');
     const form = modifiable ? `<div class="adqj-plan">
         <label class="visually-hidden" for="adqj-${d.day}">Question du ${esc(quand)}</label>
         <select class="input" id="adqj-${d.day}" data-day="${d.day}"><option value="">Tirage automatique</option>${opts}</select>

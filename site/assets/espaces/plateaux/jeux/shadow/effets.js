@@ -8,15 +8,20 @@
  *   - blessure (PV qui baissent) : le joueur touché secoue et « −N PV » (N = blessures reçues) s'affiche au-dessus de son médaillon ;
  *   - attaque ratée (ligne « Raté ! » du journal, migration 127) : tampon « RATÉ » sur l'attaquant, son seul ;
  *   - carte Vision reçue : l'œil se retourne et le bouton « Appliquer » pulse ;
- *   - victoire : bandeau « Victoire ! » et confettis, sur l'écran de fin (voir jouerVictoire, appelé par fin.js). La victoire
- *     ne se joue que si cette page a suivi la partie en cours : un écran de fin ouvert plus tard reste silencieux.
+ *   - fin de partie, sur l'écran de fin (voir jouerFin, appelé par fin.js) : le bandeau reprend le titre du camp ; le gagnant a
+ *     le son « Victoire » et les confettis (SH1), le perdant S02 sans confettis (SH2), le joueur parti S04. La fin ne se joue
+ *     que si cette page a suivi la partie en cours : un écran de fin ouvert plus tard reste silencieux.
  * Mouvement réduit (body.plat-calme ou prefers-reduced-motion) : pas d'animation, les sons restent. Chaque animation dure moins
- * de 3 s ; les éléments ajoutés au body ne captent aucun clic et sont retirés ; les minuteries sont annulées à detruire().
- * Dépendances : commun/sons-jeux.js (jouerSonJeu, sons 'shadow-hunters' 1 à 5) ; styles : ../../shadow.css (classes sh-anim-*).
- *   table.js appelle maj() après chaque rendu ; fin.js appelle jouerVictoire() à chaque rendu de son encart.
- * Exporte : creerEffets(table) -> { maj(etat, monId), detruire() } ; jouerVictoire(etat).
+ * de 3 s ; les éléments ajoutés au body ne captent aucun clic et sont retirés ; les minuteries sont annulées à detruire(), celles
+ * de la fin passent par fxFin, nettoyé en quittant la partie.
+ * Dépendances : commun/sons-jeux.js (jouerSonJeu, sons 'shadow-hunters' 1 à 5), commun/effets-duels.js (PALETTES, son),
+ *   ../../vues/fin-fx.js (fxFin, issuePlateau) ; styles : ../../shadow.css (classes sh-anim-*, sh-ban-fin).
+ *   table.js appelle maj() après chaque rendu ; fin.js appelle jouerFin() à chaque rendu de son encart.
+ * Exporte : creerEffets(table) -> { maj(etat, monId), detruire() } ; jouerFin(etat, titre, couleur).
  */
 import { jouerSonJeu } from '../../../../commun/sons-jeux.js';
+import { PALETTES, son } from '../../../../commun/effets-duels.js';
+import { fxFin, issuePlateau } from '../../vues/fin-fx.js';
 
 const JEU = 'shadow-hunters';
 /** Numéros des sons sur la maquette (sons-jeux.js). */
@@ -27,11 +32,8 @@ const DUREE_SECOUE = 1200;        // ms : secousse du joueur touché (2 × 0,6 s
 const DUREE_OEIL = 1000;          // ms : œil de la carte Vision
 const DUREE_SANG = 1600;          // ms : « −N PV » qui monte
 const DUREE_RATE = 2200;          // ms : tampon « RATÉ »
-const DUREE_BANC = 2600;          // ms : bandeau de victoire
 const DELAI_SANG = 350;           // ms : le « −N PV » sort après la secousse
 const DELAI_TOTAL = 1000;         // ms : le total pulse quand les dés s'arrêtent (table.js : 1 s)
-const CONFETTIS = 60;
-const COULEURS = ['#FE3104', '#FCA301', '#FBD32D', '#159946', '#2B5AE2', '#4E2398', '#E2C77E'];
 /** Ligne du journal d'une attaque sans blessure (« Raté ! », migration 127). */
 const RE_RATE = /^Raté/;
 
@@ -39,10 +41,10 @@ const RE_RATE = /^Raté/;
 const mouvementOk = () => !document.body.classList.contains('plat-calme')
   && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** Parties vues en cours sur cette page : seule leur fin peut jouer la victoire. */
+/** Parties vues en cours sur cette page : seule leur fin peut se jouer. */
 const vuesEnCours = new Set();
-/** Parties dont la victoire a déjà été jouée sur cette page. */
-const victoiresJouees = new Set();
+/** Parties dont la fin a déjà été jouée sur cette page. */
+const finsJouees = new Set();
 
 /** Ce que les effets comparent d'un état à l'autre. */
 function photo(e, monId) {
@@ -212,35 +214,36 @@ export function creerEffets(table) {
   };
 }
 
+/** Ligne du bandeau selon mon issue et mon camp : un Neutre gagne ou perd seul, il n'a pas de camp. */
+function ligneFin(etat, issue) {
+  const moi = (etat.joueurs || []).find((j) => j.user_id === etat.moi?.user_id);
+  const neutre = moi?.etat?.camp === 'neutre';
+  if (issue === 'gagnant') return neutre ? 'Tu l’emportes' : 'Ton camp l’emporte';
+  return neutre ? 'Tu ne l’emportes pas' : 'Ton camp a perdu';
+}
+
 /**
- * Victoire : bandeau « Victoire ! » et confettis, joués une seule fois par partie, et seulement si la page a vu la partie
+ * Fin de partie : bandeau au titre du camp gagnant, joué une seule fois par partie, et seulement si la page a vu la partie
  * en cours. Appelé à chaque rendu de l'encart de fin (fin.js) : sans effet si la partie n'est pas terminée.
  * @param {object} etat état de la partie.
+ * @param {string} titre titre du camp gagnant, celui de l'écran de fin.
+ * @param {string} couleur couleur du camp gagnant.
  */
-export function jouerVictoire(etat) {
+export function jouerFin(etat, titre, couleur) {
   const p = etat?.partie;
   if (!p?.id || p.statut !== 'terminee') return;
-  if (!vuesEnCours.has(p.id) || victoiresJouees.has(p.id)) return;
-  victoiresJouees.add(p.id);
-  jouerSonJeu(JEU, SON.victoire);
-  if (!mouvementOk()) return;
-
-  const banc = document.createElement('div');
-  banc.className = 'sh-anim-banc';
-  banc.setAttribute('aria-hidden', 'true');
-  banc.innerHTML = 'Victoire !<small>Les Shadows, ou les Hunters, l’emportent</small>';
-  document.body.append(banc);
-  setTimeout(() => banc.remove(), DUREE_BANC + 100);
-
-  for (let i = 0; i < CONFETTIS; i++) {
-    const c = document.createElement('i');
-    c.className = 'sh-anim-conf';
-    c.setAttribute('aria-hidden', 'true');
-    c.style.left = `${(Math.random() * 100).toFixed(1)}vw`;
-    c.style.background = COULEURS[i % COULEURS.length];
-    c.style.animationDuration = `${(1.2 + Math.random()).toFixed(2)}s`;
-    c.style.animationDelay = `${(Math.random() * 0.4).toFixed(2)}s`;
-    document.body.append(c);
-    setTimeout(() => c.remove(), 2800);
+  if (!vuesEnCours.has(p.id) || finsJouees.has(p.id)) return;
+  finsJouees.add(p.id);
+  const issue = issuePlateau(etat);
+  if (issue === 'gagnant') {
+    jouerSonJeu(JEU, SON.victoire);
+    fxFin.bandeau(titre, ligneFin(etat, issue), { couleur, classe: 'sh-ban-fin' });
+    fxFin.confettis(PALETTES.sh);
+  } else if (issue === 'perdant') {
+    son('S02');
+    fxFin.bandeau(titre, ligneFin(etat, issue), { ton: 'd', classe: 'sh-ban-fin' });
+  } else {
+    son('S04');
+    fxFin.bandeau(titre, '', { ton: 'n', classe: 'sh-ban-fin' });
   }
 }

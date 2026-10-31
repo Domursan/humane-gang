@@ -38,7 +38,7 @@
 .duels-oth-pion.is-pose { animation: duels-oth-pose .42s ease-out both; }
 @keyframes duels-oth-pose { 0% { transform: scale(.35); opacity: 0; } 70% { transform: scale(1.12); opacity: 1; } 100% { transform: none; opacity: 1; } }
 
-/* Effets (vues/othello.js) : « à toi de jouer », bouton « Jouer en … », bandeau et halo de fin */
+/* Effets (vues/othello.js) : « à toi de jouer », bouton « Jouer en … », halo de fin (le bandeau de fin est celui des effets communs) */
 .duels-othello .duels-face-j.is-a-toi-fx { box-shadow: 0 0 0 3px var(--sand), 0 0 22px rgba(226, 199, 126, .6); animation: duels-oth-pouls 1.2s ease-in-out 4; }
 @keyframes duels-oth-pouls { 50% { box-shadow: 0 0 0 5px var(--sand), 0 0 36px rgba(226, 199, 126, .85); } }
 .duels-oth-case.is-libre-fx { animation: duels-oth-libre 1.3s ease-in-out 3; }
@@ -47,28 +47,14 @@
 @keyframes duels-oth-choix { 50% { box-shadow: inset 0 0 0 3px var(--sand); } }
 .duels-oth-valider.is-joue-fx { animation: duels-oth-pouls 1.2s ease-in-out 4; }
 .duels-oth-fin-fx { animation: duels-oth-pouls 1.2s ease-in-out 4; }
-.duels-oth-bandeau { position: fixed; left: 50%; top: 72%; transform: translate(-50%, -50%) scale(.5); opacity: 0; z-index: 9000;
-  pointer-events: none; white-space: nowrap; font: 400 clamp(30px, 5vw, 56px) var(--font-display, 'Archivo Black', sans-serif); color: #fff;
-  text-shadow: 0 4px 0 rgba(0, 0, 0, .6), 0 0 30px rgba(226, 199, 126, .9);
-  animation: duels-oth-bandeau 2.2s cubic-bezier(.2, 1.4, .4, 1) forwards; }
-.duels-oth-bandeau small { display: block; text-align: center; font: 700 15px Inter, system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
-@keyframes duels-oth-bandeau {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(.5) rotate(-6deg); }
-  20% { opacity: 1; transform: translate(-50%, -50%) scale(1.06) rotate(-2deg); }
-  35% { transform: translate(-50%, -50%) scale(1) rotate(-2deg); }
-  85% { opacity: 1; }
-  100% { opacity: 0; }
-}
 
 /* Mouvement réduit (préférence du site, ou de l'appareil) : pions posés d'un coup, écran final directement */
 body.duels-calme .duels-oth-pion.is-pose, body.duels-calme .duels-othello .duels-face-j.is-a-toi-fx,
 body.duels-calme .duels-oth-case.is-libre-fx, body.duels-calme .duels-oth-case.is-choix-fx,
 body.duels-calme .duels-oth-valider.is-joue-fx, body.duels-calme .duels-oth-fin-fx { animation: none; }
-body.duels-calme .duels-oth-bandeau { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .duels-oth-pion.is-pose, .duels-othello .duels-face-j.is-a-toi-fx, .duels-oth-case.is-libre-fx, .duels-oth-case.is-choix-fx,
   .duels-oth-valider.is-joue-fx, .duels-oth-fin-fx { animation: none; }
-  .duels-oth-bandeau { display: none; }
 }
 
 /* Boutons du téléphone : jouer la case sélectionnée, ou annuler */

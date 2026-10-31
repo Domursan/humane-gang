@@ -321,6 +321,28 @@
 .mo-conf { position: absolute; top: -10px; width: 8px; height: 14px; animation: moTombe linear forwards; }
 @keyframes moTombe { to { transform: translateY(105vh) rotate(720deg) } }
 
+/* Encart de fin : classement par fortune et titres de chacun (fin.js). Hors de .mo-table : les couleurs sont reprises ici. */
+.mo-fin { --mo-carte-2: #1B4A37; --mo-bord-fort: #B99A52; --mo-texte: #F4EAD2; --mo-muet: #C9C0A8; --mo-or: #E2C77E;
+  box-sizing: border-box; min-width: 0; max-width: 100%; padding: 14px 16px; border-radius: 10px; border: 3px solid #0A1F16; background: #14372A;
+  color: var(--mo-texte); font-family: Inter, system-ui, sans-serif; font-size: 16px; line-height: 1.5; }
+.mo-fin .small { margin: 0; font-size: 13px; }
+.mo-fin .muted { color: var(--mo-muet); }
+.mo-fin-titre { margin: 0 0 4px; font-family: 'Archivo Black', sans-serif; font-weight: 400; font-size: 20px; line-height: 1.2; color: var(--mo-or); }
+.mo-classement { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.mo-classe { display: flex; align-items: flex-start; gap: 10px; min-width: 0; box-sizing: border-box; padding: 10px 12px; border-radius: 8px; background: var(--mo-carte-2); }
+.mo-classe.is-gagnant { box-shadow: inset 0 0 0 2px var(--mo-or); }
+.mo-classe.is-elimine { opacity: .65; }
+.mo-rang { flex: none; width: 22px; font-family: 'Archivo Black', sans-serif; font-size: 20px; line-height: 36px; color: var(--mo-or); }
+.mo-classe-avatar { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 800; color: #1B1B1B; }
+.mo-classe-corps { flex: 1; min-width: 0; }
+.mo-fin .mo-classe-tete { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: 0; overflow-wrap: anywhere; }
+.mo-classe-fortune { margin-left: auto; font-weight: 800; color: var(--mo-or); white-space: nowrap; }
+.mo-fin .mo-titres { flex-direction: row; flex-wrap: wrap; margin-top: 6px; }
+.mo-titre { display: inline-flex; flex-wrap: wrap; gap: 0 6px; min-width: 0; padding: 2px 8px; border-left: 4px solid var(--c, #6B6660); background: rgba(0, 0, 0, .22); font-size: 12px; line-height: 1.5; }
+.mo-titre.is-hypo { opacity: .65; }
+.mo-titre-nom { min-width: 0; overflow-wrap: anywhere; }
+.mo-titre-info:empty { display: none; }
+
 /* Mouvement réduit demandé par le membre : aucune animation (les classes ne sont de toute façon pas posées) */
 body.plat-calme .mo-table *, body.plat-calme .mo-fete * { animation: none !important; transition: none !important; }
 

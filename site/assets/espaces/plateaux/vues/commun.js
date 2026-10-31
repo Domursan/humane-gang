@@ -3,12 +3,13 @@
  * Rôle : petites fonctions communes à Cluedo, Shadow Hunters, Destins, Monopoly et Risk (avatars, pseudos,
  * bandeau du haut de table, chrono, journal, envoi sécurisé, lecture de l'état).
  * Les signatures sont fixes : les tables (/assets/espaces/plateaux/jeux/<jeu>/table.js) les importent telles quelles.
- * Dépendances : core.js (esc, avatarHtml, toast), plateaux/api.js (jeu, erreurTexte).
+ * Dépendances : core.js (esc, avatarHtml, toast), plateaux/api.js (jeu, erreurTexte), commun/effets-duels.js (creerTicChrono).
  * Exporte : avatarHtml, pseudoHtml, couleurPseudo, texteSur, joueurDe, bandeauHtml, brancherChrono, journalHtml, imagePlateau,
  *           envoyer, moiJoueur, estMonTour.
  */
 import { esc, avatarHtml as avatarCore, toast } from '../../../commun/core.js';
 import { erreurTexte } from '../api.js';
+import { creerTicChrono } from '../../../commun/effets-duels.js';
 
 const GRIS_INVITE = '#9A968F';
 const COULEUR = /^#[0-9a-f]{6}$/i;
@@ -153,14 +154,18 @@ export function bandeauHtml(etat, { titre = '', sousTitre = '' } = {}) {
 }
 
 /**
- * Met à jour chaque [data-chrono] de root toutes les secondes (m:ss ; vide si pas de tour ; classe is-urgent sous 10 s).
+ * Met à jour chaque [data-chrono] de root (m:ss ; vide si pas de tour ; classe is-urgent sous 10 s).
+ * À mon tour, tic discret à 5 s et moins (CH2, S14 et S15), une fois par seconde même si le chrono repeint plus souvent.
  * @param {HTMLElement} root zone contenant les chronos.
  * @param {{ secondesRestantes: Function }} suivi objet renvoyé par suivrePartie.
  * @returns {Function} fonction d'arrêt (à appeler au nettoyage).
  */
 export function brancherChrono(root, suivi) {
+  const ticChrono = creerTicChrono();
   const maj = () => {
     const s = suivi?.secondesRestantes?.();
+    const e = suivi?.etat?.();
+    ticChrono(s, estMonTour(e), e?.partie?.tour_fin, root.querySelector('[data-chrono]'));
     root.querySelectorAll('[data-chrono]').forEach((el) => {
       if (s == null) {
         el.textContent = '';
@@ -172,7 +177,7 @@ export function brancherChrono(root, suivi) {
     });
   };
   maj();
-  const t = setInterval(maj, 1000);
+  const t = setInterval(maj, 500);
   return () => clearInterval(t);
 }
 

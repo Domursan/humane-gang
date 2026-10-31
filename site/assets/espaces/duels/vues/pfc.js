@@ -12,16 +12,20 @@
  *   un halo, à égalité les faces tremblent et « On relance ! » s'affiche (son 4) ; mon lancer gagné : son 3 ; quand c'est
  *   à moi de choisir : mon nom pulse et les gestes se soulèvent à tour de rôle (attend la fin de la révélation). Animations
  *   coupées par mouvement réduit, préférence « effets » ou body.duels-calme ; les sons restent. Le bandeau « Duel gagné ! »
- *   (son 5) n'est pas ici : la fin de duel passe à vues/fin.js.
+ *   (son 5) n'est pas sur la table : la fin de duel passe à vues/fin.js, qui appelle effetsFin à chaque état.
+ *   Défaite vue en direct (PC1) : l'écran de fin n'a que la liste écrite des lancers, effetsFin y pose donc les deux mains du
+ *   dernier lancer (pièce neuve, mêmes dessins et classes que la table), ma main s'affaisse, S16, bandeau sobre.
+ *   Mouvement réduit : les mains restent, ma main déjà affaissée, sans bandeau. Invité : pas de bloc de lancers, donc son seul.
  * Dépendances : core.js (esc, toast, motionAllowed), ../api.js (duel, erreurTexte), ./commun.js (creerCadre),
- *   ../../../commun/sons-jeux.js (jouerSonJeu).
+ *   ../../../commun/sons-jeux.js (jouerSonJeu), ../../../commun/effets-duels.js (anime), ./fin-fx.js.
  * Exporte : creer, effetsFin (fin de duel, via ./fin-fx.js).
  */
 import { esc, toast, motionAllowed } from '../../../commun/core.js';
 import { duel, erreurTexte } from '../api.js';
 import { creerCadre } from './commun.js';
 import { jouerSonJeu } from '../../../commun/sons-jeux.js';
-import { vuEnCours, effetsFinDuel } from './fin-fx.js';
+import { anime as animePermis } from '../../../commun/effets-duels.js';
+import { vuEnCours, effetsFinDuel, fxFin } from './fin-fx.js';
 
 /** Durée pendant laquelle on attend l'état après un envoi réussi (ms), au cas où le temps réel tarde. */
 const DUREE_ATTENTE = 5000;
@@ -40,6 +44,10 @@ const GESTES = [
   { cle: 'ciseaux', nom: 'Ciseaux', trait: '<circle cx="32" cy="68" r="11"/><circle cx="64" cy="68" r="11"/><path d="M40 60L72 12M56 60L24 12"/>' },
 ];
 const NOM_GESTE = Object.fromEntries(GESTES.map((g) => [g.cle, g.nom]));
+/** Phrase du bandeau de défaite, selon le geste gagnant (chaque geste n'en bat qu'un). */
+const PHRASE_GAGNANTE = { feuille: 'La feuille couvre la pierre', pierre: 'La pierre casse les ciseaux', ciseaux: 'Les ciseaux coupent la feuille' };
+/** Parties (ids) perdues en direct : fin.js redessine son bloc à chaque état, effetsFin y repose alors les mains, sans animation. */
+const MAINS_POSEES = new Set();
 
 /** Dessin SVG à trait d'un geste (taille fixée par la feuille de style). */
 const dessin = (cle) => {
@@ -370,11 +378,60 @@ export function creer(root, ctx) {
   };
 }
 
-/** Fin de duel vue en direct (appelé par vues/fin.js) : son « Duel gagné », gagnant qui brille, bandeau et confettis. */
+/**
+ * Les deux mains du dernier lancer, au-dessus de la liste écrite de l'écran de fin (qui en donne déjà le texte aux lecteurs d'écran).
+ * @param {HTMLElement} root écran de fin. @param {object} e état du duel terminé. @param {boolean} vif animation permise.
+ * @returns {Element|null} la pièce posée ; null s'il n'y a pas où la poser (invité) ou si elle y est déjà.
+ */
+function poserMains(root, e, vif) {
+  const ancre = root.querySelector('.duels-fin-lancers');
+  const lancers = e.pfc?.lancers || [];
+  const l = lancers[lancers.length - 1];
+  const moi = e.moi?.user_id;
+  const adv = (e.joueurs || []).find((j) => j.user_id !== moi);
+  if (!ancre || !l || !adv || root.querySelector('.duels-pfc-finmains')) return null;
+  const face = (cote, titre, cle) => `<div class="duels-pfc-face is-${cote}">
+      <span class="duels-pfc-face-titre">${titre}</span>
+      <span class="duels-pfc-face-dessin">${dessin(cle)}</span>
+      <span class="duels-pfc-face-nom">${esc(NOM_GESTE[cle] || '—')}</span>
+    </div>`;
+  ancre.insertAdjacentHTML('beforebegin', `<div class="duels-pfc-finmains${vif ? ' is-anime' : ''}" aria-hidden="true">
+    <div class="duels-pfc-cartes${vif ? ' is-revele' : ''}">
+      ${face('gauche', 'Toi', l[moi])}
+      <span class="duels-pfc-vs">contre</span>
+      ${face('droite', esc(adv.robot ? 'Le robot' : (adv.pseudo || '?')), l[adv.user_id])}
+    </div></div>`);
+  return ancre.previousElementSibling;
+}
+
+/** PC1 : défaite vue en direct : les mains, puis le bandeau sobre. Le son S16 vient de effetsFin. */
+function defaite(root, e) {
+  const vif = animePermis();
+  const id = e.partie?.id;
+  if (id) MAINS_POSEES.add(id);
+  const mains = poserMains(root, e, vif);
+  if (vif && mains) {   // les mains passent au-dessus du bandeau, qui tombe à 42 % de la fenêtre
+    const bande = innerWidth > 800 ? (document.getElementById('commandes')?.offsetHeight || 0) : 0;
+    const ecart = mains.getBoundingClientRect().top - bande - 16;
+    if (ecart > 0) window.scrollBy({ top: ecart, behavior: 'smooth' });
+  }
+  const lancers = e.pfc?.lancers || [];
+  const l = lancers[lancers.length - 1];
+  const adv = (e.joueurs || []).find((j) => j.user_id !== e.moi?.user_id);
+  const nom = adv?.robot ? 'Le robot' : (adv?.pseudo || 'Ton adversaire');
+  fxFin.plus(() => fxFin.bandeau('Duel perdu', PHRASE_GAGNANTE[l?.[l?.gagnant]] || `${nom} gagne le duel`, { ton: 'd' }), 300);
+}
+
+/** Fin de duel vue en direct (appelé par vues/fin.js à chaque état) : gagnant : son « Duel gagné », brillance, bandeau et confettis ;
+ *  perdant : PC1. son() n'est appelé qu'une fois, partie vue en direct : c'est là que part l'effet. */
 export function effetsFin(root, e) {
+  if (MAINS_POSEES.has(e.partie?.id)) poserMains(root, e, false);
   effetsFinDuel(root, e, {
     jeu: 'pierre-feuille-ciseaux',
-    son: (issue) => (issue === 'gagnant' ? 5 : null),
+    son: (issue) => {
+      if (issue === 'perdant') defaite(root, e);
+      return { gagnant: 5, perdant: 'S16' }[issue] || null;
+    },
     titre: (issue) => (issue === 'gagnant' ? ['Duel gagné !', 'Le duel est terminé'] : null),
   });
 }

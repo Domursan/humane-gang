@@ -14,11 +14,13 @@
  *   une lettre de l'indice qui se dévoile ; « Trouvé ! » (ligne de score qui s'éclaire, et bandeau pour moi, son) ;
  *   « Temps écoulé » (son) quand le temps finit sans que tout le monde ait trouvé ; son « Mot choisi » pour les devineurs ;
  *   son « Trait de crayon » à chaque trait posé. Le signal « à toi de jouer » reste celui de commun/tour-signal.js.
+ *   Fin de partie (PI1) : avantFin garde la dernière toile le temps de son cadre doré, pour le gagnant.
  *   Animations coupées si le mouvement réduit est demandé (motionAllowed) ; sons par commun/sons-jeux.js.
  * Dépendances : commun/tour-signal.js (creerSignalTour), commun/sons-jeux.js (jouerSonJeu), core.js (esc, toast, sb,
  *   motionAllowed), ../../api.js (plat, erreurTexte), ../../vues/commun.js (avatarHtml, pseudoHtml,
- *   joueurDe, moiJoueur, brancherChrono, envoyer), ../../vues/chat.js (creerChat, tiroirChat), ./plateau.js (toile, palette).
- * Exporte : creer(root, ctx) -> { maj(etat), message(msg), detruire() }.
+ *   joueurDe, moiJoueur, brancherChrono, envoyer), ../../vues/chat.js (creerChat, tiroirChat), commun/effets-duels.js (anime),
+ *   ../../vues/fin-fx.js (effetsFinPlateau, fxFin, issuePlateau), ./fin.js (finFx), ./plateau.js (toile, palette).
+ * Exporte : creer(root, ctx) -> { maj(etat), message(msg), detruire(), avantFin(etat) }.
  *   ctx = { code, naviguer, moi, suivi, contenus } ; suivi = retour de suivrePartie.
  *   Canal : sb.channel('pict:<id>', { config: { broadcast: { self: false } } }). Événements :
  *   'trait' { n, s, c, e, k, p } (points p à partir du rang k du trait s), 'annuler' { n, s }, 'effacer' { n }.
@@ -30,10 +32,14 @@ import { avatarHtml, pseudoHtml, joueurDe, moiJoueur, brancherChrono, envoyer } 
 import { creerChat, tiroirChat } from '../../vues/chat.js';
 import { creerSignalTour } from '../../../../commun/tour-signal.js';
 import { jouerSonJeu } from '../../../../commun/sons-jeux.js';
+import { anime } from '../../../../commun/effets-duels.js';
+import { effetsFinPlateau, fxFin, issuePlateau } from '../../vues/fin-fx.js';
+import { finFx } from './fin.js';
 import { LARGEUR, HAUTEUR, FOND, PALETTE, EPAISSEURS, GOMME, tracerToile, indiceHtml, nombreCachees, arrondi, borne, couleurValide } from './plateau.js';
 
 const ECRAN_GRAND = '(min-width: 761px)';
 const PAS_ENVOI = 50;           // ms entre deux paquets de traits : au plus 20 envois par seconde
+const GARDE_FIN = 2200;         // ms : la dernière toile reste à l'écran après la fin, le temps du cadre doré (PI1)
 const PAS_SAUVEGARDE = 5000;    // ms entre deux enregistrements du dessin complet
 const DUREE_REVELE = 6000;      // ms d'affichage du mot du tour précédent
 const ICONE_QUITTER = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H9"></path></svg>';
@@ -168,6 +174,7 @@ export function creer(root, ctx) {
   let enregistrement = null;     // enregistrement en cours
   const outil = { couleur: 0, epaisseur: 1, gomme: false };
   let occupe = false;            // choix du mot en cours
+  let finie = false;             // état final reçu : la table reste un instant à l'écran, plus aucune action
   let envoiDevine = false;       // proposition en cours
   let canal = null, canalNom = null, canalPret = false;
   let rafId = 0;
@@ -204,8 +211,8 @@ export function creer(root, ctx) {
   const aTrouve = () => !!monId() && (jeu().trouves || []).includes(monId());
   const pseudoDe = (u) => (u == null ? '' : (joueurDe(etat, u)?.pseudo || '?'));
   const dessinEnCours = () => etat?.partie?.statut === 'en_cours' && phase() === 'dessin';
-  const peutDessiner = () => dessinEnCours() && estDessinateur();
-  const peutDeviner = () => dessinEnCours() && !!monId() && !estDessinateur() && !aTrouve();
+  const peutDessiner = () => !finie && dessinEnCours() && estDessinateur();
+  const peutDeviner = () => !finie && dessinEnCours() && !!monId() && !estDessinateur() && !aTrouve();
 
   /** Message pour le lecteur d'écran (zone aria-live). */
   const annoncer = (texte) => { refs.annonce.textContent = texte; };
@@ -552,7 +559,7 @@ export function creer(root, ctx) {
 
   refs.mots.addEventListener('click', async (ev) => {
     const b = ev.target.closest('[data-mot]');
-    if (!b || occupe) return;
+    if (!b || occupe || finie) return;
     const mot = choixCourants[Number(b.dataset.mot)];
     if (!mot) return;
     occupe = true;
@@ -763,6 +770,16 @@ export function creer(root, ctx) {
     message(m) {
       messagesVus.push(m);
       chat?.message(m);
+    },
+    /** PI1 : le gagnant voit la dernière toile recevoir son cadre doré, puis l'écran de fin. Sans animation, onglet masqué ou autre issue : rien à attendre. */
+    avantFin(e) {
+      finie = true;
+      refs.quitter.disabled = true;
+      if (document.hidden) return null;
+      const joue = effetsFinPlateau(e, { ...finFx,
+        apres: (issue) => { if (issue === 'gagnant') fxFin.classe(refs.toile, 'pi-toile-fin', GARDE_FIN); } });
+      if (!joue || !anime() || issuePlateau(e) !== 'gagnant') return null;
+      return new Promise((ok) => { fxFin.plus(ok, GARDE_FIN); });
     },
     detruire() {
       signal.arreter();

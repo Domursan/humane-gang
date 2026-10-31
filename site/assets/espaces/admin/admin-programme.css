@@ -18,7 +18,7 @@
 
 /* Calendrier et détail */
 .pg-cal { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); align-items: start; min-width: 0; }
-@media (min-width: 1100px) { .pg-cal { grid-template-columns: minmax(0, 1fr) 320px; } }
+@media (min-width: 1100px) { .pg-cal { grid-template-columns: minmax(0, 1fr) 380px; } }
 .pg-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
 .pg-voir { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 14px; cursor: pointer; }
 .pg-voir input { width: 20px; height: 20px; margin: 0; }
@@ -51,10 +51,8 @@
 .pg-leg b { color: var(--text); }
 
 .pg-det { display: grid; gap: 10px; }
-.pg-det li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 10px; align-items: start; }
+.pg-det > li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 10px; align-items: start; }
 .pg-det .pg-p { margin-top: 2px; }
-.pg-dett { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
-.pg-rep { flex-basis: 100%; font-size: 14px; overflow-wrap: anywhere; }
 
 /* Jeux automatiques */
 .pg-autos { display: grid; gap: 2px 20px; grid-template-columns: minmax(0, 1fr); }
@@ -66,7 +64,6 @@
 
 @media (max-width: 760px) {
   .pg-row { grid-template-columns: 28px minmax(0, 1fr); }
-  .pg-row .btn { grid-column: 2; justify-self: start; }
   .pg-bar .pl-nav { width: 100%; justify-content: space-between; }
   .pg-bar .pl-title { flex: 1; }
   .pg-day { padding: 4px 1px; }
@@ -74,4 +71,40 @@
   .pg-p { width: 12px; height: 13px; border-radius: 3px; font-size: 9px; }
   .pg-dow span { padding: 6px 0; font-size: 10px; }
   .pg-legend { justify-content: flex-start; }
+}
+
+/* Détail : contenu réel et programmation sur place */
+.pg-rowb { display: grid; justify-items: end; gap: 2px; }
+.pg-lien { color: var(--muted); text-decoration: underline; }
+.pg-det > li { padding-top: 10px; border-top: 1px solid var(--border); }
+.pg-det > li:first-child { padding-top: 0; border-top: 0; }
+.pg-dett { display: grid; gap: 4px; min-width: 0; }
+.pg-dett p { margin: 0; }
+.pg-deth { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.pg-deth b:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.pg-cont { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.pg-imgs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.pg-imgs img, .pg-geo { display: block; width: 100%; object-fit: cover; border-radius: 6px; background: var(--surface-2); }
+.pg-imgs img { aspect-ratio: 16 / 10; }
+.pg-geo { max-height: 180px; }
+.pg-opts { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; font-size: 13px; }
+.pg-opts li { display: flex; gap: 6px; }
+.pg-opts .is-bonne { color: var(--sage-text); }
+.pg-err { margin: 0; color: var(--rust); font-size: 13px; font-weight: 700; }
+.pg-form { display: grid; gap: 8px; min-width: 0; padding: 10px; border-radius: 10px; background: var(--surface-2); }
+.pg-form .field { min-width: 0; }
+.pg-form .input { width: 100%; max-width: 100%; min-height: 44px; }
+.pg-form .btn-row, .pg-acts { margin: 0; flex-wrap: wrap; }
+.pg-acts { display: flex; gap: 8px; }
+.pg-acts .btn { flex: 1 1 auto; width: auto; }
+/* Assez large : un bouton seul passe à droite du titre, pour tenir les cinq jeux sans défiler */
+@media (min-width: 761px) {
+  .pg-acts .btn { flex: 0 0 auto; }
+  .pg-dett { grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; }
+  .pg-dett > * { grid-column: 1 / -1; }
+  .pg-dett > .pg-deth, .pg-dett > .pg-deth + p { grid-column: 1; }
+  .pg-dett > .pg-acts.is-un { grid-column: 2; grid-row: 1 / span 2; align-self: start; }
+}
+@media (max-width: 760px) {
+  .pg-rowb { grid-column: 2; grid-auto-flow: column; justify-content: start; justify-items: start; align-items: center; gap: 12px; }
 }

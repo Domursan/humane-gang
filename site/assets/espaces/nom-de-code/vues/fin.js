@@ -4,16 +4,21 @@
  * marqués d'une coche), mes Paillettes et mes badges (membres seulement), historique des indices par équipe,
  * équipes avec rôle, mots trouvés et Paillettes, puis revanche ou retour. Le chat reste ouvert en dessous.
  * Effets, joués une seule fois quand la partie vient de se terminer pendant que je la suis (la table précédente
- *   a vu une partie en cours, reçue via ctx.avant) : assassin → flash rouge, secousse, bannière, son ; victoire →
- *   confettis, titre qui brille, bannière, son, pour l'équipe gagnante (ou un spectateur) seulement.
- * Dépendances : core.js (esc, avatarHtml, toast), nom-de-code/api.js (ndc, erreurTexte, estInvite, EQUIPES),
+ *   a vu une partie en cours, reçue via ctx.avant) :
+ *   assassin, mon équipe l'a touché → flash rouge, secousse, bannière « Partie perdue », son ;
+ *   assassin, l'autre équipe l'a touché (ou spectateur) → son, puis son de victoire, bandeau selon l'équipe, confettis (ND2) ;
+ *   mon équipe perd sans assassin → bandeau sobre et son (ND1) ;
+ *   victoire → confettis, titre qui brille, bannière, son, pour l'équipe gagnante (ou un spectateur).
+ *   Le résultat vient de partie.vainqueur et de moi.equipe, comme le titre de l'écran : le joueur parti garde celui de son équipe.
+ * Dépendances : core.js (esc, avatarHtml, toast), commun/effets-duels.js, nom-de-code/api.js (ndc, erreurTexte, estInvite, EQUIPES),
  *   vues/chat.js (creerChat), vues/effets.js (effets visuels et sons).
  * Exporte : creer.
  */
 import { esc, avatarHtml, toast } from '../../../commun/core.js';
+import { creerEffets, premiereFois, son as sonCommun } from '../../../commun/effets-duels.js';
 import { ndc, erreurTexte, estInvite, EQUIPES } from '../api.js';
 import { creerChat } from './chat.js';
-import { son, banniere, flashRouge, secouer, confettis, brille } from './effets.js';
+import { son, banniere, flashRouge, secouer, confettis, brille, arreterEffets } from './effets.js';
 
 const ICONE_COCHE = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>';
 const ICONE_OEIL = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle><path d="M3 3l18 18"></path></svg>';
@@ -34,6 +39,13 @@ const couleurPseudo = (j) => (j.invite ? '#9A968F' : (/^#[0-9a-f]{6}$/i.test(j.c
 const autre = (eq) => (eq === 'jaune' ? 'rose' : 'jaune');
 /** Nom affiché d'une équipe. */
 const nomEq = (eq) => EQUIPES[eq]?.nom || '';
+/** Nom d'une équipe au pluriel. */
+const nomPluriel = (eq) => (eq === 'rose' ? 'Roses' : 'Jaunes');
+
+/** Confettis de l'équipe qui gagne sur l'assassin de l'autre (ND2). */
+const CONFETTIS_ASSASSIN = ['#F2B71F', '#FFD970', '#F1EFE9'];
+/** Délai entre le son de l'assassin et celui de la victoire (ND2). */
+const DELAI_VICTOIRE = 900;
 
 /** Clé de rendu : on ne réécrit une zone que si son HTML a changé (les boutons gardent leur état). */
 function zone(el, html) {
@@ -97,6 +109,7 @@ export function creer(root, ctx) {
 
   // Le chat vit dans son propre élément : il est créé une seule fois et reçoit maj / ajouter.
   const chat = creerChat(q('[data-zone="chat"]'), { code, moi: ctx.moi });
+  const fx = creerEffets();
 
   // ----- Actions -----
   async function rejouer(btn) {
@@ -152,7 +165,8 @@ export function creer(root, ctx) {
         const nom = joueurs.find((j) => j.user_id === p.assassin)?.pseudo || 'Quelqu\'un';
         sous = `${nom} a révélé l'assassin.`;
       } else if (p.raison === 'forfait') {
-        sous = 'L\'autre équipe n\'avait plus assez de joueurs.';
+        if (!moi.equipe) sous = `L'équipe ${nomEq(autre(v))} n'avait plus assez de joueurs.`;
+        else sous = moi.equipe === v ? 'L\'autre équipe n\'avait plus assez de joueurs.' : 'Ton équipe n\'avait plus assez de joueurs.';
       } else if (p.raison === 'arret') {
         sous = 'La partie a été arrêtée.';
       }
@@ -293,16 +307,29 @@ export function creer(root, ctx) {
     const p = e.partie;
     const moi = e.moi || {};
     const v = EQUIPES[p.vainqueur] ? p.vainqueur : null;
-    if (p.raison === 'assassin') {
+    if (!v || !premiereFois(`ndc-fin:${p.id}`)) return;
+    const perdu = !!moi.equipe && moi.equipe !== v;
+    if (p.raison === 'assassin' && perdu) {
       son(4);
       flashRouge();
       secouer(root.querySelector('.ndc-fin-cartes'));
       banniere('Assassin !', 'Partie perdue', 'rouge');
-    } else if (v && (!moi.equipe || moi.equipe === v)) {
+    } else if (p.raison === 'assassin') {
+      son(4);
+      fx.plus(() => {
+        son(5);
+        fx.bandeau('Assassin !', moi.equipe ? 'Ton équipe gagne' : `Victoire des ${nomPluriel(v)}`, { ton: 'n' });
+        fx.confettis(CONFETTIS_ASSASSIN);
+      }, DELAI_VICTOIRE);
+    } else if (perdu) {
+      sonCommun('S02');
+      const sous = p.raison === 'mots' ? `Les ${nomPluriel(v)} ont trouvé tous leurs mots` : 'Ton équipe n’avait plus assez de joueurs';
+      fx.bandeau('Ton équipe perd', sous, { ton: 'd' });
+    } else {
       son(5);
       confettis();
       brille(root.querySelector('.ndc-fin-titre'));
-      banniere(`Victoire des ${v === 'rose' ? 'Roses' : 'Jaunes'}`, `Bravo à l’équipe ${nomEq(v).toLowerCase()}`, v);
+      banniere(`Victoire des ${nomPluriel(v)}`, `Bravo à l’équipe ${nomEq(v).toLowerCase()}`, v);
     }
   }
 
@@ -318,6 +345,8 @@ export function creer(root, ctx) {
     },
     detruire() {
       fini = true;
+      fx.nettoyer();
+      arreterEffets();
       try { chat?.detruire(); } catch { /* sans effet */ }
       root.innerHTML = '';
     },

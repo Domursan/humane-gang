@@ -9,10 +9,11 @@
  * Clavier (facultatif, quand le focus est dans la table) : touches 1 à 6, Retour arrière, Entrée.
  * Effets (ajouts visuels et sonores, sur les seuls changements entre deux états) : « à toi » (ma ligne, la palette et
  *   mon nom), pion posé (le trou rebondit), indices qui apparaissent un par un sur le nouvel essai (un son par indice),
- *   code percé (bandeau, confettis, lignes illuminées), le robot perce mon code (bandeau). Victoire du duel : effetsFin,
- *   appelé par vues/fin.js. Sons : commun/sons-jeux.js (jeu « mastermind »). Mouvement réduit : pas d'animation, sons conservés.
+ *   code percé (bandeau, confettis, lignes illuminées), l'adversaire perce mon code (MM2, bandeau sobre : je peux encore gagner en
+ *   moins d'essais). Fin du duel : effetsFin, appelé par vues/fin.js. Sons : commun/sons-jeux.js (jeu « mastermind »).
+ *   Mouvement réduit : pas d'animation, sons conservés.
  * Dépendances : core.js (esc, toast, motionAllowed), ../api.js (duel, erreurTexte, COULEURS_MM, estInvite), ./commun.js (creerCadre, nomJoueur),
- *   ../../../commun/sons-jeux.js (jouerSonJeu).
+ *   ../../../commun/sons-jeux.js (jouerSonJeu), ../../../commun/effets-duels.js (anime, son, creerEffets), ./fin-fx.js (fxFin, issueDuel, finEnDirect, sonFin).
  * Exporte : creer, effetsFin.
  */
 import { esc, toast, motionAllowed } from '../../../commun/core.js';
@@ -20,6 +21,8 @@ import { duel, erreurTexte, COULEURS_MM, estInvite } from '../api.js';
 import { creerCadre, nomJoueur, deNom } from './commun.js';
 import { boutonReponses } from '../../../commun/core/admin-reponses.js';
 import { jouerSonJeu } from '../../../commun/sons-jeux.js';
+import { anime as animable, son as sonDuel, creerEffets } from '../../../commun/effets-duels.js';
+import { fxFin, issueDuel, finEnDirect, sonFin } from './fin-fx.js';
 
 const CLE_DALTO = 'hg_duel_daltonien';
 const ESSAIS_MAX = 10;
@@ -53,38 +56,30 @@ const ordinal = (n) => (n === 1 ? '1er' : `${n}e`);
 
 /* ---------- Effets (ajouts visuels, aucun clic intercepté) ---------- */
 
-/** Parties (ids) dont une table a reçu un état « en cours » dans cette page : seules elles ont l'effet de fin. */
-const VUES_EN_COURS = new Set();
-/** Parties dont la victoire (code percé) a déjà été fêtée en direct : l'écran de fin ne la refête pas. */
+/** Manches (« id:manche ») dont la victoire a déjà été fêtée en direct : l'écran de fin ne refête pas la dernière manche. */
 const CELEBRES = new Set();
-/** Parties dont le robot (ou l'adversaire) a percé mon code pendant une manche vue en direct. */
-const PERCES = new Set();
 const COULEURS_CONF = ['#C4574B', '#D98B3A', '#E8C547', '#5C9E6E', '#5B7FD6', '#8E6BBF', '#E2C77E'];
 
-/** Bandeau fixe au milieu de la page (sans clic, retiré après 2,3 s). Textes fixes ou déjà contrôlés. */
+/** Bandeau fixe au milieu de la page (sans clic, retiré après 2,3 s ou en quittant le duel). Textes fixes ou déjà contrôlés. */
 function bandeau(titre, sous) {
   const b = document.createElement('div');
   b.className = 'mm-fx-ban';
-  b.setAttribute('aria-hidden', 'true');
   b.append(titre);
   const s = document.createElement('small');
   s.textContent = sous;
   b.append(s);
-  document.body.append(b);
-  setTimeout(() => b.remove(), 2300);
+  fxFin.vol(b, 2300);
 }
 /** 70 confettis qui tombent (calque fixe, retirés après 4 s). */
 function confettis() {
   for (let i = 0; i < 70; i++) {
     const d = document.createElement('i');
     d.className = 'mm-fx-conf';
-    d.setAttribute('aria-hidden', 'true');
     d.style.left = `${Math.random() * 100}vw`;
     d.style.background = COULEURS_CONF[i % COULEURS_CONF.length];
     d.style.animationDuration = `${1.6 + Math.random() * 1.6}s`;
     d.style.animationDelay = `${Math.random() * 0.5}s`;
-    document.body.append(d);
-    setTimeout(() => d.remove(), 4000);
+    fxFin.vol(d, 4000);
   }
 }
 /** Ajoute une classe d'effet à un élément pendant quelques instants (sans effet si l'élément n'existe plus). */
@@ -94,36 +89,53 @@ function flash(el, classe, ms) {
   setTimeout(() => el.classList.remove(classe), ms);
 }
 
+/** Les pastilles des « Derniers codes » de l'écran de fin apparaissent une par une (sans animation : déjà là). */
+function revelerCodes(root) {
+  if (!animable()) return;
+  root.querySelectorAll('.duels-fin-pastille').forEach((p, i) => {
+    p.style.animationDelay = `${i * 120}ms`;
+    p.classList.add('mm-fx-saut');
+  });
+}
+
 /**
- * Effet de fin de duel (appelé par vues/fin.js) : seulement pour une partie vue en direct, gagnée par moi,
- * et dont la victoire n'a pas déjà été fêtée pendant la partie. Le perdant voit l'écran de fin sans effet.
+ * Effets de fin de duel (appelé par vues/fin.js), seulement pour une partie vue en direct et pour un joueur.
+ * Gagnant : son et bandeau, sauf si la victoire a déjà été fêtée pendant la partie. Perdant (MM3) : « Duel perdu », S27, codes
+ * révélés. Nulle (MM1) : codes révélés, bandeau neutre, S17.
  * @param {HTMLElement} root conteneur de l'écran de fin.
  * @param {object} e état du duel terminé.
  */
 export function effetsFin(root, e) {
   const p = e.partie || {};
-  if (p.statut !== 'terminee' || !VUES_EN_COURS.has(p.id)) return;
-  VUES_EN_COURS.delete(p.id);
+  if (!finEnDirect(p)) return;
   const js = e.joueurs || [];
-  const gagnant = js.find((j) => j.gagne) || js.find((j) => j.user_id === p.vainqueur) || null;
-  if (gagnant && gagnant.user_id === e.moi?.user_id) {
-    if (CELEBRES.has(p.id)) return;
-    jouerSonJeu('mastermind', 4);
+  const issue = issueDuel(e);
+  const derniere = (p.historique || [])[(p.historique || []).length - 1];
+  if (issue === 'gagnant') {
+    if (CELEBRES.has(`${p.id}:${derniere?.manche ?? p.manche}`)) return;
+    sonFin('mastermind', 4);
     if (!motionAllowed()) return;
-    flash(root.querySelector('.duels-fin-joueur.is-gagnant'), 'mm-fx-fin', 4800);
+    fxFin.classe(root.querySelector('.duels-fin-joueur.is-gagnant'), 'mm-fx-fin', 4800);
     const trouve = js.find((j) => j.user_id === e.moi.user_id)?.trouve_en;
-    setTimeout(() => {
+    fxFin.plus(() => {
       bandeau('Code percé !', trouve ? `Trouvé en ${trouve} essai${trouve > 1 ? 's' : ''}` : 'Duel gagné');
       confettis();
     }, 300);
     return;
   }
-  // Défaite : si le robot (ou l'adversaire) a percé mon code et que la table ne l'a pas annoncé, on le fait ici.
-  const adv = js.find((j) => j.user_id !== e.moi?.user_id) || null;
-  if (!e.moi?.joue || !adv?.trouve_en || PERCES.has(p.id)) return;
-  jouerSonJeu('mastermind', 5);
-  if (!motionAllowed()) return;
-  setTimeout(() => bandeau(`${adv.robot ? 'Le robot' : adv.pseudo || 'Ton adversaire'} perce ton code`, 'Partie perdue pour cette manche'), 300);
+  const score = Number(p.format) > 1 ? `Score final ${js.find((j) => j.place === 1)?.manches ?? 0} – ${js.find((j) => j.place === 2)?.manches ?? 0}` : 'Le duel est terminé';
+  if (issue === 'perdant') {
+    sonFin('mastermind', 5); // S27
+    revelerCodes(root);
+    const adv = js.find((j) => j.user_id !== e.moi?.user_id) || null;
+    const n = adv?.trouve_en;
+    const sous = n ? `${adv.robot ? 'Le robot' : adv.pseudo || 'Ton adversaire'} perce en ${n} essai${n > 1 ? 's' : ''}` : score;
+    fxFin.plus(() => fxFin.bandeau('Duel perdu', sous, { ton: 'd' }), 300);
+  } else if (issue === 'nulle') {
+    sonDuel('S17');
+    revelerCodes(root);
+    fxFin.plus(() => fxFin.bandeau('Match nul', derniere && !derniere.gagnant ? 'Personne n’a percé le code' : score, { ton: 'n' }), 500);
+  }
 }
 
 /**
@@ -136,6 +148,8 @@ export function creer(root, ctx) {
   const cadre = creerCadre(root, ctx, { classe: 'duels-mm' });
   boutonReponses(root.querySelector('.duels-barre-outils'), 'mastermind', () => st.etat?.partie?.id ?? null);
   const st = { etat: null, brouillon: vide(), occupe: false, phaseVue: null, dalto: lireDalto() };
+  /** Effets décalés de la table : annulés avec elle, l'écran de fin prend le relais. */
+  const fx = creerEffets();
 
   /** Vrai si je peux agir maintenant (joueur, duel en cours, pas déjà fini, pas d'envoi en cours). */
   const peutJouer = () => {
@@ -171,7 +185,7 @@ export function creer(root, ctx) {
     const pions = [...(ligne?.querySelectorAll('.mm-fb') || [])];
     pions.forEach((p, k) => {
       if (anime) p.classList.add('mm-fx-cache');
-      setTimeout(() => {
+      fx.plus(() => {
         if (anime) { p.classList.remove('mm-fx-cache'); p.classList.add('mm-fx-pop'); }
         jouerSonJeu('mastermind', p.classList.contains('mm-fb-ok') ? 1 : 2);
       }, 450 + k * 500);
@@ -201,12 +215,10 @@ export function creer(root, ctx) {
       flash(cadre.plateau.querySelector('.mm-palette'), 'mm-fx-palette', 3500);
     }
 
-    /** Annonce décalée : son toujours, bandeau et confettis seulement si le mouvement est permis. */
-    const annonce = (son, titre, sous, fete) => setTimeout(() => {
+    /** Annonce décalée d'une fin de manche : son toujours ; le reste seulement si le mouvement est permis. */
+    const annonce = (son, suite) => fx.plus(() => {
       jouerSonJeu('mastermind', son);
-      if (!anime) return;
-      bandeau(titre, sous);
-      if (fete) confettis();
+      if (anime) suite();
     }, delai);
 
     // Code percé (je trouve le code adverse) : bandeau, confettis, lignes illuminées.
@@ -214,17 +226,20 @@ export function creer(root, ctx) {
     const moi = cadre.joueurMoi(e);
     if (!moiAvant?.trouve_en && moi?.trouve_en) {
       const n = moi.trouve_en;
-      CELEBRES.add(e.partie.id);
-      annonce(4, 'Code percé !', `Manche gagnée en ${n} essai${n > 1 ? 's' : ''}`, true);
-      if (anime) setTimeout(() => cadre.plateau.querySelectorAll('.mm-rangee:not(.is-vide)').forEach((r) => flash(r, 'mm-fx-gagne', 2600)), delai);
+      fx.plus(() => CELEBRES.add(`${e.partie.id}:${e.partie.manche}`), delai);
+      annonce(4, () => {
+        bandeau('Code percé !', `Manche gagnée en ${n} essai${n > 1 ? 's' : ''}`);
+        confettis();
+        cadre.plateau.querySelectorAll('.mm-rangee:not(.is-vide)').forEach((r) => flash(r, 'mm-fx-gagne', 2600));
+      });
     }
 
-    // Le robot (ou l'adversaire) perce mon code : bandeau grave et son.
+    // L'adversaire perce mon code (MM2) : la manche reste à moi si je trouve en moins d'essais (migration 122, hg_duel__mm_verifier).
     const adv = cadre.adversaire(e);
     const advAvant = cadre.adversaire(avant);
     if (!advAvant?.trouve_en && adv?.trouve_en) {
-      PERCES.add(e.partie.id);
-      annonce(5, `${adv.robot ? 'Le robot' : adv.pseudo || 'Ton adversaire'} perce ton code`, 'Partie perdue pour cette manche', false);
+      const n = adv.trouve_en;
+      annonce(5, () => fx.bandeau(`${adv.robot ? 'Le robot' : adv.pseudo || 'Ton adversaire'} perce ton code`, `Fais mieux que ${n} essai${n > 1 ? 's' : ''} pour gagner`, { ton: 'd' }));
     }
   };
 
@@ -408,7 +423,6 @@ export function creer(root, ctx) {
     maj(e) {
       const avant = st.etat;
       st.etat = e;
-      if (e.partie.statut === 'en_cours' && e.partie.id) VUES_EN_COURS.add(e.partie.id);
       // Mastermind : j'ai à agir tant que mon code n'est pas choisi (phase « codes ») ou que je n'ai pas fini ma manche.
       const aAgir = !!e.moi?.joue && e.partie.statut === 'en_cours'
         && (e.partie.phase === 'codes' ? !e.mastermind?.mon_code_pret : !termine(e));
@@ -425,6 +439,7 @@ export function creer(root, ctx) {
     },
     message(m) { cadre.message(m); },
     detruire() {
+      fx.nettoyer();
       root.removeEventListener('click', surClic);
       root.removeEventListener('keydown', surTouche);
       cadre.detruire();

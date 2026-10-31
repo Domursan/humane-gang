@@ -141,3 +141,6 @@ body.duels-calme .qec-carte.is-baisse .qec-dos { animation: none; }
 }
 body.duels-calme .duels-face-j.qec-fx-tour, body.duels-calme .qec-fx-surligne, body.duels-calme .qec-fx-bulle,
 body.duels-calme .qec-carte.qec-fx-bascule, body.duels-calme .qec-rep.qec-fx-pop, body.duels-calme .qec-fx-ban.is-anime { animation: none; }
+
+/* QE1 : mon portrait est désigné sur l'écran de fin (contour posé aussi sans animation ; la secousse est fxd-secoue, du socle). */
+.duels-fin-perso.qec-fx-trouve { box-shadow: 0 0 0 2px #E0909A; }
