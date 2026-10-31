@@ -5,9 +5,13 @@
  * doigt), ou en touchant deux cases (départ puis arrivée), ou au clavier (flèches, puis Entrée). Un mot trouvé se surligne
  * dans la grille (couleurs du site) et se barre dans la liste. Le chrono ne sert qu'au classement du jour : il n'empêche
  * jamais de jouer. Fin quand tous les mots sont trouvés. Moteur : nj-grilles.js (hg_nj_grille_etat / hg_nj_grille_essai).
+ * Effets (effets-jour.js), seulement après la réponse du serveur : un mot trouvé colore ses cases une à une (saut, son M1 par
+ * lettre) puis se barre dans la liste (M2) ; une sélection fausse ou hors ligne droite secoue la grille (G4).
  * Exporte : mount(panel, ctx), resume(ctx).
  */
 import { monterGrille, resumerGrille, formatDuree } from './nj-grilles.js';
+import { motionAllowed } from '../../commun/core.js';
+import { sonJour, secouer, rejoue, enCascade } from './effets-jour.js';
 
 const JEU = 'motmele';
 /** Côté de la grille (lettres). */
@@ -68,6 +72,7 @@ function corps(st, ui, esc) {
  * Une sélection hors ligne droite n'est pas envoyée.
  */
 function lier(racine, st, ui, env) {
+  jouerEffets(racine, st, ui);
   if (st.partie?.fini) return;
   const grille = racine.querySelector('.ng-grille');
   const cases = new Map();
@@ -93,7 +98,13 @@ function lier(racine, st, ui, env) {
   /** Envoie une ligne au serveur (ou signale qu'elle n'est pas droite). */
   const envoie = (a, b) => {
     ui.depart = null; ui.glisse = null;
-    if (!alignes(a, b)) { env.dire('Sélection hors ligne droite : horizontale, verticale ou diagonale.'); apercu(); return; }
+    if (!alignes(a, b)) {
+      env.dire('Sélection hors ligne droite : horizontale, verticale ou diagonale.');
+      apercu();
+      secouer(grille);
+      sonJour('G4');
+      return;
+    }
     env.envoyer({ r1: a.r, c1: a.c, r2: b.r, c2: b.c }, `.ng-cell[data-r="${ui.curseur.r}"][data-c="${ui.curseur.c}"]`);
   };
 
@@ -184,9 +195,47 @@ function lier(racine, st, ui, env) {
   apercu();
 }
 
-/** Après un essai accepté : plus de départ ni de glissement en cours. */
-function apresEssai(ui) {
+/** Après un essai accepté : plus de départ ni de glissement en cours ; l'effet à jouer après le dessin est noté. */
+/** La carte de fin attend que le dernier mot ait fini de s'allumer (effet joué par lier, après le dessin). */
+const apresRendu = () => (motionAllowed() ? 1000 : 0);
+
+function apresEssai(ui, res) {
   ui.depart = null; ui.glisse = null; ui.survol = null;
+  ui.effet = res?.ok ? { mot: res.mot } : { faux: true };
+}
+
+/**
+ * Joue l'effet noté par apresEssai (une seule fois, après le dessin). Mot trouvé : les cases du mot sont décolorées puis
+ * colorées une à une, et le mot est barré à la fin. Sans mouvement, l'état final est déjà là : seul M2 est joué.
+ */
+function jouerEffets(racine, st, ui) {
+  const fx = ui.effet;
+  ui.effet = null;
+  if (!fx) return;
+  if (fx.faux) { secouer(racine.querySelector('.ng-grille')); sonJour('G4'); return; }
+  const place = st.grille.trouves?.[fx.mot];
+  const li = racine.querySelectorAll('.ng-mots li')[st.grille.mots.indexOf(fx.mot)];
+  if (!place || !motionAllowed()) { sonJour('M2'); return; }
+  const [r1, c1, r2, c2] = place;
+  const autres = new Set();
+  Object.entries(st.grille.trouves).forEach(([m, [a, b, c, d]]) => {
+    if (m !== fx.mot) casesLigne({ r: a, c: b }, { r: c, c: d }).forEach(({ r, c: k }) => autres.add(`${r},${k}`));
+  });
+  const caseDe = ({ r, c }) => racine.querySelector(`.ng-cell[data-r="${r}"][data-c="${c}"]`);
+  const lettres = casesLigne({ r: r1, c: c1 }, { r: r2, c: c2 });
+  lettres.forEach((p) => { if (!autres.has(`${p.r},${p.c}`)) caseDe(p)?.classList.remove('is-trouve'); });
+  li?.classList.remove('is-trouve');
+  const duree = enCascade(lettres, (p) => {
+    const el = caseDe(p);
+    if (!el?.isConnected) return;
+    el.classList.add('is-trouve');
+    rejoue(el, 'fxj-saut');
+    sonJour('M1');
+  }, 70);
+  setTimeout(() => {
+    sonJour('M2');
+    if (li?.isConnected) { li.classList.add('is-trouve'); rejoue(li, 'fxj-pop'); }
+  }, duree + 120);
 }
 
 /** Message après un essai : mot trouvé, ou pas un mot de la grille. */
@@ -218,6 +267,7 @@ const CFG = {
   corps,
   lier,
   apresEssai,
+  apresRendu,
   reponse,
   finTexte: () => 'Tous les mots sont trouvés !',
   copie,

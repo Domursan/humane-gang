@@ -5,12 +5,16 @@
  * contexte et la part du gang qui a trouvé. Une citation n'est jamais montrée à son auteur.
  * Les membres proposent des citations (3 par jour au plus) ; l'auteur donne son accord ou refuse depuis cet onglet ;
  * le Staff « quiz » publie (panel › Jeux et cartes › Citations).
+ * Effets (maquette des jeux quotidiens) : bonne réponse = halo vert sur le choix + son Q1 ; mauvaise = choix secoué + son Q2,
+ * puis la bonne personne s'allume, avant l'affichage du résultat. Pas de tampon de fin : le gain quotidien (première citation
+ * du jour seulement) n'est pas connu du client.
  * Onglet : /pages/jeux/jeux.html#citations. Contrat : mount(panel, ctx).
- * Dépendances : core.js (avatarHtml, errMsg), jeux/commun.js.
+ * Dépendances : core.js (avatarHtml, errMsg, motionAllowed), jeux/commun.js, jeux/effets-jour.js.
  * Données : RPC hg_quote_list, hg_quiz_answer, hg_quote_propose, hg_quote_mine, hg_quote_author_reply, hg_members.
  */
-import { avatarHtml, errMsg } from '../../commun/core.js';
+import { avatarHtml, errMsg, motionAllowed } from '../../commun/core.js';
 import { chargerCss, nf } from './commun.js';
+import { sonJour, rejoue, secouer, finDePartie } from './effets-jour.js';
 import { boutonReponses } from '../../commun/core/admin-reponses.js';
 
 /* ---------- Constantes ---------- */
@@ -170,6 +174,7 @@ function rendreHistorique() {
 async function repondre(opt) {
   if (C.busy || !C.cur) return;
   const { sb, toast } = C.ctx;
+  const citation = C.cur;
   C.busy = true;
   for (const b of C.panel.querySelectorAll('.cit-opt')) b.disabled = true;
   const { data, error } = await sb.rpc('hg_quiz_answer', { p_question: C.cur, p_response: opt });
@@ -177,9 +182,39 @@ async function repondre(opt) {
   C.busy = false;
   if (error) { toast(errMsg(error), 'error'); await charger(); return; }
   if (data?.correct && data.reward > 0) toast(`Bravo ! +${nf(data.reward)} Paillettes`, 'success');
+  await effetReponse(opt, data);
+  if (!C) return;
   await charger();
+  // Première citation répondue du jour : c'est la partie du jour (points et Paillettes).
+  if (C && C.cur === citation && data?.jour_gain > 0) finDePartie(q('#cit-card .jg-status'), { points: data.correct ? 10 : 0, gain: data.jour_gain });
   q('#cit-card .jg-status')?.setAttribute('tabindex', '-1');
   q('#cit-card .jg-status')?.focus();
+}
+
+/**
+ * Effet juste après la réponse du serveur : halo ou secousse sur le choix, son, puis (si faux) la bonne personne s'allume.
+ * Attend la fin de l'effet avant le résultat ; sans mouvement, aucune attente (les sons restent).
+ * @param {string} opt Choix du membre.
+ * @param {{correct?: boolean, solution?: any}|null} data Réponse de hg_quiz_answer.
+ */
+async function effetReponse(opt, data) {
+  const attente = (ms) => (motionAllowed() ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+  const choix = C.panel.querySelector(`.cit-opt[data-opt="${CSS.escape(opt)}"]`);
+  if (data?.correct) {
+    sonJour('Q1');
+    rejoue(choix, 'fxj-bon');
+    choix?.classList.add('is-good');
+    await attente(650);
+    return;
+  }
+  sonJour('Q2');
+  secouer(choix);
+  choix?.classList.add('is-wrong');
+  await attente(450);
+  const bon = Array.isArray(data?.solution) ? data.solution[0] : data?.solution;
+  const btnBon = bon != null ? C?.panel.querySelector(`.cit-opt[data-opt="${CSS.escape(String(bon))}"]`) : null;
+  if (btnBon) { btnBon.classList.add('is-good'); rejoue(btnBon, 'fxj-bon'); }
+  await attente(550);
 }
 
 /** Ouvre ou ferme le formulaire de proposition ; charge la liste des membres à la première ouverture. */

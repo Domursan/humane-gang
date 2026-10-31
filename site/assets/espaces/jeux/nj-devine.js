@@ -6,10 +6,16 @@
  * distance et la direction à chaque essai. Barème : essai 1 = 10 points … essai 6 = 5 points.
  * Réponses : seulement celles de la liste « choix » de l'état (le serveur refuse les autres) ; le champ propose des
  * suggestions sans accents ni majuscules et « Valider » reste désactivé tant que la saisie n'est pas une réponse de la liste.
+ * Effets (maquette des jeux quotidiens, effets-jour.js) : seulement sur la réponse du serveur à un essai, jamais à l'ouverture
+ * d'une partie finie. Pastille qui saute, champ secoué, sons D1 à D4, indice qui s'éclaire, flou / zoom / pixels qui se précisent
+ * en douceur (l'image de la scène est gardée d'un dessin à l'autre), barre de proximité qui se remplit, photo de Pays qui
+ * apparaît, puis finDePartie (tampon, Paillettes). L'état final est toujours dessiné tel quel, sans mouvement.
  * RPC : hg_nj_etat(p_jeu), hg_nj_essai(p_jeu, p_texte) (p_texte null = passer). Les modules d'onglet sont dans jeux/nj-*.js.
  * Exporte : monter(panel, ctx, jeu), resumer(ctx, jeu).
  */
 import { paillSym } from '../../commun/paillettes.js';
+import { motionAllowed } from '../../commun/core.js';
+import { sonJour, pointsDeGain, rejoue, secouer, finDePartie } from './effets-jour.js';
 import { loadCss, boardHtml, copyText, normalize } from './devine.js';
 import { boutonReponses } from '../../commun/core/admin-reponses.js';
 
@@ -83,7 +89,7 @@ export async function monter(panel, ctx, jeu) {
   loadCss('jeux-devine');
   loadCss('jeux-nj');
   const esc = ctx.esc;
-  const e = { st: null, err: null, busy: false, draft: '' };
+  const e = { st: null, err: null, busy: false, draft: '', px: null, attendFin: false, finPoch: false };
   panel.innerHTML = '<p class="muted">Chargement du jeu…</p>';
   panel.addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-act="copier"]');
@@ -104,15 +110,80 @@ export async function monter(panel, ctx, jeu) {
   /** Envoie un essai (texte choisi dans la liste, ou null pour passer). */
   async function jouer(texte) {
     if (e.busy) return;
+    const avant = e.st;
+    let nouveau = false;
     e.busy = true; dessiner();
     try {
       const { data, error } = await ctx.sb.rpc('hg_nj_essai', { p_jeu: jeu, p_texte: texte });
       if (error) throw error;
       e.st = data; e.draft = '';
+      nouveau = (data.essais?.length || 0) > (avant?.essais?.length || 0);
+      e.attendFin = nouveau && !!data.finished;
+      e.finPoch = e.attendFin && jeu === 'pochette' && e.px != null && motionAllowed();
       if (data.finished) ctx.toast(data.solved ? `Bravo ! +${data.reward} ${paillSym()}` : `Pas trouvé cette fois. +${data.reward} ${paillSym()}`, data.solved ? 'ok' : undefined);
     } catch (err) { ctx.toast(err?.message || String(err), 'error'); }
     e.busy = false; dessiner();
+    e.finPoch = false;
+    if (nouveau && e.st) effets(avant, e.st);
     if (e.st && !e.st.finished) panel.querySelector('#nj-input')?.focus();
+  }
+
+  /** Points de la partie finie : le score du serveur, sinon déduit des Paillettes. */
+  function pointsFin(st) { return st.score != null && Number.isFinite(Number(st.score)) ? Number(st.score) : pointsDeGain(st.reward); }
+
+  /**
+   * Habille la carte de fin (tampon, gain). animer: false pour une partie déjà finie à l'ouverture.
+   * @param {boolean} animer Vrai juste après le dernier essai du membre.
+   */
+  function habillerFin(animer) {
+    const st = e.st, carte = panel.querySelector('.nj-fin');
+    if (!st || !carte) return;
+    const gain = Number(st.reward) > 0 ? Number(st.reward) : null;
+    finDePartie(carte, { points: pointsFin(st), gain, animer, cibleGain: gain ? carte.querySelector('.nj-gain-v') : null });
+  }
+
+  /**
+   * Effets d'un essai que le serveur vient de confirmer (jamais à l'ouverture).
+   * @param {object} avant État avant l'essai.
+   * @param {object} st État après l'essai.
+   */
+  function effets(avant, st) {
+    const essais = st.essais || [], n = essais.length, x = essais[n - 1];
+    if (!x) return;
+    const type = x.ok ? 'ok' : estPasse(x) ? 'pas' : 'ko';
+    const anime = motionAllowed();
+    rejoue(panel.querySelectorAll('.nj-pip')[n - 1], 'fxj-saut');
+    sonJour(type === 'ok' ? 'D4' : type === 'pas' ? 'D2' : 'D1');
+    if (type === 'ko') secouer(panel.querySelector('.jd-combo'));
+    // Barre de proximité (Pays, Plat) : elle part de zéro et se remplit.
+    const barre = panel.querySelector('.nj-tries .nj-try:last-child .nj-prox > span');
+    if (barre && anime) {
+      const largeur = barre.style.width;
+      barre.style.transition = 'none';
+      barre.style.width = '0';
+      void barre.offsetWidth;
+      barre.style.transition = '';
+      setTimeout(() => { barre.style.width = largeur; }, 40);
+    }
+    // Photo du pays : elle apparaît à la 3e erreur.
+    if (jeu === 'pays' && st.image && !avant?.image) rejoue(panel.querySelector('.nj-photo'), 'fxj-pop');
+    if (st.finished) {
+      const carte = panel.querySelector('.nj-fin');
+      const delai = anime ? (type === 'ok' ? 700 : 500) : 0;
+      if (delai && carte) carte.style.visibility = 'hidden';
+      setTimeout(() => {
+        const c = panel.querySelector('.nj-fin');
+        if (c) c.style.visibility = '';
+        e.attendFin = false;
+        habillerFin(true);
+      }, delai);
+    } else if ((st.indices || []).length > (avant?.indices || []).length) {
+      setTimeout(() => {
+        const ouverts = panel.querySelectorAll('.nj-ind:not(.is-verrouille)');
+        rejoue(ouverts[ouverts.length - 1], 'fxj-lueur');
+        sonJour('D3');
+      }, anime ? 350 : 0);
+    }
   }
 
   /** Copie le résultat façon Framed (carrés). */
@@ -133,6 +204,7 @@ export async function monter(panel, ctx, jeu) {
     if (e.err) { panel.innerHTML = `<p class="card">Jeu indisponible : ${esc(e.err)}</p>`; return; }
     const st = e.st;
     if (!st) return;
+    const ancienne = panel.querySelector('.nj-scene img[data-nj-img]');
     const n = (st.essais || []).length, fini = !!st.finished, manche = !!st.round;
     const pills = !manche ? '' : fini
       ? `<span class="pill nj-pill">Essais <strong>${n} / 6</strong></span><span class="pill nj-pill">Points <strong>${esc(st.score)}</strong></span>`
@@ -150,7 +222,26 @@ export async function monter(panel, ctx, jeu) {
       <p class="muted small">trouvé par ${esc(pluriel(st.hier.trouves ?? 0, 'membre'))}</p></section>` : '';
     panel.innerHTML = `<div class="nj nj--${jeu}">${head}${corps}<aside class="nj-aside">${regles}${board}${hier}</aside></div>`;
     boutonReponses(panel.querySelector('.nj-head'), 'nj', () => jeu);
+    if (ancienne && motionAllowed()) garderImage(ancienne);
     lier();
+    if (fini && manche && !e.attendFin) habillerFin(false);
+  }
+
+  /**
+   * Garde l'élément image d'un dessin à l'autre : il reprend sa valeur précédente (flou, zoom) puis passe à la nouvelle,
+   * ce que la transition CSS anime. Sans cela, dessiner() recréerait l'image et le changement serait brusque.
+   * @param {HTMLImageElement} ancienne Image du dessin précédent.
+   */
+  function garderImage(ancienne) {
+    // Image en erreur : on garde la nouvelle, qui retente le chargement.
+    if (ancienne.complete && !ancienne.naturalWidth) return;
+    const nouvelle = panel.querySelector('.nj-scene img[data-nj-img]');
+    if (!nouvelle || nouvelle.getAttribute('src') !== ancienne.getAttribute('src')) return;
+    const cible = nouvelle.getAttribute('style') || '';
+    nouvelle.replaceWith(ancienne);
+    if (cible === (ancienne.getAttribute('style') || '')) return;
+    void ancienne.offsetWidth;
+    ancienne.setAttribute('style', cible);
   }
 
   /** Contenu du jeu (essais, scène, indices, saisie ou fin de partie). */
@@ -189,9 +280,11 @@ export async function monter(panel, ctx, jeu) {
       return `<div class="nj-scene nj-jv">${media(st.image, 'Capture d’écran à deviner', `transform: scale(${z}); transform-origin: ${fx}% ${fy}%`)}</div>`;
     }
     if (jeu === 'pochette') {
-      if (fini || !st.image) return `<div class="nj-scene nj-pochette">${media(st.image, 'Pochette de l’album', '', 'nj-sq')}</div>`;
-      const px = PIXELS[borne(st.erreurs, 0, 5, 0)];
-      return `<div class="nj-scene nj-pochette"><div class="nj-media nj-sq is-loading"><canvas class="nj-pix" width="${px}" height="${px}" data-pix="${px}" data-src="${esc(st.image)}" role="img" aria-label="Pochette pixelisée à deviner"></canvas></div></div>`;
+      // Finie sous les yeux du membre : la pochette finit de se préciser avant de devenir l'image nette.
+      const final = fini && e.finPoch && !!st.image;
+      if ((fini && !final) || !st.image) return `<div class="nj-scene nj-pochette">${media(st.image, 'Pochette de l’album', '', 'nj-sq')}</div>`;
+      const px = final ? 96 : PIXELS[borne(st.erreurs, 0, 5, 0)];
+      return `<div class="nj-scene nj-pochette"><div class="nj-media nj-sq is-loading"><canvas class="nj-pix" width="${px}" height="${px}" data-pix="${px}"${final ? ' data-fin="1"' : ''} data-src="${esc(st.image)}" role="img" aria-label="Pochette pixelisée à deviner"></canvas></div></div>`;
     }
     if (jeu === 'replique') {
       return `<figure class="nj-scene nj-replique"><blockquote class="nj-quote"><p>« ${esc(m.citation || '…')} »</p></blockquote>${m.contexte ? `<figcaption class="nj-contexte">${esc(m.contexte)}</figcaption>` : ''}</figure>`;
@@ -273,7 +366,7 @@ export async function monter(panel, ctx, jeu) {
     return `<section class="card jd-end nj-fin${st.solved ? ' is-win' : ''}" role="status">
       <p class="jd-end-t">${st.solved ? `Trouvé en ${esc(pluriel(n, 'essai'))} !` : 'Pas trouvé cette fois.'}</p>
       <p class="jd-end-ans">${esc(titre)}</p>${plat}${det ? `<dl class="nj-det">${det}</dl>` : ''}
-      <p class="small">${st.reward ? `+${esc(st.reward)} ${paillSym()} crédités` : ''}</p>
+      <p class="small">${st.reward ? `<span class="nj-gain-v">+${esc(st.reward)} ${paillSym()}</span> crédités` : ''}</p>
       <div class="jd-actions"><button type="button" class="btn btn-sand" data-act="copier">Copier le résultat</button></div>
     </section>`;
   }
@@ -301,10 +394,26 @@ export async function monter(panel, ctx, jeu) {
   function pixeliser(cv, src, px, box) {
     const im = IMAGES.get(src) || new Image();
     IMAGES.set(src, im);
-    const dessine = () => {
-      cv.width = px; cv.height = px;
-      cv.getContext('2d').drawImage(im, 0, 0, px, px);
+    // La pochette part de sa définition précédente et se précise par étapes (le canevas est recréé à chaque dessin).
+    const de = e.px ?? px;
+    e.px = px;
+    const trace = (t) => {
+      if (!cv.isConnected) return;
+      cv.width = t; cv.height = t;
+      cv.getContext('2d').drawImage(im, 0, 0, t, t);
       box?.classList.remove('is-loading');
+    };
+    /** Fin d'une pochette révélée : l'image nette prend la place du canevas. */
+    const revele = () => {
+      if (!cv.dataset.fin || !cv.isConnected || !box) return;
+      const img = document.createElement('img');
+      img.src = src; img.alt = 'Pochette de l’album'; img.decoding = 'async'; img.setAttribute('data-nj-img', '');
+      box.replaceChildren(img);
+    };
+    const dessine = () => {
+      if (de === px || !motionAllowed()) { trace(px); revele(); return; }
+      trace(de);
+      [.25, .5, .75, 1].forEach((k, i) => setTimeout(() => { trace(Math.round(de + (px - de) * k)); if (k === 1) revele(); }, (i + 1) * 90));
     };
     if (im.complete && im.naturalWidth) { dessine(); return; }
     im.addEventListener('load', dessine, { once: true });

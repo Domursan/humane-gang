@@ -4,10 +4,13 @@
  * juste (le serveur refuse les autres, sans compter d'essai). Couleurs comme Wordle : vert = bonne place, ambre = présent
  * ailleurs, gris = absent ; le clavier à l'écran prend la meilleure couleur connue de chaque touche. Saisie au clavier à
  * l'écran (0-9, + - × ÷ =, Effacer, Entrer) ou au clavier physique (* et / acceptés, × et ÷ affichés). Le chrono ne sert
- * qu'au classement du jour. Indice à la demande (migration 149) : révèle une case, 3 par jour, −1 point chacun. Moteur : nj-grilles.js (hg_nj_grille_etat / hg_nj_grille_essai).
+ * qu'au classement du jour. Effets (réponse du serveur seulement) : cases retournées une à une (230 ms d'écart, couleur à mi-retournement,
+ * sons G1/G2/G3), clavier mis à jour après ; calcul refusé = ligne secouée + G4. Indice à la demande (migration 149) : révèle une case, 3 par jour, −1 point chacun. Moteur : nj-grilles.js (hg_nj_grille_etat / hg_nj_grille_essai).
  * Exporte : mount(panel, ctx), resume(ctx).
  */
 import { monterGrille, resumerGrille, voisinFleche } from './nj-grilles.js';
+import { sonJour, secouer, rejoue, enCascade } from './effets-jour.js';
+import { motionAllowed } from '../../commun/core.js';
 
 const JEU = 'nerdle';
 /** Longueur du calcul et nombre d'essais. */
@@ -44,8 +47,84 @@ function efface(ui, env) {
 
 /** Envoie la saisie si elle fait huit caractères. */
 async function entrer(ui, env) {
-  if ((ui.saisie || '').length !== LONGUEUR) { env.dire('Un calcul fait huit caractères.'); return; }
+  if ((ui.saisie || '').length !== LONGUEUR) {
+    env.dire('Un calcul fait huit caractères.');
+    secouer(env.panel?.querySelector('.ng-ligne.is-saisie'));
+    sonJour('G4');
+    return;
+  }
   await env.envoyer({ calcul: envoi(ui.saisie) }, '[data-act="entrer"]');
+}
+
+/** Meilleure couleur connue de chaque touche d'après les essais (clé : caractère affiché). */
+function etatsTouches(essais) {
+  const etat = {};
+  essais.forEach((x) => [...x.calcul].forEach((ch, j) => {
+    const k = aff(ch), v = x.couleurs[j];
+    if (!etat[k] || RANG[v] > RANG[etat[k]]) etat[k] = v;
+  }));
+  return etat;
+}
+
+/** Délai entre deux cases retournées, et moment du changement de couleur dans le retournement (ms). */
+const PAS_CASES = 230, MI_FLIP = 180;
+const SON_COULEUR = { v: 'G1', j: 'G2', g: 'G3' };
+
+/**
+ * Après le redessin d'un essai accepté : les cases de la nouvelle ligne se retournent une à une, la couleur apparaît à
+ * mi-retournement avec son son, puis le clavier prend ses nouvelles couleurs. Sans mouvement : tout est coloré d'un coup.
+ * @returns {number} durée de l'animation en ms (la carte de fin attend)
+ */
+function apresRendu({ avant, apres, panel }) {
+  const nouveaux = apres.partie?.etat?.essais || [], anciens = avant.partie?.etat?.essais || [];
+  if (nouveaux.length <= anciens.length) return 0; // indice : rien à retourner
+  const ligne = panel.querySelectorAll('.ng-essais .ng-ligne')[nouveaux.length - 1];
+  if (!ligne) return 0;
+  const bouge = motionAllowed();
+  // La solution attend les couleurs de la dernière ligne.
+  const calcul = panel.querySelector('.ng-calcul');
+  if (calcul && bouge) { calcul.style.visibility = 'hidden'; setTimeout(() => { calcul.style.visibility = ''; }, 2240); }
+  const cases = [...ligne.querySelectorAll('.ng-c')].map((el) => {
+    const couleur = /is-([vjg])\b/.exec(el.className)?.[1];
+    if (couleur && bouge) el.classList.remove(`is-${couleur}`);
+    return { el, couleur };
+  });
+  // Clavier : les touches qui changent gardent leur ancienne couleur jusqu'à ce que leur case se révèle.
+  const avantT = etatsTouches(anciens), apresT = etatsTouches(nouveaux);
+  const finales = new Map();
+  panel.querySelectorAll('.ng-key[data-touche]').forEach((b) => {
+    const k = b.dataset.touche;
+    if (apresT[k] === avantT[k]) return;
+    finales.set(k, apresT[k]);
+    if (bouge) { b.classList.remove(`is-${apresT[k]}`); if (avantT[k]) b.classList.add(`is-${avantT[k]}`); }
+  });
+  const majTouche = (ch) => {
+    const k = aff(ch), b = panel.querySelector(`.ng-key[data-touche="${k}"]`);
+    if (!b || !finales.has(k)) return;
+    ['v', 'j', 'g'].forEach((c) => b.classList.remove(`is-${c}`));
+    b.classList.add(`is-${finales.get(k)}`);
+  };
+  const revele = ({ el, couleur }, i) => {
+    const fin = () => { if (couleur) el.classList.add(`is-${couleur}`); majTouche(nouveaux[nouveaux.length - 1].calcul[i]); };
+    if (!bouge) { fin(); return; }
+    rejoue(el, 'fxj-flip');
+    setTimeout(fin, MI_FLIP);
+    sonJour(SON_COULEUR[couleur] || 'G3');
+  };
+  const ms = enCascade(cases, revele, PAS_CASES);
+  if (!bouge) {
+    // Sans mouvement : un seul son par couleur, pas huit à la fois.
+    [...new Set(cases.map((c) => c.couleur))].filter(Boolean).forEach((c) => sonJour(SON_COULEUR[c]));
+    return 0;
+  }
+  return ms + 380;
+}
+
+/** Calcul refusé par le serveur : la ligne en cours est secouée, son G4. Un indice refusé ne secoue rien. */
+function refus({ p, panel }) {
+  if (!p?.calcul) return;
+  secouer(panel.querySelector('.ng-ligne.is-saisie'));
+  sonJour('G4');
 }
 
 /** Corps du jeu : essais passés, ligne en cours, clavier à l'écran, calcul en fin de partie. */
@@ -77,11 +156,7 @@ function corps(st, ui, esc) {
       lignes += `<div class="ng-ligne" role="row">${cellules('', () => '')}</div>`;
     }
   }
-  const etatTouche = {};
-  essais.forEach((x) => [...x.calcul].forEach((ch, j) => {
-    const k = aff(ch), v = x.couleurs[j];
-    if (!etatTouche[k] || RANG[v] > RANG[etatTouche[k]]) etatTouche[k] = v;
-  }));
+  const etatTouche = etatsTouches(essais);
   const touches = LIGNES.map((ligne) => `<div class="ng-touches">${ligne.map((k) => {
     const cls = k === 'Effacer' ? 'ng-key-large' : k === 'Entrer' ? 'ng-key-full' : (etatTouche[k] ? `is-${etatTouche[k]}` : '');
     const attr = k === 'Effacer' ? 'data-act="effacer"' : k === 'Entrer' ? 'data-act="entrer"' : `data-touche="${esc(k)}"`;
@@ -186,6 +261,8 @@ const CFG = {
   lier,
   init,
   apresEssai,
+  apresRendu,
+  refus,
   reponse,
   finTexte: (st) => (st.partie.gagne ? 'Calcul trouvé !' : 'Pas trouvé cette fois.'),
   copie,

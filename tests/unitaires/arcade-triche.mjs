@@ -31,5 +31,22 @@ const d2 = joue(D, { coeurs: false, immortel: true }, 120);
 check(!D.fini(d2.s), 'Domu-mobile immortel : aucun accrochage en 2 min, même en fonçant dans les bouchons');
 const d3 = joue(D, { coeurs: false, immortel: false }, 300);
 check(D.fini(d3.s), 'Domu-mobile sans code : accrochage');
+
+// Derniers effets (jeu.dureeFin) : le moteur continue update sans entrées ; rien ne bouge que les effets.
+const sansEntree = { cible: null, fleche: 0, pas: 0 };
+const r = R.init({ reduit: false }); r.triche = { coeurs: false, immortel: false }; r.vies = 1; r.score = 4;
+r.items = [{ corn: true, x: r.x, y: 372, v: 0, a: 0 }, { corn: false, x: r.x, y: 300, v: 200, a: 0 }];
+R.update(r, 1 / 30, sansEntree);
+const objets = JSON.stringify(r.items);
+check(R.fini(r) && r.file.some((f) => f.k === 'coeur'), 'Raclette : dernier cornichon, partie finie, cœur différé en attente');
+let eclat = false;
+for (let t = 0; t < R.dureeFin(r); t += 1 / 30) { R.update(r, 1 / 30, sansEntree); eclat ||= r.fx.some((f) => f.k === 'demi'); }
+check(eclat && r.score === 4 && r.vies === 0 && JSON.stringify(r.items) === objets, 'Raclette : le cœur éclate pendant dureeFin, ni score ni vies ne bougent, les objets s’arrêtent');
+const d = D.init({ reduit: false }); d.triche = { coeurs: false, immortel: false };
+d.items = [{ j: false, voie: d.voie, y: 350, c: '#5A5A62' }];
+D.update(d, 1 / 30, sansEntree);
+const scoreD = D.score(d), fumee = d.fx.length;
+for (let t = 0; t < D.dureeFin(d); t += 1 / 30) D.update(d, 1 / 30, sansEntree);
+check(D.fini(d) && fumee > 0 && d.fx.length === 0 && D.score(d) === scoreD && d.flash === 0, 'Domu-mobile : l’explosion finit pendant dureeFin, score figé');
 console.log(`\n${ok} OK, ${ko} ECHEC(S)`);
 process.exit(ko ? 1 : 0);

@@ -38,6 +38,12 @@ const { ROOT, check, finish, openPage, adminSection, hscroll, log, sleep, chromi
   check((await p.locator('.jf-num:not([disabled])').count()) === 2, 'erreur : l’image 2 est dévoilée');
   check((await p.locator('.jd-try.is-miss').innerText()).includes('Le Prestige'), 'essais : « Le Prestige · Raté »');
   check((await p.locator('.jf-num.is-miss').count()) === 1, 'images : la 1re marquée ratée');
+  check((await p.locator('.jf-num.fxj-saut').count()) === 1 && (await p.locator('.jd-combo.fxj-secoue').count()) === 1, 'effets : le numéro saute et le champ est secoué après un mauvais essai');
+  check((await p.locator('.fxj-tampon').count()) === 0, 'effets : pas de tampon avant la fin');
+  await sleep(100);
+  check((await p.locator('.jf-img img').count()) === 2, 'effets : l’image suivante apparaît en fondu sur la précédente');
+  await sleep(600);
+  check((await p.locator('.jf-img img').count()) === 1, 'effets : l’ancienne image est retirée après le fondu');
   check((await p.locator('[data-act="passer"]').innerText()).includes('image 3'), 'bouton : « Passer · image 3 »');
   // Proposition hors liste refusée côté interface
   await p.fill('#jf-input', 'Titanic');
@@ -49,11 +55,17 @@ const { ROOT, check, finish, openPage, adminSection, hscroll, log, sleep, chromi
   await p.locator('#jf-list [role="option"]').first().click();
   await p.click('#jf-form button[type="submit"]');
   await p.waitForSelector('.jd-end', { timeout: 3000 }).catch(() => {});
+  await p.waitForFunction(() => document.querySelector('.fxj-tampon') && /^\+10 /.test(document.querySelector('.jd-gain-v')?.textContent || ''), null, { timeout: 5000 }).catch(() => {});
+  check((await p.locator('.jd-end .fxj-tampon').count()) === 1 && (await p.locator('.jd-end.fxj-entree').count()) === 1, 'effets : trouvé, la carte de fin entre et reçoit son tampon');
+  check((await p.locator('.fxj-gain').count()) === 0, 'effets : le gain n’est pas affiché en double');
   check((await p.locator('.jd-end').innerText()).includes('Trouvé en 2 essais'), 'fin : « Trouvé en 2 essais »');
   check((await p.locator('.jd-end-ans').innerText()).includes('Nope'), 'fin : le film est dévoilé');
   check((await p.locator('.jd-end').innerText()).includes('vu le 14 avril 2024'), 'fin : date de la séance');
   check((await p.locator('.jd-end').innerText()).includes('+10 ✦'), 'fin : gain affiché');
   check((await p.locator('.jf-num:not([disabled])').count()) === 6, 'fin : les 6 images sont visibles');
+  // Retour sur la partie finie (redessin sans essai) : tampon posé, aucune animation
+  await p.click('.jf-num[data-frame="0"]');
+  check((await p.locator('.jd-end .fxj-tampon').count()) === 1 && (await p.locator('.jd-end.fxj-entree, .fxj-confettis').count()) === 0 && /^\+10 /.test(await p.locator('.jd-gain-v').textContent()), 'effets : partie déjà finie, tampon et gain posés sans animation');
   const calls = (await log(p)).filter((e) => e[0] === 'rpc' && e[1] === 'hg_framed_guess');
   check(calls.length === 2 && calls[0][2].p_film === 'f-prestige' && calls[1][2].p_film === 'f-nope', 'appels : 2 essais envoyés avec les bons films');
   check((await hscroll(p)) <= 0, '390 px : pas de défilement horizontal');

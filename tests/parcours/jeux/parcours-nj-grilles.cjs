@@ -25,7 +25,7 @@ const touche = async (p, r, c) => { const A = await centre(p, r, c); await p.mou
 /** Clique une tuile Connexions par son mot. */
 const tuile = async (p, m) => { await p.click(`[data-mot="${m}"]`); await sleep(60); };
 /** Valide la sélection Connexions puis attend la fin de l'envoi. */
-const valide = async (p) => { await p.click('[data-act="valider"]'); await sleep(350); };
+const valide = async (p) => { await p.click('[data-act="valider"]'); await sleep(1500); };
 
 (async () => {
   const browser = await chromium.launch();
@@ -49,7 +49,10 @@ const valide = async (p) => { await p.click('[data-act="valider"]'); await sleep
   check((await p.locator('.ng-tile.is-sel').count()) === 4 && !(await p.locator('[data-act="valider"]').isDisabled()), 'connexions : quatre mots sélectionnés, « Valider » actif');
   await tuile(p, 'PIANO');
   check((await p.locator('.ng-tile.is-sel').count()) === 4 && (await live(p)).includes('Quatre mots au plus'), 'connexions : un cinquième mot refusé (« Quatre mots au plus »)');
-  await valide(p);
+  await p.click('[data-act="valider"]');
+  await sleep(200);
+  check((await p.locator('.ng-tiles.fxj-secoue').count()) === 1, 'connexions effets : « à un mot près », les tuiles sont secouées pendant l’animation');
+  await sleep(1300);
   check((await live(p)).includes('À un mot près'), 'connexions : « À un mot près ! » après trois mots sur quatre');
   check((await p.locator('.ng-dot.is-on').count()) === 3, 'connexions : une erreur de plus (trois restantes)');
   check((await p.locator('.ng-tile.is-sel').count()) === 0, 'connexions : la sélection repart à zéro après l’essai');
@@ -68,11 +71,21 @@ const valide = async (p) => { await p.click('[data-act="valider"]'); await sleep
   check((await p.locator('[data-mot]').allTextContents()).sort().join() === avant && (await p.locator('[data-mot]').count()) === 16, 'connexions : « Mélanger » réordonne sans changer les mots');
 
   // Fruits, Instruments, Félins, Météo
+  let premier = true;
   for (const groupe of [['POMME', 'POIRE', 'PRUNE', 'FIGUE'], ['PIANO', 'VIOLON', 'FLÛTE', 'HARPE'], ['LYNX', 'PUMA', 'OCELOT', 'SERVAL'], ['ORAGE', 'GRÊLE', 'BRUME', 'ÉCLAIR']]) {
     for (const m of groupe) await tuile(p, m);
-    await valide(p);
+    if (premier) {
+      premier = false;
+      await p.click('[data-act="valider"]');
+      await sleep(250);
+      check((await p.locator('.ng-tile.fxj-saut').count()) >= 2, 'connexions effets : groupe juste, les tuiles choisies sautent');
+      await sleep(1250);
+      check((await p.locator('.ng-band.fxj-pop').count()) === 1, 'connexions effets : le bandeau du groupe apparaît en pop');
+    } else await valide(p);
   }
+  await sleep(2000);
   check((await p.locator('.ng-fin.is-win').count()) === 1, 'connexions : fin, grille trouvée');
+  check((await p.locator('.ng-fin .fxj-tampon').textContent()) === '4 PTS' && (await p.locator('.ng-fin.fxj-entree').count()) === 1, 'connexions effets : tampon « 4 PTS » et carte de fin animée après la dernière partie jouée');
   check((await p.locator('.ng-fin').textContent()).includes('Score 4 pts') && (await p.locator('.ng-fin').textContent()).includes('+10 ✦ crédités'), 'connexions : score 4 pts et « +10 ✦ crédités »');
   check((await p.locator('.ng-band').count()) === 4 && (await p.locator('.ng-band.is-trouve').count()) === 4, 'connexions : les quatre groupes montrés en fin');
   check((await p.locator('[data-mot]').count()) === 0, 'connexions : plus de tuiles en fin de partie');
@@ -95,7 +108,9 @@ const valide = async (p) => { await p.click('[data-act="valider"]'); await sleep
   const perdants = [['POMME', 'POIRE', 'PIANO', 'VIOLON'], ['PRUNE', 'FIGUE', 'FLÛTE', 'HARPE'], ['LYNX', 'PUMA', 'ORAGE', 'GRÊLE'], ['OCELOT', 'SERVAL', 'BRUME', 'ÉCLAIR']];
   for (const groupe of perdants) { for (const m of groupe) await tuile(p, m); await valide(p); }
   check((await live(p)).includes('Pas un groupe'), '1280 px : « Pas un groupe cette fois. » pour deux mots de chaque groupe');
+  await sleep(1500);
   check((await p.locator('.ng-fin:not(.is-win)').count()) === 1 && (await p.locator('.ng-fin').textContent()).includes('Grille perdue'), '1280 px : grille perdue après quatre erreurs');
+  check((await p.locator('.ng-fin .fxj-tampon').textContent()) === '0 PT', '1280 px effets : tampon « 0 PT » après une défaite');
   check((await p.locator('.ng-band.is-rate').count()) === 4, '1280 px : les quatre groupes montrés, aucun trouvé');
   check((await p.locator('.ng-fin').textContent()).includes('Aucune Paillette'), '1280 px : aucune Paillette après une défaite');
   check((await p.evaluate(() => { const m = document.querySelector('.ng'); return m && getComputedStyle(m).gridTemplateColumns.split(' ').length; })) === 2, '1280 px : deux colonnes (jeu à gauche, règles à droite)');
@@ -117,8 +132,12 @@ const valide = async (p) => { await p.click('[data-act="valider"]'); await sleep
   check((await p.locator('.ng-cell.is-apercu').count()) === 5, 'glisser : aperçu de cinq cases pendant le glissement');
   await p.mouse.up(); await sleep(150);
   check((await p.locator('.ng-cell.is-apercu').count()) === 0 && (await live(p)).includes('Pas un mot'), 'glisser : tronçon non mot relâché, pas de mot trouvé');
+  check((await p.locator('.ng-grille.fxj-secoue').count()) === 1, 'mot mêlé effets : un tronçon qui n’est pas un mot secoue la grille');
   await glisse(p, [0, 0], [0, 8]);
   check((await live(p)).includes('Mot trouvé : CASSEROLE'), 'glisser : CASSEROLE trouvé (horizontal)');
+  const enCours = await p.locator('.ng-cell.is-trouve').count();
+  check(enCours < 9 && (await p.locator('.ng-cell.fxj-saut').count()) > 0, 'mot mêlé effets : les cases du mot trouvé s’allument une à une (' + enCours + ' sur 9 juste après)');
+  await sleep(900);
   check((await p.locator('.ng-mots li.is-trouve').count()) === 1 && (await p.locator('.ng-cell.is-trouve').count()) === 9, 'glisser : mot barré dans la liste, neuf cases surlignées');
   check((await p.locator('.ng-liste .ng-label').textContent()).includes('1/6'), 'glisser : compteur à 1/6');
   await p.screenshot({ path: SHOTS + '/nj-grilles-motmele-390-mi.png', fullPage: true });
@@ -143,6 +162,8 @@ const valide = async (p) => { await p.click('[data-act="valider"]'); await sleep
   check((await live(p)).includes('Mot trouvé : SPATULE'), 'glisser : SPATULE trouvé (horizontale)');
   await glisse(p, [11, 0], [5, 6]);
   check((await p.locator('.ng-fin').count()) === 1 && (await p.locator('.ng-fin').textContent()).includes('Tous les mots sont trouvés'), 'fin : tous les mots trouvés, fin de partie');
+  await sleep(1800); // le gain défile après l'entrée de la carte de fin
+  await p.waitForFunction(() => document.querySelector('.ng-fin')?.textContent.includes('+10 ✦ crédités'), null, { timeout: 5000 }).catch(() => {});
   check((await p.locator('.ng-fin').textContent()).includes('+10 ✦ crédités'), 'fin : « +10 ✦ crédités »');
   check((await p.locator('.ng-cell[role="gridcell"]').count()) === 144 && (await p.locator('.ng-cell.is-trouve').count()) >= 40, 'fin : mots surlignés dans la grille');
   check((await p.locator('.ng-fin').textContent()).includes('Classement du jour'), 'fin : classement du jour affiché');
@@ -179,7 +200,10 @@ const valide = async (p) => { await p.click('[data-act="valider"]'); await sleep
   for (const t of ['1', '0', '+', '3', '7', '=', '4', '7']) await p.click(`.ng-key[data-touche="${t}"]`);
   check((await p.locator('.ng-ligne.is-saisie .ng-c').allTextContents()).join('') === '10+37=47', 'nerdle : saisie affichée dans la ligne en cours');
   await p.click('[data-act="entrer"]');
-  await sleep(350);
+  await sleep(650);
+  const l0 = p.locator('.ng-essais .ng-ligne').first();
+  check((await l0.locator('.ng-c.is-v, .ng-c.is-g').count()) > 0 && (await l0.locator('.ng-c.is-v, .ng-c.is-g').count()) < 8 && (await l0.locator('.fxj-flip').count()) > 0, 'nerdle effets : les cases se retournent une à une (pas toutes colorées d’un coup)');
+  await sleep(2400);
   const l1 = p.locator('.ng-essais .ng-ligne').first();
   check((await l1.locator('.ng-c.is-v').count()) === 6 && (await l1.locator('.ng-c.is-g').count()) === 2, 'nerdle : couleurs de 10+37=47 (six bonnes places, deux absents)');
   check((await p.locator('.ng-key.is-v').count()) >= 5 && (await p.locator('.ng-key.is-g').count()) >= 1, 'nerdle : touches du clavier colorées');
@@ -189,6 +213,7 @@ const valide = async (p) => { await p.click('[data-act="valider"]'); await sleep
   for (const t of ['1', '2', '+', '3', '5', '=', '4', '8']) await p.click(`.ng-key[data-touche="${t}"]`);
   await p.click('[data-act="entrer"]');
   await sleep(350);
+  check((await p.locator('.ng-ligne.is-saisie.fxj-secoue').count()) === 1, 'nerdle effets : calcul refusé, la ligne en cours est secouée');
   check((await p.locator('.ng-essais .ng-ligne').count()) === 6 && (await p.locator('.ng-ligne.is-saisie .ng-c').allTextContents()).join('') === '12+35=48', 'nerdle : calcul faux refusé, pas d’essai compté, saisie conservée');
   check((await p.locator('body').textContent()).includes('Ce n\'est pas un calcul juste'), 'nerdle : message « Ce n’est pas un calcul juste » affiché');
   // Clavier physique : Retour arrière pour effacer le 8, puis Entrée
@@ -197,9 +222,14 @@ const valide = async (p) => { await p.click('[data-act="valider"]'); await sleep
   await sleep(120);
   check((await p.locator('.ng-ligne.is-saisie .ng-c').allTextContents()).join('') === '12+35=47', 'clavier physique : Retour arrière puis 7 corrige la saisie');
   await p.keyboard.press('Enter');
-  await sleep(400);
+  await sleep(700);
+  check(!(await p.locator('.ng-fin').isVisible()), 'nerdle effets : la carte de fin attend la fin du retournement des cases');
+  await sleep(3800);
   check((await p.locator('.ng-fin.is-win').count()) === 1 && (await p.locator('.ng-fin').textContent()).includes('Calcul trouvé'), 'nerdle : calcul trouvé en deux essais');
+  check((await p.locator('.ng-fin .fxj-tampon').textContent()) === '4 PTS' && (await p.locator('.ng-fin.fxj-entree').count()) === 1, 'nerdle effets : tampon « 4 PTS » à la fin de la partie jouée');
   check((await p.locator('.ng-calcul').textContent()).includes('12+35=47'), 'fin : calcul révélé');
+  await sleep(1800); // le gain défile après l'entrée de la carte de fin
+  await p.waitForFunction(() => document.querySelector('.ng-fin')?.textContent.includes('+10 ✦ crédités'), null, { timeout: 5000 }).catch(() => {});
   check((await p.locator('.ng-fin').textContent()).includes('+10 ✦ crédités'), 'fin : « +10 ✦ crédités »');
   check((await p.locator('.ng-clavier').count()) === 0, 'fin : clavier retiré');
   await p.evaluate(CLIP_FAUX);
@@ -220,6 +250,13 @@ const valide = async (p) => { await p.click('[data-act="valider"]'); await sleep
   await p.screenshot({ path: SHOTS + '/nj-grilles-nerdle-1280.png', fullPage: true });
   check((await hscroll(p)) <= 0, '1280 px (nerdle) : pas de défilement horizontal');
   check(mesErreurs(p).length === 0, 'nerdle 1280 px : aucune erreur JS' + (mesErreurs(p).length ? ' — ' + mesErreurs(p).join(' | ') : ''));
+  await p.ctx.close();
+
+  /* ---------- Nerdle déjà fini à l'ouverture : aucun effet joué ---------- */
+  p = await ouvre(browser, '#nerdle', { scenario: { nerdleFini: true } });
+  await sleep(300);
+  check((await p.locator('.ng-fin').isVisible()) && (await p.locator('.ng-fin').textContent()).includes('+10 ✦ crédités'), 'nerdle fini à l’ouverture : carte de fin et gain affichés tout de suite');
+  check((await p.locator('.ng-fin .fxj-tampon').textContent()) === '10 PTS' && (await p.locator('.ng-fin.fxj-entree').count()) === 0 && (await p.locator('.fxj-confettis').count()) === 0, 'nerdle fini à l’ouverture : tampon posé mais ni animation d’entrée ni confettis');
   await p.ctx.close();
 
   /* ---------- Pas de grille aujourd'hui, 360 px ---------- */

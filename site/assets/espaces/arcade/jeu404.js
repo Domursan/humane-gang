@@ -32,7 +32,7 @@ if (canvas && scoreEl && coeursEl && viesTxt && bouton && message) demarrageJeu(
 function demarrageJeu() {
   const arcade = creeArcade({
     canvas,
-    jeu: JEU,
+    jeu: { ...JEU, accroche: 'Attrape les paillettes, évite le reste !' },
     onHud: (score, vies) => {
       if (scoreEl.textContent !== String(score)) scoreEl.textContent = String(score);
       // Vies : cœurs (♥ pleins, ♡ perdus) ; le texte est lu par les lecteurs d'écran.

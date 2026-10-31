@@ -50,7 +50,7 @@
 /* Carte mystère : bordure selon la rareté, image floutée */
 .nj-carte { margin: 0 auto; width: min(260px, 100%); padding: 4px; border-radius: 18px; background: var(--rc, #6B6B73); box-sizing: border-box; }
 .nj-carte .nj-media { aspect-ratio: 5 / 7; border: 0; border-radius: 14px; }
-.nj-carte img { image-rendering: pixelated; transform: scale(1.06); }
+.nj-carte img { image-rendering: pixelated; transform: scale(1.06); transition: filter .7s ease; }
 .nj-rare-peu_commune { --rc: var(--sage); }
 .nj-rare-rare { --rc: var(--slate); }
 .nj-rare-epique { --rc: var(--plum); }
@@ -60,8 +60,8 @@
 
 /* Jeu vidéo : capture zoomée */
 .nj-jv .nj-media { aspect-ratio: 16 / 9; }
-.nj-jv img { transition: transform .4s ease; }
-@media (prefers-reduced-motion: reduce) { .nj-jv img { transition: none; } }
+.nj-jv img { transition: transform .7s ease; }
+@media (prefers-reduced-motion: reduce) { .nj-jv img, .nj-carte img { transition: none; } }
 
 /* Pochette : pixelisée (canevas agrandi sans lissage) */
 .nj-pochette { width: min(340px, 100%); margin: 0 auto; }
@@ -114,7 +114,8 @@
 .nj-km { min-width: 84px; text-align: right; font-variant-numeric: tabular-nums; }
 .nj-dir { width: 24px; text-align: center; font-size: 18px; line-height: 1; color: var(--sand); }
 .nj-prox { flex: 1 1 60px; min-width: 60px; height: 8px; border-radius: 999px; background: var(--border); overflow: hidden; }
-.nj-prox > span { display: block; height: 100%; background: linear-gradient(90deg, #9E3543, var(--sand), var(--sage)); }
+.nj-prox > span { display: block; height: 100%; background: linear-gradient(90deg, #9E3543, var(--sand), var(--sage)); transition: width .7s ease; }
+@media (prefers-reduced-motion: reduce) { .nj-prox > span { transition: none; } }
 
 /* Fin de partie */
 .nj-fin { display: flex; flex-direction: column; gap: 8px; }

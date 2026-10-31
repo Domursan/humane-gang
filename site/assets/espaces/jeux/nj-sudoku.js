@@ -8,6 +8,10 @@
  * solution. Refusée : « Grille incorrecte », on corrige et une nouvelle partie chronométrée démarre (hg_nj_solo_debut).
  * Si la grille du jour est déjà terminée (sudoku_fait), elle se rejoue pour le plaisir, sans score.
  * Le temps officiel est celui du serveur (au premier chiffre posé) ; le chrono affiché pendant la partie est local.
+ * Effets (effets-jour.js), seulement sur un vrai changement pendant la visite : une ligne, une colonne ou un bloc qui vient
+ * d'être complété s'éclaire (éclat, son M3) ; une grille refusée secoue la grille (G4) ; la fin gagnée habille la carte de
+ * résultat (finDePartie : tampon, son, Paillettes qui défilent) ; la grille déjà terminée à l'ouverture reçoit le tampon seul ;
+ * la grille rejouée sans score ne change rien à la fin.
  * Onglet : /pages/jeux/jeux.html#sudoku. Contrat : mount(panel, ctx), unmount(), resume(ctx).
  * Dépendances : core.js (errMsg), jeux/commun.js (chargerCss, nf, classementHtml, zurichIso, jourLong).
  * Données : RPC hg_nj_solo_etat, hg_nj_solo_debut, hg_nj_solo_fin (migration 138).
@@ -16,6 +20,7 @@
 import { paillSym } from '../../commun/paillettes.js';
 import { esc, errMsg } from '../../commun/core.js';
 import { chargerCss, nf, classementHtml, zurichIso, jourLong } from './commun.js';
+import { sonJour, pointsDeGain, rejoue, secouer, finDePartie } from './effets-jour.js';
 
 /* ---------- Constantes ---------- */
 /** Déplacement au clavier (ligne, colonne). */
@@ -59,6 +64,33 @@ function conflits() {
   }
   return bad;
 }
+
+/** Les trois zones (ligne, colonne, bloc) d'une case : listes d'indices. */
+function zonesDe(i) {
+  const r = Math.floor(i / 9), c = i % 9, br = r - (r % 3), bc = c - (c % 3);
+  const ligne = [], colonne = [], bloc = [];
+  for (let k = 0; k < 9; k++) {
+    ligne.push(r * 9 + k);
+    colonne.push(k * 9 + c);
+    bloc.push((br + Math.floor(k / 3)) * 9 + bc + (k % 3));
+  }
+  return [ligne, colonne, bloc];
+}
+
+/** Vrai si la zone est pleine avec les neuf chiffres, chacun une fois. */
+const zoneComplete = (zone) => zone.every((k) => S.val[k] > 0) && new Set(zone.map((k) => S.val[k])).size === 9;
+
+/** Éclat de la ligne, de la colonne ou du bloc qui vient d'être complété par la case i (son M3). */
+function eclatZones(i, avant) {
+  const neuves = zonesDe(i).filter((z, n) => !avant[n] && zoneComplete(z));
+  if (!neuves.length) return;
+  const cases = [...new Set(neuves.flat())];
+  sonJour('M3');
+  cases.forEach((k, n) => { const b = S.cases[k]; b.style.animationDelay = `${n * 35}ms`; rejoue(b, 'fxj-eclat'); });
+}
+
+/** Points d'une grille d'après son temps : tranches de 2 minutes au-delà de 5 minutes (palier 1 = 10 points). */
+const pointsDeTemps = (secondes) => Math.max(1, 10 - Math.max(0, Math.floor((Number(secondes) - 300) / 120)));
 
 /* ---------- Montage ---------- */
 /**
@@ -255,6 +287,8 @@ async function finir() {
       demarrerHorloge();
       majFin({ type: 'incorrecte' });
       maj();
+      secouer(q('#su-grille'));
+      sonJour('G4');
       return;
     }
     if (data.reward > 0) S.recompense = true;
@@ -294,10 +328,12 @@ function saisir(v) {
     return;
   }
   if (v === 0) { S.val[i] = 0; S.notes[i] = 0; maj(); return; }
+  const avant = zonesDe(i).map(zoneComplete);
   S.val[i] = v;
   S.notes[i] = 0;
   demarrer();
   maj();
+  eclatZones(i, avant);
   verifierFin();
 }
 
@@ -335,6 +371,7 @@ function maj() {
     if (i === a) cls.push('is-active');
     else if (memeZone(i, a)) cls.push('is-meme-bloc');
     else if (av && S.val[i] === av) cls.push('is-meme-val');
+    if (b.classList.contains('fxj-eclat')) cls.push('fxj-eclat'); // l'éclat en cours survit aux rafraîchissements
     const nom = cls.join(' ');
     if (b.className !== nom) b.className = nom;
     // Contenu : le chiffre posé, ou les notes (petits chiffres), ou rien. Reconstruit seulement si ça change.
@@ -388,14 +425,23 @@ function majBoard() {
 function majFin({ type, secondes, reward = 0 }) {
   const box = q('#su-fin');
   if (!box) return;
-  let titre, detail = '', ton = 'is-ko';
-  if (type === 'gagne') { titre = `Grille du jour terminée en ${fmtTemps(secondes)}`; ton = 'is-ok'; detail = reward > 0 ? `Paillettes reçues : +${nf(reward)} ${paillSym()}` : (S.recompense ? 'Paillettes déjà reçues aujourd’hui.' : 'Grille enregistrée.'); }
-  else if (type === 'incorrecte') { titre = 'Grille incorrecte'; detail = 'Corrige une case, puis valide à nouveau : une nouvelle partie chronométrée a démarré.'; }
+  let titre, detail = '', ton = 'is-ko', detailHtml = null;
+  if (type === 'gagne') {
+    titre = `Grille du jour terminée en ${fmtTemps(secondes)}`; ton = 'is-ok';
+    if (reward > 0) detailHtml = `Paillettes reçues : <span id="su-fin-gain">+${esc(nf(reward))} ${paillSym()}</span>`;
+    else detail = S.recompense ? 'Paillettes déjà reçues aujourd’hui.' : 'Grille enregistrée.';
+  } else if (type === 'incorrecte') { titre = 'Grille incorrecte'; detail = 'Corrige une case, puis valide à nouveau : une nouvelle partie chronométrée a démarré.'; }
   else if (type === 'deja') { titre = `Grille du jour terminée en ${fmtTemps(secondes)}`; ton = 'is-ok'; detail = 'Tu peux la rejouer pour le plaisir : sans score ni Paillettes.'; }
   else if (type === 'rejoue') { titre = 'Bravo, grille rejouée'; ton = 'is-ok'; detail = `Temps local : ${fmtTemps(secondes)}. Pas de score : la grille du jour est déjà terminée.`; }
   else { titre = 'Partie non enregistrée'; detail = 'Le serveur n’a pas ouvert la partie. Rafraîchis la page pour réessayer.'; }
   box.hidden = false;
-  box.innerHTML = `<p class="sol-grand ${ton === 'is-ok' ? 'jg-sand' : ''}">${esc(titre)}</p><p class="small muted">${esc(detail)}</p>`;
+  box.innerHTML = `<p class="sol-grand ${ton === 'is-ok' ? 'jg-sand' : ''}">${esc(titre)}</p><p class="small muted">${detailHtml ?? esc(detail)}</p>`;
+  if (type === 'gagne') {
+    // Partie gagnée sous les yeux du membre : le gain défile dans la ligne existante (pas de doublon)
+    finDePartie(box, { points: reward > 0 ? pointsDeGain(reward) : pointsDeTemps(secondes), gain: reward > 0 ? reward : null, cibleGain: box.querySelector('#su-fin-gain') });
+  } else if (type === 'deja') {
+    finDePartie(box, { points: pointsDeTemps(secondes), animer: false });
+  }
   if (type === 'incorrecte') q('#su-statut').className = 'sol-statut is-ko';
 }
 

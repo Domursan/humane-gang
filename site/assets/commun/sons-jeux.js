@@ -5,7 +5,7 @@
  * Suit la préférence « Sons des jeux » (sonTour, active par défaut) et le volume des préférences ; jamais avant un geste
  * de l'utilisateur (le navigateur l'exige) ; silencieux si WebAudio manque. Anti-rafale : un même son 60 ms au plus.
  * Dépendances : aucune (lit localStorage « hg_prefs »).
- * Exporte : jouerSonJeu, SONS_JEUX (liste par jeu : numéro → nom).
+ * Exporte : jouerSonJeu, SONS_JEUX (liste par jeu : numéro → nom ; « quotidien » : codes de effets-jour.js).
  */
 let A = null; let M = null; const dernier = {};
 function prefs() {
@@ -29,6 +29,9 @@ const cloche = (f, t, d, vol = .22) => { const a = A, c = a.createOscillator(), 
   c.frequency.value = f; m.frequency.value = f * 3.5; mg.gain.setValueAtTime(f * 2, a.currentTime + t); mg.gain.exponentialRampToValueAtTime(1, a.currentTime + t + d);
   m.connect(mg).connect(c.frequency); g.gain.setValueAtTime(0, a.currentTime + t); g.gain.linearRampToValueAtTime(vol, a.currentTime + t + .004);
   g.gain.exponentialRampToValueAtTime(.0001, a.currentTime + t + d); c.connect(g).connect(M); [c, m].forEach((o) => { o.start(a.currentTime + t); o.stop(a.currentTime + t + d + .05); }); };
+
+/** Arpège : notes l'une après l'autre (l fréquences, pas écart, d durée, t0 départ). */
+const arpege = (l, pas, d, vol = .15, type = 'triangle', t0 = 0) => l.forEach((f, i) => note(f, t0 + i * pas, d, { type, vol }));
 
 /** Sons par jeu et numéro (numéros des maquettes validées). */
 const SONS = {
@@ -171,6 +174,113 @@ const SONS = {
     4: () => { note(900,0,.35,{type:'sine',vol:.08,f2:300});bruit(.25,.12,2000,.25,1,'highpass'); }, // Attaque ratée
     5: () => { [330,415,494,659].forEach((f,i)=>note(f,i*.12,.6,{type:'triangle',vol:.14}));note(659,.5,1.2,{type:'triangle',vol:.1}); }, // Victoire
   },
+  'quotidien': { // Jeux quotidiens (effets-jour.js) : codes de la maquette validée
+    F1: () => { [523,659,784,1047,1319].forEach((f,i)=>note(f,i*.09,.55,{type:'triangle',vol:.15}));cloche(1319,.48,1.1,.12); }, // Parfait (10 points)
+    F2: () => { [659,784,1047].forEach((f,i)=>note(f,i*.11,.45,{type:'triangle',vol:.15})); }, // Trouvé
+    F3: () => { [523,659].forEach((f,i)=>note(f,i*.13,.4,{type:'triangle',vol:.15})); }, // Trouvé juste à temps
+    F4: () => { note(392,0,.3,{type:'triangle',vol:.14});note(330,.25,.6,{type:'triangle',vol:.14}); }, // Raté
+    F5: () => { for(let i=0;i<8;i++)note(1100+i*70,i*.07,.05,{type:'triangle',vol:.07}); }, // Paillettes qui défilent
+    G1: () => { note(880,0,.12,{type:'triangle',vol:.13}); }, // Lettre bien placée
+    G2: () => { note(587,0,.12,{type:'triangle',vol:.11}); }, // Lettre mal placée
+    G3: () => { bruit(0,.05,500,.4,1,'lowpass'); }, // Lettre absente
+    G4: () => { note(220,0,.28,{type:'square',vol:.06,f2:160}); }, // Refusé
+    D1: () => { note(247,0,.25,{type:'triangle',vol:.16,f2:165}); }, // Essai raté
+    D2: () => { bruit(0,.12,2500,.22,.8,'highpass'); }, // Passer
+    D3: () => { cloche(988,0,.7,.12); }, // Indice dévoilé
+    D4: () => { note(420,0,.6,{type:'sine',vol:.08,f2:1320});cloche(1319,.5,.8,.1); }, // Image dévoilée
+    C1: () => { note(740,0,.05,{type:'square',vol:.06}); }, // Tuile choisie
+    C2: () => { [659,880,1175].forEach((f,i)=>note(f,i*.08,.4,{type:'triangle',vol:.15})); }, // Groupe trouvé
+    C3: () => { note(659,0,.12,{type:'triangle',vol:.12});note(622,.14,.22,{type:'triangle',vol:.12}); }, // À un mot près
+    C4: () => { note(196,0,.3,{type:'square',vol:.06}); }, // Erreur
+    M1: () => { note(1046,0,.06,{type:'triangle',vol:.09}); }, // Lettre allumée
+    M2: () => { [784,1047].forEach((f,i)=>note(f,i*.09,.35,{type:'triangle',vol:.15})); }, // Mot trouvé
+    M3: () => { cloche(880,0,.9,.13);cloche(1320,.1,.8,.08); }, // Bloc complet
+    P1: () => { bruit(0,.05,900,.7,2);note(320,0,.12,{vol:.22,f2:180}); }, // Épingle posée
+    P2: () => { note(500,0,.7,{type:'sine',vol:.06,f2:900}); }, // Trajet tracé
+    P3: () => { for(let i=0;i<9;i++)note(900+i*60,i*.06,.04,{type:'triangle',vol:.06}); }, // Score qui défile
+    Q1: () => { note(784,0,.12,{type:'triangle',vol:.15});note(1175,.1,.35,{type:'triangle',vol:.15}); }, // Bonne réponse
+    Q2: () => { note(233,0,.35,{type:'sawtooth',vol:.06,f2:175}); }, // Mauvaise réponse
+  },
+  'flash': { // Jeux flash : codes de la maquette validée (socle SO, puis un préfixe par jeu)
+    SO1: () => { note(660, 0, .14, { type: 'square', vol: .08 }); }, // Compte
+    SO2: () => { note(880, 0, .1, { type: 'square', vol: .08 }); note(1319, .08, .35, { type: 'square', vol: .09 }); cloche(1760, .08, .6, .08); }, // Go !
+    SO3: () => { note(660, 0, .09, { type: 'square', vol: .07 }); note(440, .09, .18, { type: 'square', vol: .07 }); }, // Pause
+    SO4: () => { note(440, 0, .09, { type: 'square', vol: .07 }); note(660, .09, .18, { type: 'square', vol: .07 }); }, // Reprise
+    SO5: () => { [523, 440, 370].forEach(function (f, i) { note(f, i * .16, .2, { type: 'triangle', vol: .13 }); }); note(262, .48, .7, { type: 'triangle', vol: .14, f2: 233 }); }, // Fin de partie
+    SO6: () => { arpege([523, 659, 784, 1047, 1319, 1568], .07, .5, .13); cloche(1568, .45, 1.1, .12); for (var i = 0; i < 6; i++) note(2000 + i * 90, .5 + i * .06, .05, { type: 'triangle', vol: .05 }); }, // Nouveau record
+    SO7: () => { arpege([392, 523, 659, 784], .09, .22, .07, 'square'); cloche(1047, .36, .7, .08); }, // Titre
+    PA1: () => { note(1175, 0, .07, { type: 'triangle', vol: .14 }); note(1568, .06, .16, { type: 'triangle', vol: .12 }); }, // Prise
+    PA2: () => { note(300, 0, .12, { vol: .1, f2: 180 }); bruit(0, .04, 1200, .15, 1, 'lowpass'); }, // Tombée au sol
+    PA3: () => { note(180, 0, .32, { type: 'sawtooth', vol: .09, f2: 70 }); note(190, 0, .3, { type: 'square', vol: .05, f2: 80 }); bruit(0, .12, 700, .25, 1.5); }, // Fausse paillette
+    PA4: () => { bruit(0, .09, 5200, .35, 3, 'highpass'); cloche(2093, 0, .5, .1); cloche(1568, .07, .45, .07); }, // Grêlon
+    PA5: () => { note(494, 0, .12, { type: 'triangle', vol: .15 }); note(370, .12, .12, { type: 'triangle', vol: .15 }); note(247, .24, .4, { type: 'triangle', vol: .15, f2: 200 }); }, // Cœur perdu
+    PA6: () => { note(400, 0, .5, { vol: .1, f2: 1200 }); cloche(1200, .45, .5, .06); }, // Palier de vitesse
+    RA1: () => { bruit(0, .05, 900, .35, 1, 'lowpass'); note(330, 0, .14, { vol: .22, f2: 520 }); }, // Fromage attrapé
+    RA2: () => { bruit(0, .35, 1800, .12, .7, 'highpass'); note(220, 0, .35, { vol: .05, f2: 260 }); }, // Fromage qui fond
+    RA3: () => { bruit(0, .07, 3000, .5, 2, 'highpass'); note(150, 0, .2, { type: 'square', vol: .08, f2: 90 }); }, // Cornichon
+    RA4: () => { note(392, 0, .15, { type: 'triangle', vol: .15 }); note(294, .15, .5, { type: 'triangle', vol: .15, f2: 250 }); }, // Cœur perdu
+    RA5: () => { note(520, 0, .06, { vol: .1, f2: 260 }); bruit(0, .03, 600, .2); }, // Tranche au sol
+    RA6: () => { bruit(0, .5, 6000, .1, .5, 'highpass'); bruit(.12, .3, 5200, .07, .5, 'highpass'); }, // Poêlon qui grésille
+    DE1: () => { note(880, 0, .04, { type: 'square', vol: .05 }); bruit(0, .02, 3000, .2, 1); }, // Case ouverte
+    DE2: () => { for (var i = 0; i < 6; i++) note(500 + i * 90, i * .05, .07, { type: 'triangle', vol: .1 }); }, // Ouverture en vague
+    DE3: () => { bruit(0, .04, 1500, .4, 2); note(300, 0, .1, { vol: .2, f2: 200 }); note(1200, .06, .1, { type: 'triangle', vol: .08 }); }, // Drapeau posé
+    DE4: () => { note(900, 0, .08, { vol: .1, f2: 500 }); }, // Drapeau retiré
+    DE5: () => { arpege([440, 554, 659], .05, .2, .12); }, // Accord des voisines
+    DE6: () => { bruit(0, .5, 300, .7, .8, 'lowpass'); note(120, 0, .5, { type: 'sawtooth', vol: .12, f2: 40 }); bruit(.05, .15, 2500, .3, 1); note(262, .45, .3, { type: 'triangle', vol: .12 }); note(196, .7, .5, { type: 'triangle', vol: .12 }); }, // Cœur qui explose
+    DE7: () => { arpege([523, 659, 784, 1047], .09, .5, .14); cloche(1568, .4, 1, .1); cloche(2093, .55, 1, .07); }, // Victoire
+    TU1: () => { bruit(0, .09, 1800, .12, .6); }, // Glissement
+    TU2: () => { arpege([523, 659], .06, .16, .13); }, // Fusion peu commune
+    TU3: () => { arpege([523, 659, 784], .06, .22, .14); }, // Fusion rare
+    TU4: () => { arpege([587, 740, 880, 1175], .06, .26, .14); cloche(1175, .2, .5, .08); }, // Fusion épique
+    TU5: () => { arpege([659, 831, 988, 1319], .065, .3, .14); cloche(1319, .25, .9, .13); cloche(1976, .3, .8, .06); }, // Fusion légendaire
+    TU6: () => { arpege([523, 659, 784, 1047, 1319, 1568], .055, .4, .13); cloche(1047, .3, 1.1, .12); cloche(1568, .34, 1.1, .1); }, // Fusion mythique
+    TU7: () => { arpege([392, 523, 659, 784, 1047, 1319, 1568, 2093], .05, .5, .12); cloche(262, 0, 1.6, .2); cloche(2093, .4, 1.4, .1); cloche(3136, .5, 1.2, .05); }, // Fusion au-delà
+    FL1: () => { note(300, 0, .12, { vol: .13, f2: 620 }); bruit(0, .05, 2200, .12, .8, 'highpass'); }, // Battement d’ailes
+    FL2: () => { note(988, 0, .07, { type: 'square', vol: .07 }); note(1319, .07, .16, { type: 'square', vol: .07 }); }, // Tuyau franchi
+    FL3: () => { bruit(0, .12, 500, .5, 1, 'lowpass'); note(140, 0, .18, { type: 'square', vol: .12, f2: 70 }); }, // Contact tuyau
+    FL4: () => { bruit(0, .2, 2400, .35, 1); note(900, 0, .3, { type: 'triangle', vol: .12, f2: 150 }); [1319, 1047, 784, 659, 523, 392].forEach(function (f, i) { note(f, .08 + i * .05, .12, { vol: .08 }); }); }, // Cœur qui éclate
+    FL5: () => { note(110, 0, .2, { vol: .28, f2: 55 }); bruit(0, .06, 400, .3, 1, 'lowpass'); }, // Chute au sol
+    FL6: () => { note(500, 0, .35, { vol: .08, f2: 1000 }); }, // Palier de vitesse
+    CB1: () => { note(330, 0, .07, { type: 'square', vol: .08, f2: 420 }); }, // Rebond raquette
+    CB2: () => { note(240, 0, .04, { type: 'square', vol: .05 }); }, // Rebond mur
+    CB3: (r) => { var f = [1319, 1175, 1047, 880, 784, 659][r == null ? 2 : r]; note(f, 0, .06, { type: 'square', vol: .07 }); bruit(0, .07, 3500, .35, 1.5, 'highpass'); }, // Carte cassée
+    CB4: () => { cloche(520, 0, .25, .16); bruit(0, .04, 1800, .3, 3); }, // Blindée touchée
+    CB5: () => { arpege([1175, 1568, 2093], .05, .25, .12); }, // Paillette +15
+    CB6: () => { note(440, 0, .5, { type: 'triangle', vol: .15, f2: 110 }); }, // Balle perdue
+    CB7: () => { arpege([392, 494, 587, 784], .08, .35, .14); cloche(1175, .3, .8, .09); }, // Niveau suivant
+    SN1: () => { note(520, 0, .03, { type: 'square', vol: .05 }); }, // Tourner
+    SN2: () => { bruit(0, .05, 1400, .3, 1.5, 'lowpass'); note(392, 0, .08, { type: 'square', vol: .08 }); note(587, .07, .14, { type: 'square', vol: .08 }); }, // Raclette mangée
+    SN3: () => { arpege([523, 659, 784], .05, .14, .1, 'square'); }, // Il grandit
+    SN4: () => { note(120, 0, .25, { type: 'square', vol: .12, f2: 60 }); bruit(0, .08, 500, .4, 1, 'lowpass'); }, // Mur
+    SN5: () => { bruit(0, .06, 2800, .5, 2, 'highpass'); note(260, 0, .25, { type: 'sawtooth', vol: .09, f2: 130 }); }, // Queue mordue
+    SN6: () => { note(330, 0, .3, { type: 'triangle', vol: .1, f2: 660 }); }, // Palier de vitesse
+    TE1: () => { note(300, 0, .025, { type: 'square', vol: .04 }); }, // Déplacer
+    TE2: () => { note(600, 0, .05, { type: 'square', vol: .06, f2: 750 }); }, // Tourner
+    TE3: () => { note(170, 0, .08, { type: 'square', vol: .1, f2: 90 }); bruit(0, .03, 800, .2, 1, 'lowpass'); }, // Pose
+    TE4: () => { for (var i = 0; i < 3; i++) note(880, i * .09, .05, { type: 'square', vol: .06 }); arpege([523, 659, 784], .07, .2, .13, 'triangle', .3); }, // Ligne effacée
+    TE5: () => { for (var i = 0; i < 6; i++) note(i % 2 ? 1047 : 784, i * .09, .05, { type: 'square', vol: .06 }); arpege([523, 659, 784, 1047, 1319], .07, .3, .13, 'triangle', .55); cloche(1047, .55, 1.2, .14); cloche(1568, .62, 1, .08); }, // Tetris, 4 lignes
+    TE6: () => { note(900, 0, .12, { vol: .08, f2: 200 }); note(110, .12, .1, { type: 'square', vol: .12, f2: 70 }); bruit(.12, .05, 700, .3, 1, 'lowpass'); }, // Chute d’un coup
+    TE7: () => { arpege([440, 554, 659, 880], .06, .2, .1, 'square'); }, // Niveau de vitesse
+    IN1: () => { note(1200, 0, .14, { type: 'square', vol: .07, f2: 240 }); }, // Tir
+    IN2: () => { bruit(0, .12, 1800, .45, 1.2); note(300, 0, .14, { type: 'square', vol: .08, f2: 90 }); }, // Cornichon touché
+    IN3: () => { [98, 87, 82, 73].forEach(function (f, i) { note(f, i * .12, .08, { type: 'square', vol: .05 }); }); }, // Marche des cornichons
+    IN4: () => { for (var i = 0; i < 8; i++) note(i % 2 ? 700 : 520, i * .06, .07, { vol: .07 }); }, // Soucoupe qui passe
+    IN5: () => { bruit(0, .2, 1500, .4, 1); arpege([784, 1047, 1319, 1568], .06, .3, .13); cloche(1568, .25, .9, .1); }, // Soucoupe touchée
+    IN6: () => { bruit(0, .35, 4000, .3, .8, 'highpass'); note(220, 0, .35, { type: 'sawtooth', vol: .09, f2: 80 }); }, // Goutte sur le vaisseau
+    IN7: () => { arpege([330, 392, 494, 659, 784], .08, .3, .12, 'square'); }, // Vague suivante
+    TA1: () => { note(200, 0, .12, { vol: .14, f2: 420 }); bruit(0, .06, 500, .2, 1, 'lowpass'); }, // Terrier qui s’ouvre
+    TA2: () => { bruit(0, .06, 1800, .5, 1); note(180, 0, .12, { type: 'square', vol: .14, f2: 90 }); note(900, .02, .1, { type: 'triangle', vol: .1, f2: 1400 }); }, // Paf !
+    TA3: () => { note(160, 0, .3, { type: 'sawtooth', vol: .08, f2: 80 }); bruit(0, .14, 900, .4, 1.5); }, // Cornichon tapé
+    TA4: () => { note(500, 0, .2, { vol: .1, f2: 200 }); }, // Membre qui rentre
+    TA5: () => { note(440, 0, .1, { type: 'square', vol: .06 }); note(440, .16, .1, { type: 'square', vol: .06 }); note(330, .32, .35, { type: 'square', vol: .07 }); }, // Cinq ratés de suite
+    TA6: () => { note(330, 0, .12, { type: 'triangle', vol: .15 }); note(247, .12, .4, { type: 'triangle', vol: .15, f2: 200 }); }, // Cœur perdu
+    DO1: () => { bruit(0, .16, 2200, .2, .7); note(300, 0, .14, { vol: .06, f2: 500 }); }, // Changer de voie
+    DO2: () => { note(300, 0, .08, { type: 'triangle', vol: .12, f2: 400 }); note(220, .06, .1, { vol: .1, f2: 300 }); cloche(1319, .1, .5, .1); }, // Jerrican
+    DO3: () => { note(70, 0, .5, { type: 'sawtooth', vol: .07, f2: 140 }); note(72, 0, .5, { type: 'square', vol: .03, f2: 145 }); }, // Moteur
+    DO4: () => { note(440, 0, .3, { type: 'square', vol: .07 }); note(554, 0, .3, { type: 'square', vol: .07 }); }, // Klaxon
+    DO5: () => { bruit(0, .5, 600, .7, .7, 'lowpass'); bruit(0, .15, 3500, .4, 1, 'highpass'); note(90, 0, .4, { type: 'sawtooth', vol: .14, f2: 40 }); }, // Accrochage
+    DO6: () => { note(260, 0, .5, { type: 'sawtooth', vol: .05, f2: 520 }); }, // Palier de vitesse
+  },
 };
 /** Noms des sons (pour les réglages et la documentation). */
 export const SONS_JEUX = {
@@ -312,17 +422,125 @@ export const SONS_JEUX = {
   "3": "Blessure",
   "4": "Attaque ratée",
   "5": "Victoire"
+ },
+ "quotidien": {
+  "F1": "Parfait (10 points)",
+  "F2": "Trouvé",
+  "F3": "Trouvé juste à temps",
+  "F4": "Raté",
+  "F5": "Paillettes qui défilent",
+  "G1": "Lettre bien placée",
+  "G2": "Lettre mal placée",
+  "G3": "Lettre absente",
+  "G4": "Refusé",
+  "D1": "Essai raté",
+  "D2": "Passer",
+  "D3": "Indice dévoilé",
+  "D4": "Image dévoilée",
+  "C1": "Tuile choisie",
+  "C2": "Groupe trouvé",
+  "C3": "À un mot près",
+  "C4": "Erreur",
+  "M1": "Lettre allumée",
+  "M2": "Mot trouvé",
+  "M3": "Bloc complet",
+  "P1": "Épingle posée",
+  "P2": "Trajet tracé",
+  "P3": "Score qui défile",
+  "Q1": "Bonne réponse",
+  "Q2": "Mauvaise réponse"
+ },
+ "flash": {
+  "SO1": "Compte",
+  "SO2": "Go !",
+  "SO3": "Pause",
+  "SO4": "Reprise",
+  "SO5": "Fin de partie",
+  "SO6": "Nouveau record",
+  "SO7": "Titre",
+  "PA1": "Prise",
+  "PA2": "Tombée au sol",
+  "PA3": "Fausse paillette",
+  "PA4": "Grêlon",
+  "PA5": "Cœur perdu",
+  "PA6": "Palier de vitesse",
+  "RA1": "Fromage attrapé",
+  "RA2": "Fromage qui fond",
+  "RA3": "Cornichon",
+  "RA4": "Cœur perdu",
+  "RA5": "Tranche au sol",
+  "RA6": "Poêlon qui grésille",
+  "DE1": "Case ouverte",
+  "DE2": "Ouverture en vague",
+  "DE3": "Drapeau posé",
+  "DE4": "Drapeau retiré",
+  "DE5": "Accord des voisines",
+  "DE6": "Cœur qui explose",
+  "DE7": "Victoire",
+  "TU1": "Glissement",
+  "TU2": "Fusion peu commune",
+  "TU3": "Fusion rare",
+  "TU4": "Fusion épique",
+  "TU5": "Fusion légendaire",
+  "TU6": "Fusion mythique",
+  "TU7": "Fusion au-delà",
+  "FL1": "Battement d’ailes",
+  "FL2": "Tuyau franchi",
+  "FL3": "Contact tuyau",
+  "FL4": "Cœur qui éclate",
+  "FL5": "Chute au sol",
+  "FL6": "Palier de vitesse",
+  "CB1": "Rebond raquette",
+  "CB2": "Rebond mur",
+  "CB3": "Carte cassée",
+  "CB4": "Blindée touchée",
+  "CB5": "Paillette +15",
+  "CB6": "Balle perdue",
+  "CB7": "Niveau suivant",
+  "SN1": "Tourner",
+  "SN2": "Raclette mangée",
+  "SN3": "Il grandit",
+  "SN4": "Mur",
+  "SN5": "Queue mordue",
+  "SN6": "Palier de vitesse",
+  "TE1": "Déplacer",
+  "TE2": "Tourner",
+  "TE3": "Pose",
+  "TE4": "Ligne effacée",
+  "TE5": "Tetris, 4 lignes",
+  "TE6": "Chute d’un coup",
+  "TE7": "Niveau de vitesse",
+  "IN1": "Tir",
+  "IN2": "Cornichon touché",
+  "IN3": "Marche des cornichons",
+  "IN4": "Soucoupe qui passe",
+  "IN5": "Soucoupe touchée",
+  "IN6": "Goutte sur le vaisseau",
+  "IN7": "Vague suivante",
+  "TA1": "Terrier qui s’ouvre",
+  "TA2": "Paf !",
+  "TA3": "Cornichon tapé",
+  "TA4": "Membre qui rentre",
+  "TA5": "Cinq ratés de suite",
+  "TA6": "Cœur perdu",
+  "DO1": "Changer de voie",
+  "DO2": "Jerrican",
+  "DO3": "Moteur",
+  "DO4": "Klaxon",
+  "DO5": "Accrochage",
+  "DO6": "Palier de vitesse"
  }
 };
 
 /**
  * Joue un son de jeu. Ne lève jamais d'erreur.
  * @param {string} jeu identifiant du jeu (clé de SONS_JEUX)
- * @param {number} n numéro du son
+ * @param {number|string} n numéro ou code du son
+ * @param {*} [x] réglage propre au son (ex. rangée de la carte cassée)
  */
-export function jouerSonJeu(jeu, n) {
+export function jouerSonJeu(jeu, n, x) {
   const f = SONS[jeu]?.[n]; const p = prefs();
   if (!f || !p.on || p.volume <= 0) return;
   const k = jeu + n; const t = performance.now(); if (t - (dernier[k] || 0) < 60) return; dernier[k] = t;
-  try { if (!ctx()) return; M.gain.setValueAtTime(p.volume * p.volume, A.currentTime); f(); } catch (e) { console.warn('[son]', e); }
+  try { if (!ctx()) return; M.gain.setValueAtTime(p.volume * p.volume, A.currentTime); f(x); } catch (e) { console.warn('[son]', e); }
 }

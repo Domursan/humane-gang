@@ -54,7 +54,7 @@
 .sol-case.is-ouverte { background: var(--surface-2); cursor: default; }
 .sol-case.is-ouverte:not([data-n]) { background: #1A1A1E; }
 .sol-case.is-drapeau .sol-drapeau, .sol-case.is-coeur .sol-coeur { width: 62%; height: auto; display: block; }
-.sol-case.is-explose { background: rgba(176, 16, 42, .45); }
+.sol-case.is-explose { background: rgba(176, 16, 42, .45); z-index: 2; }
 .sol-case.is-faux { box-shadow: inset 0 0 0 2px var(--rose); }
 .sol-case[data-n="1"] { color: var(--sage-text); }
 .sol-case[data-n="2"] { color: var(--slate); }
@@ -65,6 +65,10 @@
 .sol-case[data-n="7"] { color: var(--text); }
 .sol-case[data-n="8"] { color: var(--muted); }
 @media (hover: hover) { .sol-case:not(.is-ouverte):hover { background: #34343B; } }
+.sol-fin.is-ko { border-color: #B0102A; }
+.sol-fin.is-ok { border-color: var(--sand); }
+.sol-confettis { position: fixed; inset: 0; z-index: 9000; overflow: hidden; pointer-events: none; }
+.sol-confettis i { position: absolute; top: -14px; width: 7px; height: 11px; }
 
 /* ---------- Sudoku ---------- */
 .sol-grille { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); width: 100%; max-width: 540px; margin: 0 auto;
@@ -137,6 +141,25 @@
 @keyframes sol-fusion { 0% { transform: scale(1); } 45% { transform: scale(1.14); } 100% { transform: scale(1); } }
 @keyframes sol-scintille { to { filter: hue-rotate(360deg); } }
 .sol-tuile[data-brille="4"] { animation: sol-scintille 3s linear infinite; }
+
+/* 2048 : calque des effets de fusion (au-dessus de la grille, sans capter les clics) et carte de fin */
+.sol-2048-fx { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.sol-fx-pt { position: absolute; width: calc((100% - 3 * var(--g)) / 4); height: calc((100% - 3 * var(--g)) / 4);
+  left: calc(var(--c, 0) * ((100% - 3 * var(--g)) / 4 + var(--g))); top: calc(var(--r, 0) * ((100% - 3 * var(--g)) / 4 + var(--g))); }
+.sol-fx-e { position: absolute; left: 50%; top: 50%; opacity: 0; will-change: transform, opacity; }
+.sol-fx-p { border-radius: 1px; }
+.sol-fx-etoile { clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); }
+.sol-fx-anneau { width: 100px; height: 100px; margin: -50px 0 0 -50px; border: 2px solid; border-radius: 50%; box-sizing: border-box; }
+.sol-fx-rayon { width: 40px; height: 2px; margin-top: -1px; transform-origin: 0 50%; border-radius: 1px; }
+.sol-fx-halo { width: 100px; height: 100px; margin: -50px 0 0 -50px; border-radius: 50%; }
+.sol-fx-txt { transform: translate(-50%, 0); white-space: nowrap; font-family: var(--font-display); line-height: 1;
+  text-shadow: 0 0 3px #08080B, 0 0 3px #08080B, 0 1px 4px rgba(8, 8, 11, .9); }
+.sol-fx-eclair { inset: -8px; left: -8px; top: -8px; right: -8px; bottom: -8px; border-radius: 16px; }
+#g-fin.sol-fin { border: 2px solid var(--bord, var(--border-strong)); border-radius: 16px; padding: 16px 18px; text-align: center; }
+#g-fin.is-entree { animation: sol-carte .35s cubic-bezier(.2, .8, .3, 1.2); }
+#g-fin .sol-fin-tuile { font-weight: 600; }
+#g-fin .sol-fin-record { font-family: var(--font-display); color: var(--sand); letter-spacing: .06em; text-transform: uppercase; font-size: 13px; }
+@keyframes sol-carte { from { transform: translateY(14px) scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* ---------- Mouvement réduit et écrans étroits ---------- */
 @media (prefers-reduced-motion: reduce) {

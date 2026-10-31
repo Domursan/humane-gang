@@ -11,11 +11,16 @@
  * aussi devient un cœur ; immortel = les gouttes ne font rien, et si les cornichons atteignent le bas, la vague recommence.
  * Commandes : souris ou doigt (le vaisseau suit), flèches gauche et droite ; tir à l'appui (espace, flèche haut, clic ou
  * doigt), tir continu tant que la touche ou le doigt reste appuyé.
- * Animation réduite : formation plus lente, pas de secousse ni d'explosions.
+ * Effets (maquette jInvaders, sons IN1 à IN7 via fx.js) : tir avec étincelles, cornichon qui éclate avec son « +points »,
+ * soucoupe-raclette qui fond en fromage, briques d'abri qui s'effritent, goutte qui grésille sur le vaisseau (il clignote, le cœur
+ * du HUD éclate), nouvelle vague qui descend du haut. Son de marche (IN3) : au plus un par pas de la formation, espacé d'au moins 0,15 s.
+ * Partie finie : tout s'arrête, sauf les effets, pendant dureeFin (le dernier cœur éclate avant l'écran de fin).
+ * Animation réduite : formation plus lente, pas de secousse ni d'animations ; état et sons conservés, textes « +points » gardés.
  * Moteur : eggs/arcade.js (creeArcade ; jeu.action = true).
  * Exporte : JEU (règles du mini-jeu pour creeArcade).
  */
 import { W, H, coeur } from './arcade.js';
+import { sonFlash, poussiere, etoiles, flotte, onde, rayons, eclats, eclatCoeur, majFX, dessineFX } from './fx.js';
 
 const VIES = 3;
 /** Accélération par vague : +7 %, sans plafond (le plancher technique de la formation reste en place). */
@@ -38,6 +43,8 @@ const ABRI_Y = H - 112, CELL = 4, ABRI_L = 11 * CELL;
 const SOUC_Y = 40, SOUC_VIT = 70, SOUC_POINTS = 50;
 const OR = '#FBD32D', SABLE = '#E2C77E', ROUGE = '#9E3543', VINAIGRE = '#D9F0A0', FROMAGE = '#FCA301';
 const FLASH = 'rgba(224, 64, 75, ';
+/** Intervalle minimal entre deux sons de marche (IN3), pour les pas très rapprochés en fin de vague. */
+const MARCHE_MIN = 0.15;
 
 /* Sprites en pixel art (une lettre par pixel, voir PAL_*). */
 const PAL_CORN = { o: '#1F3A18', g: '#5FA83A', l: '#A8DC74', d: '#2F6B2A', k: '#0E0E10' };
@@ -131,7 +138,7 @@ function chevauche(ax, ay, aw, ah, bx, by, bw, bh) {
  * @returns {{vivants: boolean[], fx: number, fy: number, sens: number, tick: number}}
  */
 function formation() {
-  return { vivants: new Array(TOTAL).fill(true), fx: X0, fy: Y0, sens: 1, tick: 0 };
+  return { vivants: new Array(TOTAL).fill(true), formX: X0, fy: Y0, sens: 1, tick: 0 };
 }
 
 /**
@@ -143,7 +150,7 @@ function creeAbris() {
   for (let k = 0; k < 3; k++) {
     const gauche = Math.round((W * (k + 1)) / 4 - ABRI_L / 2);
     MASQUE_ABRI.forEach((ligne, j) => {
-      for (let i = 0; i < ligne.length; i++) if (ligne[i] === '#') briques.push({ x: gauche + i * CELL, y: ABRI_Y + j * CELL, hp: 2 });
+      for (let i = 0; i < ligne.length; i++) if (ligne[i] === '#') briques.push({ x: gauche + i * CELL, y: ABRI_Y + j * CELL, hp: 2, fl: -9 });
     });
   }
   return briques;
@@ -184,12 +191,12 @@ function intervalle(s, n) {
  * @param {{minCol: number, maxCol: number}} b bilan de la formation
  */
 function avance(s, b) {
-  const gauche = s.fx + b.minCol * ESP_X, droite = s.fx + b.maxCol * ESP_X + AW;
+  const gauche = s.formX + b.minCol * ESP_X, droite = s.formX + b.maxCol * ESP_X + AW;
   if ((s.sens > 0 && droite + PAS > W - 8) || (s.sens < 0 && gauche - PAS < 8)) {
     s.fy += DECAL;
     s.sens = -s.sens;
   } else {
-    s.fx += s.sens * PAS;
+    s.formX += s.sens * PAS;
   }
 }
 
@@ -202,7 +209,7 @@ function avance(s, b) {
 function cornichonsSur(s, c) {
   for (let i = 0; i < TOTAL; i++) {
     if (!s.vivants[i]) continue;
-    const x = s.fx + (i % COLS) * ESP_X, y = s.fy + ((i / COLS) | 0) * ESP_Y;
+    const x = s.formX + (i % COLS) * ESP_X, y = s.fy + ((i / COLS) | 0) * ESP_Y;
     if (chevauche(x, y, AW, AH, c.x, c.y, CELL, CELL)) return true;
   }
   return false;
@@ -222,7 +229,13 @@ function frappeAbri(s, x, y, w, h) {
     const c = s.abris[i];
     if (chevauche(x, y, w, h, c.x, c.y, CELL, CELL)) {
       c.hp--;
-      if (c.hp <= 0) s.abris.splice(i, 1);
+      c.fl = s.ecoule;
+      poussiere(s, c.x + 2, c.y + 2, 5, [SABLE, '#8A7444', '#fff'], 60, 0.4, 2, 240);
+      if (c.hp <= 0) {
+        s.abris.splice(i, 1);
+        poussiere(s, c.x + 2, c.y + 2, 6, [SABLE, '#8A7444'], 80, 0.5, 3, 300);
+      }
+      sonFlash('IN6');
       return true;
     }
   }
@@ -230,13 +243,43 @@ function frappeAbri(s, x, y, w, h) {
 }
 
 /**
- * Petit éclat à l'impact (pas d'éclat en animation réduite).
+ * Un cornichon éclate : éclats verts, flash doré, rayons, anneau et « +points ».
  * @param {object} s état de la partie
  * @param {number} x centre
  * @param {number} y centre
+ * @param {number} v points gagnés
  */
-function explose(s, x, y) {
-  if (!s.reduit) s.explos.push({ x, y, vie: 0.35 });
+function eclateCornichon(s, x, y, v) {
+  poussiere(s, x, y, 12, ['#5FA83A', '#A8DC74', '#2F6B2A', '#1F3A18'], 110, 0.55, 4, 260);
+  poussiere(s, x, y, 1, [OR], 0, 0.3, 12, 0);
+  rayons(s, x, y, 8, 8, 28, '#A8DC74', 0.3);
+  onde(s, x, y, 4, 26, '#A8DC74', 0.3, 2);
+  flotte(s, x, y - 24, `+${v}`, OR, 16);
+  sonFlash('IN2');
+}
+
+/**
+ * La soucoupe-raclette fond en morceaux de fromage dorés.
+ * @param {object} s état de la partie
+ * @param {number} x centre
+ */
+function fondSoucoupe(s, x) {
+  eclats(s, x, SOUC_Y, 12, [FROMAGE, OR], { v: 50, vie: 1, g: 320, w: 4, h: 6 });
+  rayons(s, x, SOUC_Y, 14, 10, 60, OR, 0.5);
+  onde(s, x, SOUC_Y, 6, 70, OR, 0.5, 3);
+  etoiles(s, x, SOUC_Y, 8, '#FFF1BE', 90, 0.7);
+  flotte(s, x, SOUC_Y + 30, `+${SOUC_POINTS}`, OR, 24);
+  sonFlash('IN5');
+}
+
+/**
+ * Départ d'un tir : son et petites étincelles au canon.
+ * @param {object} s état de la partie
+ */
+function tirPart(s) {
+  sonFlash('IN1');
+  etoiles(s, s.x, VAISS_Y - 6, 3, '#fff', 40, 0.25);
+  onde(s, s.x, VAISS_Y - 6, 2, 12, OR, 0.2, 2);
 }
 
 /**
@@ -248,17 +291,18 @@ function tirTouche(s) {
   const x = s.tir.x - 1, y = s.tir.y;
   for (let i = 0; i < TOTAL; i++) {
     if (!s.vivants[i]) continue;
-    const ax = s.fx + (i % COLS) * ESP_X, ay = s.fy + ((i / COLS) | 0) * ESP_Y;
+    const ax = s.formX + (i % COLS) * ESP_X, ay = s.fy + ((i / COLS) | 0) * ESP_Y;
     if (chevauche(x, y, 2, 10, ax, ay, AW, AH)) {
       s.vivants[i] = false;
-      s.score += VALEUR[(i / COLS) | 0];
-      explose(s, ax + AW / 2, ay + AH / 2);
+      const v = VALEUR[(i / COLS) | 0];
+      s.score += v;
+      eclateCornichon(s, ax + AW / 2, ay + AH / 2, v);
       return true;
     }
   }
   if (s.soucoupe && chevauche(x, y, 2, 10, s.soucoupe.x - 15, SOUC_Y - 6, 30, 12)) {
     s.score += SOUC_POINTS;
-    explose(s, s.soucoupe.x, SOUC_Y);
+    fondSoucoupe(s, s.soucoupe.x);
     s.soucoupe = null;
     return true;
   }
@@ -307,17 +351,25 @@ function lacheGoutte(s) {
   }
   if (!colonnes.length) return;
   const [c, l] = colonnes[Math.floor(Math.random() * colonnes.length)];
-  s.gouttes.push({ x: s.fx + c * ESP_X + AW / 2, y: s.fy + l * ESP_Y + AH });
+  s.gouttes.push({ x: s.formX + c * ESP_X + AW / 2, y: s.fy + l * ESP_Y + AH });
 }
 
 /**
  * Une goutte touche le vaisseau : une vie de moins (sauf code « immortel »), flash rouge et secousse.
  * @param {object} s état de la partie
  */
-function perdUneVie(s) {
+function perdUneVie(s, x) {
   s.vies--;
   s.flash = 0.35;
+  s.touche = s.ecoule;
   if (!s.reduit) s.secousse = 0.3;
+  for (let i = 0; i < 8; i++) {
+    poussiere(s, x + (Math.random() - 0.5) * 16, VAISS_Y, 1, i % 2 ? [VINAIGRE] : ['#fff'], 30, 0.7, 3, -10);
+  }
+  onde(s, x, VAISS_Y, 4, 30, VINAIGRE, 0.4, 2);
+  sonFlash('IN6');
+  // Le cœur du HUD éclate juste après (position du cœur perdu, comme le HUD commun).
+  s.coeurs.push({ t: 0.2, x: W - 14 - (VIES - 1 - s.vies) * 18, y: 15 });
 }
 
 /**
@@ -330,6 +382,8 @@ function vagueSuivante(s) {
   s.gouttes = [];
   s.tir = null;
   s.attente = 1.2;
+  if (!s.reduit) s.entree = s.ecoule + 0.2;
+  sonFlash('IN7');
 }
 
 /**
@@ -350,21 +404,42 @@ function dessineSoucoupe(ctx, x, y) {
 export const JEU = {
   id: 'invaders',
   titre: 'Space Invaders',
+  accroche: 'Les cornichons attaquent !',
+  quip: 'Les cornichons se figent, suspects.',
   action: true,
   aide: 'Souris, doigt ou flèches gauche et droite : déplace le vaisseau. Espace, flèche haut, clic ou doigt : tire (maintiens pour tirer sans arrêt). Évite les gouttes de vinaigre.',
+  aideBorne: '← → OU SOURIS · ESPACE : TIRER',
+  embleme(ctx, x, y, T) {
+    const o = Math.sin(T * 3) * 4;
+    dessineSegments(ctx, SEG_CORN, x - 11, y - 34 + o, 3);
+    dessineSegments(ctx, SEG_CORN, x - 62, y - 22 - o, 3);
+    dessineSegments(ctx, SEG_CORN, x + 40, y - 22 - o, 3);
+    dessineSegments(ctx, SEG_VAISS, x - 13, y + 22, 3);
+    ctx.fillStyle = OR; ctx.fillRect(x - 1, y - 2, 2, 10);
+  },
+  finTexte: (s) => (s.perdu
+    ? { t: 'Les cornichons ont gagné', d: 'Ils ont atteint le bas, tout vinaigrés.' }
+    : { t: 'Les cornichons ont gagné', d: 'Le vaisseau a pris trop de vinaigre.' }),
   init: ({ reduit }) => ({
     reduit, score: 0, vies: VIES, vague: 1, ecoule: 0,
     x: W / 2, cible: W / 2, cd: 0, tir: null,
-    gouttes: [], abris: creeAbris(), explos: [],
+    gouttes: [], abris: creeAbris(),
     soucoupe: null, prochaineSoucoupe: 14 + Math.random() * 6,
     tirE: 1.2, attente: 0.8, flash: 0, secousse: 0, perdu: false,
+    fx: [], coeurs: [], touche: -9, entree: -9, marche: -9, sirene: 0,
     ...formation(),
   }),
   update(s, dt, e) {
-    if (s.perdu) return;
     s.ecoule += dt;
     s.flash = Math.max(0, s.flash - dt);
     s.secousse = Math.max(0, s.secousse - dt);
+    majFX(s, dt);
+    for (let i = s.coeurs.length - 1; i >= 0; i--) {
+      const q = s.coeurs[i];
+      q.t -= dt;
+      if (q.t <= 0) { eclatCoeur(s, q.x, q.y, 8); s.coeurs.splice(i, 1); }
+    }
+    if (JEU.fini(s)) return; // partie finie : seuls les effets continuent
     // Code « domu » : plus aucune goutte, même celles déjà en l'air.
     if (s.triche?.coeurs && s.gouttes.length) s.gouttes = [];
 
@@ -375,7 +450,7 @@ export const JEU = {
 
     // Tir : à l'appui, puis en continu ; un seul tir à l'écran, au plus un toutes les 0,35 s.
     s.cd = Math.max(0, s.cd - dt);
-    if ((e.action || e.tenu) && !s.tir && s.cd <= 0) { s.tir = { x: s.x, y: VAISS_Y - 10 }; s.cd = CADENCE; }
+    if ((e.action || e.tenu) && !s.tir && s.cd <= 0) { s.tir = { x: s.x, y: VAISS_Y - 10 }; s.cd = CADENCE; tirPart(s); }
     if (s.tir) {
       s.tir.y -= VIT_TIR * dt;
       if (s.tir.y < -10 || tirTouche(s)) s.tir = null;
@@ -389,7 +464,12 @@ export const JEU = {
     if (s.attente > 0) s.attente = Math.max(0, s.attente - dt);
     else {
       s.tick -= dt;
-      if (s.tick <= 0) { s.tick = intervalle(s, b.n); avance(s, b); }
+      if (s.tick <= 0) {
+        s.tick = intervalle(s, b.n);
+        avance(s, b);
+        // Marche : un seul son par pas, jamais plus d'un toutes les 0,15 s.
+        if (s.ecoule - s.marche >= MARCHE_MIN) { s.marche = s.ecoule; sonFlash('IN3'); }
+      }
     }
 
     // Les cornichons atteignent le bas : fin de partie, ou vague recommencée (code « immortel »).
@@ -407,12 +487,16 @@ export const JEU = {
     // Soucoupe : passe en haut de temps en temps.
     if (s.soucoupe) {
       s.soucoupe.x += s.soucoupe.v * dt;
+      s.sirene -= dt;
+      if (s.sirene <= 0) { s.sirene = 0.56; sonFlash('IN4'); }
       if (s.soucoupe.x < -30 || s.soucoupe.x > W + 30) s.soucoupe = null;
     } else {
       s.prochaineSoucoupe -= dt;
       if (s.prochaineSoucoupe <= 0) {
         const depuisGauche = Math.random() < 0.5;
         s.soucoupe = { x: depuisGauche ? -20 : W + 20, v: depuisGauche ? SOUC_VIT : -SOUC_VIT };
+        s.sirene = 0.56;
+        sonFlash('IN4');
         s.prochaineSoucoupe = 16 + Math.random() * 10;
       }
     }
@@ -429,36 +513,54 @@ export const JEU = {
     s.gouttes = s.gouttes.filter((g) => {
       g.y += vG * dt;
       if (chevauche(g.x - 2, g.y - 4, 4, 8, s.x - VAISS_L / 2, VAISS_Y, VAISS_L, VAISS_H)) {
-        if (!immortel) perdUneVie(s);
+        if (!immortel) perdUneVie(s, g.x);
         return false;
       }
       if (frappeAbri(s, g.x - 2, g.y - 4, 4, 8)) return false;
       return g.y < H + 10;
     });
 
-    for (const p of s.explos) p.vie -= dt;
-    s.explos = s.explos.filter((p) => p.vie > 0);
   },
   draw(ctx, s) {
     const dx = s.secousse > 0 ? (Math.random() - 0.5) * 8 : 0;
     ctx.save();
     ctx.translate(dx, 0);
-    for (const c of s.abris) { ctx.fillStyle = COULEUR_ABRI[c.hp]; ctx.fillRect(c.x, c.y, CELL - 1, CELL - 1); }
+    for (const c of s.abris) { ctx.fillStyle = !s.reduit && s.ecoule - c.fl < 0.12 ? '#fff' : COULEUR_ABRI[c.hp]; ctx.fillRect(c.x, c.y, CELL - 1, CELL - 1); }
     for (let i = 0; i < TOTAL; i++) {
       if (!s.vivants[i]) continue;
-      const x = s.fx + (i % COLS) * ESP_X, y = s.fy + ((i / COLS) | 0) * ESP_Y;
+      const x = s.formX + (i % COLS) * ESP_X;
+      let y = s.fy + ((i / COLS) | 0) * ESP_Y;
+      // Nouvelle vague : les rangées descendent du haut, l'une après l'autre.
+      if (s.entree > -9) {
+        const k = (s.ecoule - s.entree - ((i / COLS) | 0) * 0.08) / 0.5;
+        if (k < 1) y -= (1 - Math.max(0, k)) ** 3 * 280;
+      }
       if (s.triche?.coeurs) coeur(ctx, x + AW / 2, y + AH / 2, 10);
       else dessineSegments(ctx, SEG_CORN, x, y, PIX);
     }
     ctx.fillStyle = VINAIGRE;
     for (const g of s.gouttes) ctx.fillRect(g.x - 2, g.y - 4, 4, 8);
+    if (!s.reduit) {
+      ctx.globalAlpha = 0.4;
+      for (const g of s.gouttes) ctx.fillRect(g.x - 1, g.y - 12, 2, 8);
+      ctx.globalAlpha = 1;
+    }
     if (s.soucoupe) dessineSoucoupe(ctx, s.soucoupe.x, SOUC_Y);
-    if (s.tir) { ctx.fillStyle = OR; ctx.fillRect(s.tir.x - 1, s.tir.y, 2, 10); }
+    if (s.tir) {
+      ctx.fillStyle = OR; ctx.fillRect(s.tir.x - 1, s.tir.y, 2, 10);
+      if (!s.reduit) { ctx.globalAlpha = 0.35; ctx.fillRect(s.tir.x - 1, s.tir.y + 10, 2, 12); ctx.globalAlpha = 1; }
+    }
     if (s.triche?.coeurs) coeur(ctx, s.x, VAISS_Y + VAISS_H / 2, 11);
-    else dessineSegments(ctx, SEG_VAISS, s.x - VAISS_L / 2, VAISS_Y, PIX);
-    for (const p of s.explos) { ctx.globalAlpha = Math.max(0, p.vie / 0.35); ctx.fillStyle = OR; ctx.fillRect(p.x - 3, p.y - 3, 6, 6); }
-    ctx.globalAlpha = 1;
+    else {
+      // Touché : le vaisseau clignote en blanc pendant 0,6 s.
+      const h = s.ecoule - s.touche;
+      if (!s.reduit && h >= 0 && h < 0.6 && Math.floor(h / 0.07) % 2 === 0) {
+        ctx.globalAlpha = 0.9; ctx.fillStyle = '#fff'; ctx.fillRect(s.x - VAISS_L / 2, VAISS_Y, VAISS_L, VAISS_H); ctx.globalAlpha = 1;
+      } else dessineSegments(ctx, SEG_VAISS, s.x - VAISS_L / 2, VAISS_Y, PIX);
+    }
+    dessineFX(ctx, s);
     ctx.restore();
+    dessineFX(ctx, s, true);
     if (s.attente > 0) {
       ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fillRect(0, H / 2 - 26, W, 52);
       ctx.fillStyle = '#F2EFEA'; ctx.font = '18px "Archivo Black", system-ui, sans-serif'; ctx.textAlign = 'center';
@@ -470,4 +572,6 @@ export const JEU = {
   score: (s) => s.score,
   vies: (s) => ({ left: s.vies, max: VIES }),
   fini: (s) => s.perdu || s.vies <= 0,
+  /* Le temps que le dernier cœur éclate (0,2 s de délai, 0,55 s d'éclats). */
+  dureeFin: (s) => (s.vies <= 0 ? 0.9 : 0.6),
 };

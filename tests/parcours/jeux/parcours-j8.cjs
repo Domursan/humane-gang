@@ -33,9 +33,15 @@ async function tape(p, mot) {
   await p.click('.su-key[data-key="Enter"]');
   await sleep(250);
   check((await p.locator('.su-msg').innerText()).includes('pas dans le dictionnaire'), 'mot hors dictionnaire : message');
+  check((await p.locator('.su-row').first().evaluate((e) => e.classList.contains('fxj-secoue'))), 'effets : mot refusé, la ligne en cours est secouée');
   for (let i = 0; i < 7; i++) await p.click('.su-key[data-key="Backspace"]');
   // Essais au clavier physique
   await tape(p, 'RESTAURE');
+  await sleep(450);
+  const demi = p.locator('.su-row').first().locator('.su-cell');
+  check((await demi.nth(0).getAttribute('class')).includes('is-2') && !/is-[012]/.test(await demi.nth(7).getAttribute('class')), 'effets : les cases se révèlent une à une (la première colorée, la dernière pas encore)');
+  check((await p.locator('.su-key[data-key="U"]').getAttribute('class')).indexOf('is-0') < 0, 'effets : le clavier attend la révélation de la lettre');
+  await sleep(2400);
   const l1 = p.locator('.su-row').first().locator('.su-cell');
   check((await l1.nth(0).getAttribute('class')).includes('is-2') && (await l1.nth(1).getAttribute('class')).includes('is-1') && (await l1.nth(2).getAttribute('class')).includes('is-0'), 'couleurs : R bien placée, E mal placée, S absente');
   check((await l1.nth(0).getAttribute('aria-label')) === 'R bien placée', 'lecteur d’écran : « R bien placée »');
@@ -43,10 +49,14 @@ async function tape(p, mot) {
   check((await p.locator('.su-key[data-key="S"]').getAttribute('class')).includes('is-0'), 'clavier : lettre absente grisée');
   await p.screenshot({ path: path.join(SHOTS, 'j8-sutom-390.png'), fullPage: true });
   await tape(p, 'raclette');
+  await sleep(700);
+  check(!(await p.locator('.su-end').isVisible()), 'effets : la carte de fin attend la fin de la révélation');
+  await sleep(3800);
   await p.waitForSelector('.su-end', { timeout: 4000 }).catch(() => {});
   const fin = await p.locator('.su-end').innerText().catch(() => '');
   check(fin.includes('Bravo') && fin.includes('RACLETTE') && fin.includes('Plat sacré'), 'gagné : mot et définition à la sauce du gang');
-  check(fin.includes('+10 Paillettes'), 'gagné : +10 Paillettes');
+  check(fin.includes('+10'), 'gagné : +10 Paillettes affiché dans la carte de fin (un seul gain)');
+  check(/^[0-9]+ PTS?$/.test(await p.locator('.su-end .fxj-tampon').textContent()) && (await p.locator('.su-end.fxj-entree').count()) === 1, 'effets : tampon de points (calculé d’après le gain du faux serveur) et carte de fin animée');
   check((await p.locator('.su-kbd').count()) === 0, 'fin de partie : clavier retiré');
   // Le presse-papiers du navigateur de test n'est pas fiable (focus) : on capte ce que le bouton écrit.
   await p.evaluate(() => {
@@ -62,6 +72,14 @@ async function tape(p, mot) {
   check(g.join(',') === 'RZZZZZZZ,RESTAURE,RACLETTE', 'appels : chaque essai part au serveur (y compris le refusé)');
   check(p.errs.length === 0, 'aucune erreur JS' + (p.errs.length ? ' — ' + p.errs.join(' | ') : ''));
   await p.screenshot({ path: path.join(SHOTS, 'j8-sutom-fin.png'), fullPage: true });
+  await p.ctx.close();
+
+  // Partie déjà finie à l'ouverture : carte de fin et gain tout de suite, sans effet d'entrée ni confettis
+  p = await openPage(browser, { page: 'jeux', hash: '#sutom', width: 390, init: 'fake-jeux.js', scenario: { jeux: { fini: true } } });
+  await p.waitForSelector('.su-end', { timeout: 6000 }).catch(() => {});
+  await sleep(300);
+  check((await p.locator('.su-end').isVisible()) && (await p.locator('.su-end').innerText()).includes('+10'), 'ouverture d’une partie finie : carte de fin et gain affichés d’emblée');
+  check((await p.locator('.su-end .fxj-tampon').count()) === 1 && (await p.locator('.su-end.fxj-entree').count()) === 0 && (await p.locator('.fxj-confettis').count()) === 0, 'ouverture d’une partie finie : tampon posé, aucun effet d’entrée');
   await p.ctx.close();
 
   p = await openPage(browser, { page: 'jeux', hash: '#sutom', width: 390, init: 'fake-jeux.js', scenario: { jeux: { vide: true } } });

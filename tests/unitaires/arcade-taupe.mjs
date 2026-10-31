@@ -141,5 +141,50 @@ function pireSeconde(points) {
     'identifiant « taupe », titre, aide, trois vies et score initial 0');
 }
 
+// 8. Effets : aucun ne touche aux règles, et le dernier cœur finit la partie à l'image même.
+{
+  const vide = { cible: null, cibleY: null, dir: null, action: false };
+  /** Fait sortir un avatar dans le terrier 4 et le tape. */
+  const tape = (s, cornichon) => {
+    const t = s.trous[4];
+    Object.assign(t, { etat: 'sorti', t: 0, h: 1, duree: 5, cornichon, lettre: cornichon ? null : 'D', fait: false, age: 1 });
+    JEU.update(s, 0, { ...vide, action: true, cible: t.x, cibleY: t.y - 30 });
+    return t;
+  };
+  const s = JEU.init({ reduit: false });
+  const t = tape(s, false);
+  check(JEU.score(s) === 1 && t.etat === 'rentre' && !!s.mart, 'membre tapé : point et retour au terrier dès le clic, marteau levé');
+  const ctx = fauxCtx();
+  JEU.draw(ctx, s);
+  for (let i = 0; i < 9; i++) JEU.update(s, PAS, vide);
+  check(t.etat === 'vide' && t.sq > 0 && s.fx.length > 0, 'le terrier se vide comme avant, le coup arrive après le marteau avec ses effets');
+  JEU.draw(ctx, s);
+
+  const d = JEU.init({ reduit: false });
+  d.vies = 1;
+  tape(d, true);
+  check(JEU.fini(d) && JEU.vies(d).left === 0 && d.attente.length === 1, 'dernier cœur sur un cornichon : la partie finit à l’image même, le coup reste à jouer');
+  const scoreFin = JEU.score(d), etats = d.trous.map((q) => q.etat).join();
+  let eclat = false;
+  for (let i = 0; i < JEU.dureeFin(d) / PAS; i++) { JEU.update(d, PAS, vide); eclat ||= d.fx?.some((f) => f.k === 'demi'); }
+  check(eclat && d.attente.length === 0, 'dureeFin : le marteau frappe et le dernier cœur éclate');
+  check(JEU.score(d) === scoreFin && JEU.vies(d).left === 0 && d.trous.map((q) => q.etat).join() === etats, 'dureeFin : ni score, ni vies, ni terriers ne bougent');
+  check(JEU.finTexte(d).t === 'Plus de cœurs !' && typeof JEU.finTexte(d).d === 'string', 'finTexte : titre et phrase');
+
+  const r = JEU.init({ reduit: true });
+  tape(r, false); tape(r, true);
+  check(JEU.score(r) === 1 && r.vies === 2 && !r.mart && !(r.fx?.some((f) => f.k !== 'txt')) && r.secousse === 0 && r.flash === 0,
+    'mouvement réduit : état juste, ni marteau, ni particules, ni secousse, ni flash');
+  JEU.draw(ctx, r);
+
+  const c = JEU.init({ reduit: false });
+  c.serie = 4;
+  Object.assign(c.trous[0], { etat: 'rentre', t: 0, h: 1, h0: 1, cornichon: false, lettre: 'S', fait: false });
+  JEU.update(c, 0.2, vide);
+  check(c.serie === 0 && c.vies === 2 && c.plein > c.ecoule && c.attente.length === 1, 'cinquième raté : série remise à zéro et vie perdue tout de suite, compteur gardé plein pour l’effet');
+  check(JEU.accroche && JEU.quip && JEU.aide && typeof JEU.embleme === 'function', 'champs des écrans communs');
+  JEU.embleme(ctx, 180, 200, 1);
+}
+
 console.log(`\n${ok} OK, ${ko} ECHEC(S)`);
 process.exit(ko ? 1 : 0);

@@ -6,9 +6,13 @@
  * dessinée jusqu'à la fin. Les tests remplacent le lecteur par window.__HG_FAKE_YT (aucun appel à YouTube).
  * Les membres peuvent proposer un morceau (le Staff « souvenirs » valide). Sous le jeu : l'historique de toutes les manches
  * passées avec les scores du gang (heardle-historique.js).
+ * Effets (effets-jour.js), seulement après un essai confirmé par le serveur, jamais à l'ouverture : segment débloqué qui s'éclaire,
+ * champ secoué, sons D1 à D4, vidéo dévoilée en pop, puis finDePartie (tampon, Paillettes).
  * RPC : hg_heardle_state, hg_heardle_guess, hg_heardle_propose, hg_heardle_signaler (vidéo qui ne se lit plus). Exporte : mount(panel, ctx), unmount().
  */
 import { paillSym } from '../../commun/paillettes.js';
+import { motionAllowed } from '../../commun/core.js';
+import { sonJour, pointsDeGain, rejoue, secouer, finDePartie } from './effets-jour.js';
 import { loadCss, guessFormHtml, bindGuess, boardHtml, shareText, copyText } from './devine.js';
 import { boutonReponses } from '../../commun/core/admin-reponses.js';
 import { monterHistorique } from './heardle-historique.js';
@@ -16,7 +20,7 @@ import { monterHistorique } from './heardle-historique.js';
 const STEPS = [1, 2, 4, 7, 11, 16];
 const dateLong = new Intl.DateTimeFormat('fr-CH', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Zurich' });
 let P = null, C = null;
-const S = { st: null, busy: false, err: null, player: null, playerP: null, ready: false, playing: false, pos: 0, timer: null, forVideo: null, propose: false, vol: 70, muted: false };
+const S = { st: null, busy: false, err: null, player: null, playerP: null, ready: false, playing: false, pos: 0, timer: null, forVideo: null, propose: false, vol: 70, muted: false, attendFin: false };
 const VOL_KEY = 'hg_heardle_volume';
 
 /** Monte l'onglet. */
@@ -265,7 +269,7 @@ function render() {
       <p class="jd-end-t">${st.solved ? `Trouvé en ${esc(st.guesses.length)} essai${st.guesses.length > 1 ? 's' : ''} !` : 'Pas trouvé cette fois.'}</p>
       <p class="jd-end-ans">${esc(t.artist || '')} — ${esc(t.title || '')}</p>
       ${t.proposed_by || t.shared_on ? `<p class="muted small">« proposé par ${esc(t.proposed_by || 'le gang')}${t.shared_on ? ` dans ${esc(t.shared_on)}` : ''} »</p>` : ''}
-      <p class="small">${st.reward ? `+${esc(st.reward)} ${paillSym()} crédités` : ''}</p>
+      <p class="small">${st.reward ? `<span class="jd-gain-v">+${esc(st.reward)} ${paillSym()}</span> crédités` : ''}</p>
       <div class="jd-actions"><button type="button" class="btn btn-sand" data-act="share">Partager le résultat</button></div></div>`;
   } else {
     bottom = guessFormHtml('jh', 'Titre ou artiste', S.busy)
@@ -286,20 +290,66 @@ function render() {
   } else {
     // Fin : la vidéo se dévoile (lecteur visible, avec ses commandes).
     ensurePlayer().catch(() => {});
+    if (!S.attendFin) habillerFin(false);
+  }
+}
+
+/**
+ * Habille la carte de fin (tampon, gain). animer: false pour une partie déjà finie à l'ouverture.
+ * @param {boolean} animer Vrai juste après le dernier essai du membre.
+ */
+function habillerFin(animer) {
+  const st = S.st, carte = P.querySelector('.jd-end');
+  if (!st || !carte) return;
+  const gain = Number(st.reward) > 0 ? Number(st.reward) : null;
+  const points = st.score != null && Number.isFinite(Number(st.score)) ? Number(st.score) : pointsDeGain(st.reward);
+  finDePartie(carte, { points, gain, animer, cibleGain: gain ? carte.querySelector('.jd-gain-v') : null });
+}
+
+/**
+ * Effets d'un essai confirmé par le serveur : segment débloqué qui s'éclaire, champ secoué, sons, vidéo dévoilée en pop.
+ * @param {object} avant État avant l'essai.
+ * @param {object} st État après l'essai.
+ */
+function effets(avant, st) {
+  const g = st.guesses || [], x = g[g.length - 1];
+  if (!x) return;
+  const anime = motionAllowed();
+  const type = st.solved && st.finished ? 'ok' : x.id ? 'ko' : 'pas';
+  sonJour(type === 'ok' ? 'D4' : type === 'pas' ? 'D2' : 'D1');
+  if (type === 'ko') secouer(P.querySelector('.jd-combo'));
+  if (st.finished) {
+    rejoue(P.querySelector('.jh-cover'), 'fxj-pop');
+    const carte = P.querySelector('.jd-end');
+    const delai = anime && type !== 'ok' ? 500 : 0;
+    if (delai && carte) carte.style.visibility = 'hidden';
+    setTimeout(() => {
+      const c = P.querySelector('.jd-end');
+      if (c) c.style.visibility = '';
+      S.attendFin = false;
+      habillerFin(true);
+    }, delai);
+  } else if (st.seconds > (avant?.seconds || 0)) {
+    rejoue(P.querySelector('.jh-seg.is-now'), 'fxj-lueur');
   }
 }
 
 /** Envoie un essai (null = passer). */
 async function guess(id) {
   if (S.busy) return;
+  const avant = S.st;
+  let nouveau = false;
   S.busy = true; render();
   try {
     const { data, error } = await C.sb.rpc('hg_heardle_guess', { p_track: id });
     if (error) throw error;
     S.st = data;
+    nouveau = (data.guesses?.length || 0) > (avant?.guesses?.length || 0);
+    S.attendFin = nouveau && !!data.finished;
     if (data.finished) C.toast(data.solved ? `Bravo ! +${data.reward} ${paillSym()}` : `C’était « ${data.track?.title} ». +${data.reward} ${paillSym()}`, 'ok');
   } catch (e) { C.toast(e?.message || String(e), 'error'); }
   S.busy = false; render();
+  if (nouveau && S.st) effets(avant, S.st);
   P.querySelector('#jh-input')?.focus();
 }
 

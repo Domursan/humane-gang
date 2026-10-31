@@ -6,7 +6,8 @@
  * Le serveur fixe le jeu de chaque tableau (hg_arcade_board(p_game)) et de chaque partie (hg_arcade_start(p_game)) ;
  * la partie est fermée par le serveur (hg_arcade_finish : durée et score vérifiés). Une seule partie par jour est
  * récompensée, tous jeux confondus. Record personnel (navigateur) par jeu et meilleurs scores du gang de la semaine (5 lignes).
- * Un changement de jeu ou d'adresse pendant une partie l'interrompt (sans score).
+ * Un changement de jeu ou d'adresse pendant une partie l'interrompt (sans score). Les écrans de la borne (départ, compte, pause,
+ * fin) sont dessinés par le moteur : la page lui donne le record (option record) et l'accès au sélecteur (option onAutres).
  * Maquette : idees-design/project/J18.dc.html.
  * Dépendances : ctx = { sb, me, toast, esc, sub } (jeux.js) ; eggs/arcade.js (moteur) ; eggs/jeu-*.js (mini-jeux) ;
  * core/util.js (avatarHtml) ; core/pages-access.js (accès des nouveaux jeux).
@@ -208,9 +209,20 @@ export async function mount(panel, ctx) {
     peintGain();
 
     let run = null;
+    let meilleur = Math.max(record.lire(g), Number(B.my_best) || 0); // record affiché par la borne et la boîte « Ton record »
     borne = creeArcade({
       canvas: $z('#arc-canvas'),
       jeu: JEU,
+      record: () => meilleur,
+      onAutres: () => {
+        const choix = $('.arc-tirage');
+        choix.scrollIntoView({ block: 'center' });
+        choix.querySelector('.arc-jeu:not([aria-pressed="true"])')?.focus({ preventScroll: true });
+      },
+      onPause: (enPause) => {
+        pause.textContent = enPause ? 'Reprendre' : 'Pause';
+        msg.textContent = enPause ? 'Pause. Reprends quand tu veux.' : '';
+      },
       onHud: (sc, v) => {
         if (scoreEl.textContent !== String(sc)) scoreEl.textContent = String(sc);
         // Vies : cœurs à l'écran (♥ pleins, ♡ perdus) et texte pour les lecteurs d'écran ; absentes si le jeu n'en a pas.
@@ -239,8 +251,9 @@ export async function mount(panel, ctx) {
         bouton.disabled = false;
         pause.disabled = true;
         pause.textContent = 'Pause';
-        const best = record.lire(g);
-        if (sc > best) { record.ecrire(g, sc); $z('#arc-record').textContent = String(sc); }
+        if (sc > record.lire(g)) record.ecrire(g, sc);
+        meilleur = Math.max(meilleur, sc);
+        $z('#arc-record').textContent = String(meilleur);
         msg.textContent = sc > 0 ? `Score : ${sc} !` : 'Aucun point cette fois. Rejoue !';
         const id = await run;
         if (!id) { msg.textContent += ' Score non enregistré (connexion au serveur impossible).'; return; }
@@ -249,26 +262,19 @@ export async function mount(panel, ctx) {
           if (error) throw error;
           if (data?.ok === false) { msg.textContent += ` Score non retenu : ${data.error}.`; return; }
           if (data?.reward > 0) { recu = true; peintGain(); toast(`🕹️ Arcade : +${data.reward} ${paillSym()}`, 'success'); msg.textContent += ` +${data.reward} ${paillSym()}`; }
+          // Paillettes et Raclette : 1 Paillette par prise (migration 182).
+          if (data?.prises > 0) { msg.textContent += ` +${data.prises} ${paillSym()} pour tes prises.`; toast(`🕹️ Prises : +${data.prises} ${paillSym()}`, 'success'); }
           if (data?.new_best) msg.textContent += ' Nouveau record de la semaine !';
           if (Array.isArray(data?.top)) $z('#arc-top').innerHTML = topHtml(data.top, me?.id, esc);
-          $z('#arc-record').textContent = String(Math.max(record.lire(g), Number(data?.best) || 0));
+          meilleur = Math.max(meilleur, Number(data?.best) || 0);
+          $z('#arc-record').textContent = String(meilleur);
         } catch (e) {
           msg.textContent += ` Score non enregistré (${e?.message || e}).`;
         }
       },
     });
     bouton.addEventListener('click', () => borne.demarre());
-    pause.addEventListener('click', () => {
-      const enPause = borne.pause();
-      pause.textContent = enPause ? 'Reprendre' : 'Pause';
-      msg.textContent = enPause ? 'Pause. Reprends quand tu veux.' : '';
-    });
-    // Échap sur la borne : pause ou reprise, comme le bouton (sans effet hors partie).
-    $z('#arc-canvas').addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape' || pause.disabled) return;
-      e.preventDefault();
-      pause.click();
-    });
+    pause.addEventListener('click', () => borne.pause());
   }
 
   // Sélecteur : un clic charge le jeu choisi (sans effet pendant une partie, boutons bloqués)

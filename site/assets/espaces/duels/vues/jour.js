@@ -4,13 +4,20 @@
  * Un code secret par jour pour tout le gang, 10 essais. Affiche la série de jours consécutifs,
  * le classement du jour (ma ligne en or) et le nombre de trouveurs. Une fois fini : le code dévoilé.
  * Interrupteur « Mode daltonien » partagé avec la table (clé localStorage hg_duel_daltonien).
- * Dépendances : core.js (esc, toast), ../api.js (duel, erreurTexte, COULEURS_MM), ./commun.js (nomJoueur).
+ * Effets (maquette des jeux quotidiens) : après un essai, les pions se posent un à un (son « pion posé » du Mastermind), puis
+ * les indices apparaissent un par un (sons « bien placé » / « mal placé ») ; si la partie est finie, finDePartie (tampon de
+ * points : 11 moins le numéro de l'essai, 0 si le code n'est pas trouvé). Rien de tout cela à l'ouverture d'un jour déjà fini :
+ * le tampon est posé sans animation. Les Paillettes ne sont pas renvoyées par le serveur : pas de ligne de gain.
+ * Dépendances : core.js (esc, toast, motionAllowed), ../api.js (duel, erreurTexte, COULEURS_MM), ./commun.js (nomJoueur),
+ *   ../../../commun/sons-jeux.js (jouerSonJeu), ../../jeux/effets-jour.js (rejoue, finDePartie).
  * Exporte : afficher.
  */
-import { esc, toast } from '../../../commun/core.js';
+import { esc, toast, motionAllowed } from '../../../commun/core.js';
 import { duel, erreurTexte, COULEURS_MM } from '../api.js';
 import { nomJoueur } from './commun.js';
 import { boutonReponses } from '../../../commun/core/admin-reponses.js';
+import { jouerSonJeu } from '../../../commun/sons-jeux.js';
+import { rejoue, finDePartie } from '../../jeux/effets-jour.js';
 
 const CLE_DALTO = 'hg_duel_daltonien';
 const ESSAIS_MAX = 10;
@@ -44,7 +51,7 @@ const heure = (iso) => {
  * @returns {Promise<Function>} nettoyage (retire les écouteurs).
  */
 export async function afficher(root) {
-  const st = { jour: null, occupe: false, brouillon: vide(), dalto: lireDalto(), vivant: true };
+  const st = { jour: null, occupe: false, brouillon: vide(), dalto: lireDalto(), vivant: true, anim: false };
 
   /** Le jour est-il terminé pour moi (code trouvé ou plus d'essais) ? */
   const fini = () => !!st.jour && (!!st.jour.fini || !!st.jour.trouve_en || (st.jour.essais || []).length >= ESSAIS_MAX);
@@ -58,20 +65,60 @@ export async function afficher(root) {
   };
   const vider = (i) => { st.brouillon[i] = null; rendre(); };
 
+  /** Points sur 10 de la partie finie : 11 moins le numéro de l'essai gagnant (1 au moins), 0 si le code n'est pas trouvé. */
+  const pointsFin = () => (st.jour?.trouve_en ? Math.max(1, 11 - st.jour.trouve_en) : 0);
+
   /** Envoie l'essai du jour ; la réponse contient le nouvel état du jour. */
   async function valider() {
     if (!st.brouillon.every(Boolean) || st.occupe || fini()) return;
     const texte = st.brouillon.join('');
+    const avant = (st.jour?.essais || []).length;
+    let nouveau = false;
     st.occupe = true; rendre();
     try {
       st.jour = await duel.jourEssayer(texte);
       st.brouillon = vide();
+      nouveau = (st.jour?.essais || []).length > avant;
     } catch (err) {
       toast(erreurTexte(err), 'error');
     } finally {
       st.occupe = false;
-      if (st.vivant) rendre();
+      if (st.vivant) { if (nouveau) st.anim = true; rendre(); }
     }
+    if (nouveau && st.vivant) effetsEssai();
+  }
+
+  /**
+   * Effets du dernier essai (le plateau est déjà dessiné dans son état final) : pions posés un à un, indices un par un,
+   * puis, si la partie est finie, la carte de bilan avec son tampon. Sans mouvement : seuls les sons sont espacés.
+   */
+  function effetsEssai() {
+    const essais = st.jour?.essais || [];
+    const n = essais.length ? essais[essais.length - 1].n : 0;
+    const ligne = root.querySelectorAll('.mm-plateau > .mm-rangee')[n - 1];
+    const pions = [...(ligne?.querySelectorAll('.mm-pion') || [])];
+    const indicesPts = [...(ligne?.querySelectorAll('.mm-fb') || [])];
+    const texte = ligne?.querySelector('.mm-indices-txt') || null;
+    const anime = motionAllowed();
+    const essai = (st.seq = (st.seq || 0) + 1); // un essai plus récent reprend la main sur la fin de séquence
+    if (anime) [...pions, ...indicesPts, texte].forEach((x) => x?.classList.add('jour-cache'));
+    const reveler = (x, cls) => { if (!anime || !x) return; x.classList.remove('jour-cache'); rejoue(x, cls); };
+    pions.forEach((x, k) => setTimeout(() => { if (!st.vivant) return; jouerSonJeu('mastermind', 3); reveler(x, 'fxj-pop'); }, k * 130));
+    indicesPts.forEach((x, i) => setTimeout(() => {
+      if (!st.vivant) return;
+      jouerSonJeu('mastermind', x.classList.contains('mm-fb-ok') ? 1 : 2);
+      reveler(x, 'fxj-pop');
+    }, 600 + i * 420));
+    setTimeout(() => {
+      texte?.classList.remove('jour-cache');
+      if (essai !== st.seq) return;
+      st.anim = false;
+      if (!st.vivant) return;
+      const bilan = root.querySelector('.duels-jour-bilan');
+      if (!bilan) return;
+      bilan.classList.remove('jour-cache');
+      finDePartie(bilan, { points: pointsFin(), gain: st.jour?.gain ?? null, animer: true });
+    }, 800 + indicesPts.length * 420);
   }
 
   /** Plateau : 10 rangées, la rangée en cours surlignée tant que le jour n'est pas fini. */
@@ -166,6 +213,12 @@ export async function afficher(root) {
     </section>`;
     if (focus) root.querySelector(`[data-k="${focus}"]:not([disabled])`)?.focus();
     boutonReponses(root.querySelector('.duels-jour-tete'), 'codejour');
+    // Bilan : caché pendant les effets du dernier essai (il est révélé avec son tampon), sinon tampon posé sans animation.
+    const bilan = root.querySelector('.duels-jour-bilan');
+    if (bilan) {
+      if (st.anim) bilan.classList.add('jour-cache');
+      else finDePartie(bilan, { points: pointsFin(), gain: st.jour?.gain ?? null, animer: false });
+    }
   }
 
   /** Clics : palette, trous, effacer, valider, interrupteur daltonien. */

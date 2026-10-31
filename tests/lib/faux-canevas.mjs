@@ -21,9 +21,9 @@ export function fauxCtx() {
  * @param {{secondes?: number, triche?: object, entree?: (s, t) => object}} o entree(s, t) donne l'entrée de chaque image
  * @returns {{s: object, t: number, maxParSeconde: number}} état final, durée jouée, plus forte cadence de points sur 1 s
  */
-export function simule(JEU, { secondes = 60, triche = { coeurs: false, immortel: false }, entree = () => ({}) } = {}) {
+export function simule(JEU, { secondes = 60, triche = { coeurs: false, immortel: false }, entree = () => ({}), reduit = false } = {}) {
   const ctx = fauxCtx();
-  const s = JEU.init({ reduit: false });
+  const s = JEU.init({ reduit });
   s.triche = triche;
   const dt = 1 / 30;
   let t = 0; const hist = [];

@@ -60,6 +60,8 @@ const CONTENU = {
 const PAYS_PLAT = { Empanadas: 'Argentine', 'Pad thaï': 'Thaïlande', Pizza: 'Italie', Ramen: 'Japon', Tacos: 'Mexique', 'Tom yum': 'Thaïlande' };
 /** Parties en cours : essais, terminée, gagnée. */
 const J = window.__NJ = Object.fromEntries(Object.keys(CONTENU).map((k) => [k, { essais: [], finished: false, solved: false }]));
+// Scénario dejaFini : <jeu> : ce jeu est déjà gagné en 2 essais à l'ouverture (retour sur une partie finie).
+if (S.dejaFini && CONTENU[S.dejaFini]) Object.assign(J[S.dejaFini], { essais: [{ t: CONTENU[S.dejaFini].choix.find((c) => c !== CONTENU[S.dejaFini].titre), ok: false }, { t: CONTENU[S.dejaFini].titre, ok: true }], finished: true, solved: true });
 const BOARD = () => [{ user_id: U(2), pseudo: 'Alice', color: '#D97757', points: 14, wins: 3 }, { user_id: ME, pseudo: 'Ethan', color: '#4F6A8F', points: 9, wins: 2 }];
 
 /** État d'un jeu, tel que renvoyé par hg_nj_etat. */

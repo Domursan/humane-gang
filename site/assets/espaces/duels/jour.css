@@ -43,3 +43,6 @@
   .duels-jour-ligne { grid-template-columns: 22px minmax(0, 1fr) auto; }
   .duels-jour-ligne time { display: none; }
 }
+
+/* Effets (jour.js) : éléments cachés le temps que les pions et les indices apparaissent un à un */
+.duels-jour .jour-cache { opacity: 0 !important; }

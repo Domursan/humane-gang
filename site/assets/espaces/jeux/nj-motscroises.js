@@ -7,9 +7,13 @@
  * « Vérifier » signale les cases remplies qui sont fausses, en rouge, et compte comme une erreur. La grille est aussi
  * envoyée toute seule quand elle est pleine : les fautes sont signalées, sans compter d'erreur. La saisie est gardée sur
  * l'appareil, par jour, pour ne pas la perdre. Moteur : nj-grilles.js (hg_nj_grille_etat / hg_nj_grille_essai).
+ * Effets (effets-jour.js), seulement après la réponse du serveur à un essai, jamais à l'ouverture : un mot complet et juste
+ * s'allume lettre après lettre (saut, son M1 par lettre, M2 à la fin du mot) ; les cases fausses secouent avec le son C4.
  * Exporte : mount(panel, ctx), resume(ctx).
  */
 import { monterGrille, resumerGrille, formatDuree } from './nj-grilles.js';
+import { motionAllowed } from '../../commun/core.js';
+import { sonJour, secouer, rejoue, enCascade } from './effets-jour.js';
 
 const JEU = 'motscroises';
 
@@ -83,7 +87,11 @@ function prepare(st, ui) {
     ui.jour = st.day;
     return;
   }
+  ui.allumes = ui.allumes || new Set();
+  ui.cJustes = ui.cJustes || new Set();
   if (ui.flat == null || ui.jour !== st.day || ui.flat.length !== n) {
+    ui.allumes = new Set();
+    ui.cJustes = new Set();
     const base = g.motif.map((l) => l.replace(/#/g, ' ')).join('');
     ui.flat = lireLocale(st.day, n) || base;
     ui.jour = st.day;
@@ -149,6 +157,7 @@ function majCases(racine, ui, st) {
     el.classList.toggle('is-pos', !!ui.pos && ui.pos.r === r && ui.pos.c === c);
     el.classList.toggle('is-mot', dansMot.has(idx));
     el.classList.toggle('is-faux', !!ui.faux?.has(idx));
+    el.classList.toggle('is-juste', !!ui.cJustes?.has(idx));
     el.querySelector('.mc-lettre').textContent = ui.flat[idx] === ' ' ? '' : ui.flat[idx];
   });
   racine.querySelectorAll('.mc-def').forEach((b) => {
@@ -169,8 +178,47 @@ function majCases(racine, ui, st) {
   if (prog) prog.textContent = `Cases remplies : ${remplies} / ${blanches(g)}`;
 }
 
+/** Une lettre change : les mots allumés qui la contiennent s'éteignent (le serveur les revérifiera). */
+function eteint(ui, mod, idx) {
+  mod.liste.forEach((m, k) => { if (ui.allumes?.has(k) && m.cases.some((c) => c.idx === idx)) ui.allumes.delete(k); });
+  ui.cJustes = new Set();
+  ui.allumes?.forEach((k) => mod.liste[k].cases.forEach((c) => ui.cJustes.add(c.idx)));
+}
+
+/**
+ * Effets de la réponse du serveur (posés par apresEssai, joués une seule fois après le dessin) : cases fausses secouées avec C4,
+ * puis chaque mot complet et juste s'allume lettre après lettre. Sans mouvement, un seul M2 par mot.
+ */
+function jouerEffets(racine, st, ui) {
+  const fx = ui.effet;
+  ui.effet = null;
+  if (!fx) return;
+  const w = st.grille.w;
+  const mod = modele(st.grille);
+  const caseDe = (idx) => racine.querySelector(`.mc-case[data-r="${Math.floor(idx / w)}"][data-c="${idx % w}"]`);
+  if (fx.faux.length) {
+    fx.faux.forEach((idx) => secouer(caseDe(idx)));
+    sonJour('C4');
+  }
+  if (!fx.justes.length) return;
+  const etapes = [];
+  fx.justes.forEach((k) => mod.liste[k].cases.forEach((c, j, tab) => etapes.push({ k, idx: c.idx, dernier: j === tab.length - 1 })));
+  const lance = () => enCascade(etapes, ({ k, idx, dernier }) => {
+    ui.cJustes.add(idx);
+    const el = caseDe(idx);
+    if (el?.isConnected) { el.classList.add('is-juste'); rejoue(el, 'fxj-saut'); }
+    if (motionAllowed()) sonJour('M1');
+    if (dernier) {
+      ui.allumes.add(k);
+      setTimeout(() => sonJour('M2'), motionAllowed() ? 100 : 0);
+    }
+  }, Math.min(80, 1400 / etapes.length)); // une grande grille reste sous 1,4 s
+  if (fx.faux.length && motionAllowed()) setTimeout(lance, 450); else lance();
+}
+
 /** Écouteurs : cases, définitions, saisie (clavier physique, clavier tactile), Tab, flèches, « Vérifier ». */
 function lier(racine, st, ui, env) {
+  jouerEffets(racine, st, ui);
   if (st.partie?.fini) return;
   const g = st.grille;
   const mod = modele(g);
@@ -213,6 +261,7 @@ function lier(racine, st, ui, env) {
     const idx = ui.pos.r * g.w + ui.pos.c;
     ui.flat = ui.flat.slice(0, idx) + lettre + ui.flat.slice(idx + 1);
     ui.faux = new Set();
+    eteint(ui, mod, idx);
     const act = motActif(ui, mod);
     if (act >= 0) {
       const cases = mod.liste[act].cases;
@@ -239,6 +288,7 @@ function lier(racine, st, ui, env) {
     }
     ui.flat = ui.flat.slice(0, idx) + ' ' + ui.flat.slice(idx + 1);
     ui.faux = new Set();
+    eteint(ui, mod, idx);
     sauveLocale(st.day, ui.flat);
     rafraichis();
   };
@@ -307,13 +357,24 @@ function lier(racine, st, ui, env) {
  * Après un essai : la grille acceptée se termine toute seule ; sinon les cases remplies fausses passent en rouge.
  * Le message est rangé dans res.texte pour la zone « live ».
  */
+/** La carte de fin attend que le dernier mot ait fini de s'allumer (effet joué par lier, après le dessin). */
+const apresRendu = () => (motionAllowed() ? 1900 : 0);
+
 function apresEssai(ui, res, st) {
   ui.faux = new Set();
-  if (res.ok) return;
+  ui.allumes = ui.allumes || new Set();
+  ui.cJustes = ui.cJustes || new Set();
+  const mod = modele(st.grille);
+  const vide = (ch) => !ch || ch === ' ' || ch === '.';
+  // Mots à allumer : grille juste = tous ceux qui ne le sont pas déjà ; sinon les mots pleins sans case fausse.
+  const justes = (faux) => mod.liste.map((m, k) => k).filter((k) => !ui.allumes.has(k)
+    && mod.liste[k].cases.every((c) => !vide(ui.flat[c.idx]) && !faux.includes(c.idx)));
+  if (res.ok) { ui.effet = { faux: [], justes: justes([]) }; return; }
   const verifier = ui.mode === 'verifier';
   ui.mode = null;
   const fausses = (res.faux || []).filter((idx) => ui.flat[idx] && ui.flat[idx] !== ' ' && ui.flat[idx] !== '.');
   ui.faux = new Set(fausses);
+  ui.effet = { faux: fausses, justes: justes(fausses) };
   const s = fausses.length > 1 ? 's' : '';
   if (fausses.length) {
     res.texte = `${fausses.length} case${s} fausse${s} en rouge. ${verifier ? 'Compte comme une erreur.' : 'Corrige-les : la grille se revérifie quand elle est pleine.'}`;
@@ -359,6 +420,7 @@ const CFG = {
   corps,
   lier,
   apresEssai,
+  apresRendu,
   reponse,
   finTexte: () => 'Grille complète !',
   copie,

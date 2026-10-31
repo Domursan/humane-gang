@@ -33,6 +33,8 @@
 .arc-canvas:focus-visible { outline: 2px solid var(--sand); outline-offset: -4px; }
 .arc-hud { position: absolute; left: 10px; right: 10px; top: 8px; display: flex; justify-content: space-between; line-height: 1.2; pointer-events: none;
   font-family: "DejaVu Sans Mono", "Liberation Mono", monospace; font-size: 13px; font-weight: 700; color: #F2EFEA; font-variant-numeric: tabular-nums; }
+/* Écrans dessinés dans le canevas (départ, pause, fin) : ils rappellent eux-mêmes le score, le HUD s'efface. */
+.arc-canvas[data-ecran="depart"] + .arc-hud, .arc-canvas[data-ecran="pause"] + .arc-hud, .arc-canvas[data-ecran="fin"] + .arc-hud { visibility: hidden; }
 .arc-msg { min-height: 1.5em; }
 .arc-boutons { display: flex; gap: 8px; }
 .arc-boutons .btn { flex: 1; min-height: 44px; }

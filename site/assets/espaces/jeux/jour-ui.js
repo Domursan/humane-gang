@@ -3,9 +3,13 @@
 // (série, joker de la semaine) et classement du mois. Le serveur corrige : la bonne réponse n'arrive qu'après la réponse.
 // RPC : hg_quiz_daily_today, hg_quiz_daily_answer, hg_quiz_daily_board (migration 084).
 // Styles : assets/espaces/jeux/jeux-jour.css (ajouté une seule fois par un <link>).
-// Dépendances : core.js (avatarHtml, errMsg). Tout texte venant de la base passe par esc().
+// Effets (maquette des jeux quotidiens) : bonne réponse = halo vert + son Q1 ; mauvaise = choix secoué + son Q2, puis la bonne
+// réponse s'allume ; ensuite carte de fin (tampon de points) par finDePartie. Rien de tout cela à l'ouverture d'une question déjà
+// répondue : le tampon est posé sans animation. Valable aussi pour la version compacte de l'accueil.
+// Dépendances : core.js (avatarHtml, errMsg, motionAllowed), ./effets-jour.js. Tout texte venant de la base passe par esc().
 // Exporte : mountDaily(el, { sb, esc, toast, compact, meId }).
-import { avatarHtml, errMsg } from '../../commun/core.js';
+import { avatarHtml, errMsg, motionAllowed } from '../../commun/core.js';
+import { sonJour, rejoue, secouer, finDePartie } from './effets-jour.js';
 import { boutonReponses } from '../../commun/core/admin-reponses.js';
 
 /* ---------- Constantes ---------- */
@@ -153,10 +157,40 @@ export async function mountDaily(el, { sb, esc, toast, compact = false, meId = n
     </section>`;
   }
 
-  /** Dessine tout. */
-  function dessine() {
+  /**
+   * Dessine tout, puis habille la carte de résultat (tampon de points : 10 si juste, 0 sinon).
+   * @param {boolean} [animer] true seulement juste après la réponse du membre
+   */
+  function dessine(animer = false) {
     el.innerHTML = `<div class="qdj${compact ? ' is-compact' : ''}">${carteQuestion()}${carteSemaine()}${carteClassement()}</div>`;
     if (!compact) boutonReponses(el.querySelector('.qdj-top'), 'jour');
+    const res = el.querySelector('.qdj-result');
+    if (res) finDePartie(res, { points: S.d.correct === true ? 10 : 0, animer });
+  }
+
+  /** Attend la fin d'un effet (aucune attente sans mouvement). */
+  const attente = (ms) => (motionAllowed() ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+
+  /** Effet de la réponse : bonne = halo + Q1 ; mauvaise = secousse + Q2, puis la bonne réponse s'allume. */
+  async function effetReponse(ok, valeur, solution) {
+    const cible = (v) => el.querySelector(`.qdj-choice[data-choice="${CSS.escape(String(v))}"], .qdj-choice[data-multi="${CSS.escape(String(v))}"]`);
+    const choisi = Array.isArray(valeur) ? null : cible(valeur);
+    const carte = el.querySelector('.qdj-card');
+    if (ok) {
+      sonJour('Q1');
+      rejoue(choisi || carte, 'fxj-bon');
+      await attente(650);
+      return;
+    }
+    sonJour('Q2');
+    secouer(choisi || carte);
+    await attente(450);
+    const bonne = [...el.querySelectorAll('.qdj-choice')].find((b) => {
+      const id = b.dataset.choice ?? b.dataset.multi;
+      return id === String(solution) || b.textContent.trim() === String(solution);
+    });
+    if (bonne) rejoue(bonne, 'fxj-bon');
+    await attente(550);
   }
 
   /** Envoie la réponse. */
@@ -174,7 +208,8 @@ export async function mountDaily(el, { sb, esc, toast, compact = false, meId = n
       const gain = (data?.bonus || 0) + (data?.reward || 0) + (data?.paliers || []).reduce((s, p) => s + (p.paillettes || 0), 0);
       if (gain && toast) toast(`+${nf.format(gain)} Paillettes`, 'ok');
       try { const r = await sb.rpc('hg_quiz_daily_board', { p_month: null }); if (!r.error) S.board = r.data; } catch { /* classement inchangé */ }
-      dessine();
+      await effetReponse(data?.correct === true, valeur, data?.solution);
+      dessine(true);
       el.querySelector('.qdj-result')?.focus();
     } catch (e) {
       console.warn('[question du jour]', e);

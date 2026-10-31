@@ -71,6 +71,8 @@ const mot = async (p, i, lettres) => { await p.keyboard.type(lettres); await sle
   check((await p.locator('.ang-mot[data-i="0"] .ang-mot-revele').textContent()) === 'MAISON', 'MAISON : le mot s’affiche une fois trouvé');
   check((await p.locator('.ang-mot.is-actif').getAttribute('data-i')) === '1', 'après MAISON : le mot suivant devient actif');
   check((await p.locator('.ng-pills').textContent()).includes('Trouvés 1 / 5'), 'après MAISON : « Trouvés 1 / 5 »');
+  await sleep(700);
+  check((await p.locator('.ang-mot[data-i="0"].fxj-bon').count()) === 1 && (await p.locator('.ang-mot[data-i="0"] .ang-mot-revele span').count()) === 0, 'anagramme effets : le mot trouvé s’est allumé lettre après lettre, texte final remis');
 
   // Mélanger et tuiles (CHOCOLAT)
   const avant = (await p.locator('.ang-mot[data-i="1"] .ang-tuile').allTextContents()).sort().join('');
@@ -100,6 +102,8 @@ const mot = async (p, i, lettres) => { await p.keyboard.type(lettres); await sle
   await mot(p, 4, 'LUNETTES');
   check((await p.locator('.ng-fin').count()) === 1 && (await p.locator('.ng-fin:not(.is-win)').count()) === 1, 'fin : partie terminée (un mot passé : pas de victoire complète)');
   check((await p.locator('.ng-fin').textContent()).includes('4 mots sur 5 trouvés'), 'fin : « 4 mots sur 5 trouvés »');
+  await sleep(1800); // le gain défile après l'entrée de la carte de fin
+  await p.waitForFunction(() => document.querySelector('.ng-fin')?.textContent.includes('+10 ✦ crédités'), null, { timeout: 5000 }).catch(() => {});
   check((await p.locator('.ng-fin').textContent()).includes('Score 4 pts') && (await p.locator('.ng-fin').textContent()).includes('+10 ✦ crédités'), 'fin : « Score 4 pts » et « +10 ✦ crédités »');
   check((await p.locator('.ang-mot-revele').count()) === 5 && (await p.locator('body').textContent()).includes('CHOCOLAT'), 'fin : les cinq mots sont montrés');
   check((await p.locator('.ang-tuile').count()) === 0 && (await p.locator('.ng-clavier').count()) === 0, 'fin : plus de tuiles');
@@ -174,6 +178,7 @@ const mot = async (p, i, lettres) => { await p.keyboard.type(lettres); await sle
   await sleep(200);
   check((await p.locator('.mc-case.is-faux').count()) === 65, 'grille pleine : les 65 cases fausses sont en rouge');
   check((await live(p)).includes('65 cases fausses en rouge'), 'grille pleine : message « 65 cases fausses en rouge »');
+  check((await p.locator('.mc-case.is-faux.fxj-secoue').count()) === 65, 'mots croisés effets : les cases fausses sont secouées');
   check((await essais(p)).length >= 1 && (await essais(p))[0][2].p.verifier === undefined, 'serveur : l’envoi automatique n’est pas une vérification');
   check((await hscroll(p)) <= 0, '390 px (mots croisés, en cours) : pas de défilement horizontal');
 
@@ -181,7 +186,10 @@ const mot = async (p, i, lettres) => { await p.keyboard.type(lettres); await sle
   for (const [r, c] of cellulesBlanches()) await tape(p, r, c, solution(r, c));
   await sleep(250);
   check((await p.locator('.ng-fin.is-win').count()) === 1, 'grille juste : partie terminée');
+  check((await p.locator('.mc-case.fxj-saut').count()) > 0, 'mots croisés effets : les lettres des mots justes sautent une à une');
+  await sleep(1800); // le gain défile après l'entrée de la carte de fin
   check((await p.locator('.ng-fin').textContent()).includes('Score 5 pts'), 'grille juste : « Score 5 pts » (aucune erreur)');
+  await p.waitForFunction(() => document.querySelector('.ng-fin')?.textContent.includes('+10 ✦ crédités'), null, { timeout: 5000 }).catch(() => {});
   check((await p.locator('.ng-fin').textContent()).includes('+10 ✦ crédités'), 'grille juste : « +10 ✦ crédités »');
   check((await p.locator('.mc-lettre').allTextContents()).filter((t) => t).length === 65, 'fin : la grille complète est montrée');
   check((await p.locator('.mc-case.is-faux').count()) === 0, 'fin : plus aucune case rouge');
@@ -201,6 +209,7 @@ const mot = async (p, i, lettres) => { await p.keyboard.type(lettres); await sle
   await tape(p, 0, 1, solution(0, 1));
   await p.click('[data-act="verifier"]'); await sleep(260);
   check((await p.locator('.mc-case.is-faux').count()) === 1, '« Vérifier » : seule la case fausse et remplie est en rouge (les cases vides ne comptent pas)');
+  check((await p.locator('.mc-case.is-faux.fxj-secoue').count()) === 1, 'mots croisés effets : « Vérifier » secoue la case fausse');
   check((await live(p)).includes('1 case fausse en rouge') && (await live(p)).includes('Compte comme une erreur'), '« Vérifier » : message « 1 case fausse en rouge… Compte comme une erreur »');
   check((await p.locator('.ng-main').boundingBox()).x < (await p.locator('.ng-aside').boundingBox()).x, '1280 px (mots croisés) : jeu à gauche, règles à droite');
   await p.reload(); await p.waitForSelector('.mc-grille', { timeout: 6000 }); await sleep(200);

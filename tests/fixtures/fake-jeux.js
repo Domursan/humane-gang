@@ -2,7 +2,7 @@
 // et leurs sections admin. Script injecté avant la page par openPage({ init: 'fake-jeux.js' }) ; il s'accroche au faux
 // client fake-sb.mjs par window.__FAKE_SETUP (base) et window.__FAKE_RPC (RPC). Mêmes formes de réponse que la base.
 // Scénario (window.__SCN.jeux) : { deja: true } question déjà jouée dans le quiz ; { vide: true } aucune question,
-// aucune compétition, aucun mot ; { fini: true } grille Sutom déjà finie.
+// aucune compétition, aucun mot ; { fini: true } grille Sutom déjà finie ; { repondue: true } question du jour déjà répondue (juste).
 // Expose window.__JEUX (état, pour les vérifications des tests).
 (() => {
   const ME = '11111111-1111-4111-8111-111111111111';
@@ -53,6 +53,7 @@
     DB.hg_pages.push({ slug: 'jeux', label: 'Jeux', mode: 'membres', in_nav: true, sort: 10 });
     const s = SC();
     if (s.deja) J.jour.already_played = true;
+    if (s.repondue) Object.assign(J.jour, { answered: true, my_response: 'b', correct: true, explanation: 'Un Worldle de mars 2022 qui a mal tourné.', solution: '2022', stats: { answered: 12, correct: 9 } });
     if (s.vide) { J.jour.question = null; J.sutom = null; }
     if (s.fini) Object.assign(J.sutom, { guesses: ['RACLETTE'], finished: true, solved: true });
   };

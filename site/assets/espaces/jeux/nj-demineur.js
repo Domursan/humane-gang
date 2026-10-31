@@ -8,14 +8,22 @@
  * Le temps officiel est celui du serveur : hg_nj_solo_debut au premier coup, hg_nj_solo_fin à la fin. Le chrono affiché
  * pendant la partie est local ; à la fin, c'est le temps renvoyé par le serveur qui s'affiche.
  * Onglet : /pages/jeux/jeux.html#demineur. Contrat : mount(panel, ctx), unmount(), resume(ctx).
- * Dépendances : core.js (esc, errMsg), jeux/commun.js (chargerCss, nf, classementHtml).
+ * Dépendances : core.js (esc, errMsg, motionAllowed), jeux/commun.js (chargerCss, nf, classementHtml), arcade/fx.js (sonFlash),
+ * effets-jour.js (rejoue).
  * Données : RPC hg_nj_solo_etat, hg_nj_solo_debut, hg_nj_solo_fin (migration 138).
+ * Effets (tous sur des éléments du DOM, jamais de canevas) : ouverture en vague depuis la case touchée, drapeau qui retombe en
+ * rebondissant, anneau sur un chiffre qui ouvre ses voisines, cœur qui explose puis révèle les autres du plus proche au plus
+ * loin, victoire où les cœurs deviennent des drapeaux arc-en-ciel (confettis), carte de fin dans la page. L'état du jeu est
+ * toujours juste tout de suite : seuls l'affichage et la carte de fin attendent la fin de l'effet. Sans mouvement
+ * (motionAllowed faux) : aucun effet visuel, les sons restent (sonFlash DE1 à DE7). Un effet ne part que sur un geste du joueur.
  * Tests : window.__SCN.demineurCoeurs, liste de couples [ligne, colonne], remplace la pose au hasard (jamais en production).
  * Exporte : mount, unmount, resume.
  */
 import { paillSym } from '../../commun/paillettes.js';
-import { esc, errMsg } from '../../commun/core.js';
+import { esc, errMsg, motionAllowed } from '../../commun/core.js';
 import { chargerCss, nf, classementHtml } from './commun.js';
+import { sonFlash } from '../arcade/fx.js';
+import { rejoue } from './effets-jour.js';
 
 /* ---------- Constantes ---------- */
 /** Niveaux : dimensions (lignes × colonnes) et nombre de cœurs cachés. */
@@ -57,7 +65,8 @@ const DRAPEAU_SVG = `<svg class="sol-drapeau" viewBox="0 0 12 14" shape-renderin
 // mine, nb, ouvert, drap : tableaux (un octet par case, index = ligne × C + colonne) ; cases : boutons ; place : cœurs posés ;
 // fini : partie terminée ; explose : case du cœur touché (-1 sinon) ; run : promesse de l'identifiant de partie ;
 // t0 : instant du premier coup (ms) ; horloge : minuteur du chrono ; officiel : réponse de hg_nj_solo_fin ;
-// gain, recompense, board : Paillettes, déjà reçues, classement ; gen : numéro de partie (ignore les réponses tardives).
+// gain, recompense, board : Paillettes, déjà reçues, classement ; gen : numéro de partie (ignore les réponses tardives) ;
+// attente : cœurs pas encore changés en drapeaux pendant la victoire ; finPret : instant où la carte de fin peut s'afficher.
 let D = null;
 
 /* ---------- Outils ---------- */
@@ -76,6 +85,105 @@ function fmtTemps(s) {
 const etroit = () => { try { return matchMedia(ETROIT).matches; } catch { return false; } };
 /** Vrai si le plateau s'affiche couché : écran étroit et niveau plus long que large (difficile). */
 const couche = () => etroit() && D.C > D.L;
+
+/* ---------- Effets ---------- */
+/** Vrai si le mouvement est réduit ou coupé. */
+const doux = () => !motionAllowed();
+/** Joue un son du Démineur (DE1 à DE7). */
+const son = (code) => { try { sonFlash(code); } catch { /* son indisponible */ } };
+/** Exécute fn dans ms, sauf si la partie a changé entre-temps. */
+function plus(fn, ms) { const gen = D.gen; setTimeout(() => { if (D && gen === D.gen) fn(); }, ms); }
+/** Anime un élément (WAAPI) ; ne fait rien sans mouvement. */
+function anime(el, kf, opt) {
+  if (!el || doux() || !el.animate) return null;
+  try { return el.animate(kf, opt); } catch { return null; }
+}
+/** Anneau qui s'élargit autour d'une case. */
+function anneau(b, couleur, rayon, ms = 450) {
+  if (!b || doux()) return;
+  b.style.zIndex = '3';
+  const a = anime(b, [{ boxShadow: `0 0 0 0 ${couleur}` }, { boxShadow: `0 0 0 ${rayon}px transparent` }], { duration: ms, easing: 'ease-out' });
+  if (a) a.onfinish = a.oncancel = () => { b.style.zIndex = ''; }; else b.style.zIndex = '';
+}
+/** Le drapeau retombe en rebondissant. */
+function rebondDrapeau(b) {
+  anime(b?.firstElementChild, [{ transform: 'translateY(-90%)', opacity: 0 }, { transform: 'translateY(0)', opacity: 1, offset: .5 }, { transform: 'translateY(-18%)', offset: .72 }, { transform: 'translateY(0)' }], { duration: 380, easing: 'ease-in' });
+}
+/** Ouverture en vague : chaque case s'ouvre avec un retard proportionnel à sa distance (35 ms par pas). */
+function animerOuverture(liste, depart = -1) {
+  if (doux() || !liste.length) return;
+  /* Pas de transform sur la case : elle garde sa zone cliquable (un clic d'accord ne se perd pas). */
+  if (liste.length > 120) {
+    /* Grande ouverture : opacité seule, retard par tranches de 4 pas, sans fond. */
+    for (const [j, d] of liste) {
+      anime(D.cases[j], [{ opacity: 0 }, { opacity: 1 }], { duration: 200, delay: Math.min(Math.floor(d / 4) * 140, 700), fill: 'backwards', easing: 'ease-out' });
+    }
+  } else {
+    for (const [j, d] of liste) {
+      anime(D.cases[j], [{ opacity: .3, backgroundColor: '#2B2B31', color: 'transparent' }, { opacity: 1, backgroundColor: 'rgba(255,241,190,.35)', offset: .6 }, { opacity: 1 }],
+        { duration: 260, delay: Math.min(d * 35, 700), fill: 'backwards', easing: 'ease-out' });
+    }
+  }
+  if (liste.length > 1 && depart >= 0) { rejoue(q('#dm-champ'), 'fxj-lueur'); anneau(D.cases[depart], 'rgba(226,199,126,.55)', 36, 520); }
+}
+/** Pluie de confettis aux couleurs du drapeau (victoire), retirée toute seule. */
+function confettis() {
+  if (doux()) return;
+  const c = document.createElement('div');
+  c.className = 'sol-confettis';
+  c.setAttribute('aria-hidden', 'true');
+  for (let k = 0; k < 40; k++) {
+    const e = document.createElement('i');
+    e.style.left = `${Math.random() * 100}%`;
+    e.style.background = BANDES[k % BANDES.length];
+    c.append(e);
+    anime(e, [{ transform: 'translateY(0) rotate(0deg)' }, { transform: `translateY(105vh) rotate(${Math.round(360 + Math.random() * 360)}deg)`, opacity: .7 }], { duration: 1400 + Math.random() * 900, delay: Math.random() * 300, easing: 'linear', fill: 'forwards' });
+  }
+  document.body.append(c);
+  setTimeout(() => c.remove(), 2800);
+}
+/** Explosion : secousse, éclair rouge, cœur touché agrandi, puis les autres cœurs révélés du plus proche au plus loin, puis les faux drapeaux. */
+function exploser(i) {
+  son('DE6');
+  D.finPret = 0;
+  if (doux()) return;
+  const mines = [];
+  for (let k = 0; k < D.mine.length; k++) if (D.mine[k] && k !== i && !D.drap[k]) mines.push(k);
+  const r0 = Math.floor(i / D.C), c0 = i % D.C;
+  const dist = (k) => Math.hypot(Math.floor(k / D.C) - r0, (k % D.C) - c0);
+  mines.sort((a, b) => dist(a) - dist(b));
+  const champ = q('#dm-champ'), b = D.cases[i];
+  champ?.classList.remove('fxj-lueur');
+  rejoue(champ, 'fxj-secoue');
+  anime(champ, [{ backgroundColor: 'rgba(176,16,42,.45)' }, { backgroundColor: 'rgba(176,16,42,0)' }], { duration: 450 });
+  anneau(b, 'rgba(226,199,126,.7)', 40, 520);
+  anneau(b, 'rgba(176,16,42,.6)', 24, 380);
+  anime(b.firstElementChild, [{ transform: 'scale(.4)' }, { transform: 'scale(1.6)', offset: .4 }, { transform: 'scale(1.35)' }], { duration: 420, easing: 'ease-out', fill: 'forwards' });
+  const dep = 250, n = mines.length, pas = Math.min(120, 700 / Math.max(1, n)), cadence = Math.max(2, Math.ceil(n / 8));
+  mines.forEach((j, k) => {
+    anime(D.cases[j].firstElementChild, [{ transform: 'scale(.4)', opacity: 0 }, { transform: 'scale(1.2)', opacity: 1, offset: .6 }, { transform: 'scale(1)', opacity: 1 }], { duration: 300, delay: dep + k * pas, fill: 'backwards' });
+    if (k % cadence === 0) plus(() => son('DE1'), dep + k * pas);
+  });
+  const fin = dep + n * pas;
+  for (let k = 0; k < D.drap.length; k++) if (D.drap[k] && !D.mine[k]) anime(D.cases[k], [{ boxShadow: 'inset 0 0 0 0 rgba(233,132,157,0)' }, { boxShadow: 'inset 0 0 0 2px rgba(233,132,157,1)' }], { duration: 300, delay: fin + 100, fill: 'backwards' });
+  D.finPret = performance.now() + fin + 350;
+}
+/** Victoire : les cœurs deviennent des drapeaux arc-en-ciel en diagonale, confettis, lueur. */
+function celebrer(mines) {
+  if (doux()) { son('DE7'); D.finPret = 0; return; }
+  plus(() => son('DE7'), 200);
+  rejoue(q('#dm-champ'), 'fxj-lueur');
+  const ordre = mines.slice().sort((a, b) => (Math.floor(a / D.C) + (a % D.C)) - (Math.floor(b / D.C) + (b % D.C)));
+  const dep = 300, pas = Math.min(90, 800 / Math.max(1, ordre.length));
+  ordre.forEach((j, n) => plus(() => {
+    D.attente?.delete(j);
+    majCase(j);
+    rebondDrapeau(D.cases[j]);
+    anneau(D.cases[j], `${BANDES[n % BANDES.length]}99`, 12, 400);
+  }, dep + n * pas));
+  plus(confettis, dep + 100);
+  D.finPret = performance.now() + dep + ordre.length * pas + 500;
+}
 
 /** Cases voisines (jusqu'à 8) d'un index. */
 function voisins(i) {
@@ -260,7 +368,7 @@ function preparer(niv) {
   D.niveau = niv; D.L = n.lignes; D.C = n.colonnes; D.coeurs = n.coeurs; D.totalCoeurs = n.coeurs;
   const N = D.L * D.C;
   D.mine = new Uint8Array(N); D.nb = new Uint8Array(N); D.ouvert = new Uint8Array(N); D.drap = new Uint8Array(N);
-  D.nOuvert = 0; D.place = false; D.fini = false; D.explose = -1; D.run = null; D.t0 = 0; D.officiel = null; D.focus = 0;
+  D.attente = null; D.finPret = 0; D.nOuvert = 0; D.place = false; D.fini = false; D.explose = -1; D.run = null; D.t0 = 0; D.officiel = null; D.focus = 0;
   const champ = q('#dm-champ');
   champ.innerHTML = '';
   D.cases = [];
@@ -323,20 +431,24 @@ function ouvrir(i) {
   if (!D.place) { poser(i); D.place = true; }
   demarrer();
   if (D.mine[i]) { perdre(i); return; }
-  reveler(i);
+  const liste = reveler(i);
+  son(liste.length > 1 ? 'DE2' : 'DE1');
   verifierGain();
   maj();
+  animerOuverture(liste, i);
 }
 
-/** Ouvre une case et, de proche en proche, les zones vides qui l'entourent (drapeaux épargnés). */
+/** Ouvre une case et, de proche en proche, les zones vides qui l'entourent (drapeaux épargnés). Renvoie les cases ouvertes avec leur distance. */
 function reveler(i) {
-  const pile = [i];
-  while (pile.length) {
-    const j = pile.pop();
+  const file = [[i, 0]], ouvertes = [];
+  for (let h = 0; h < file.length; h++) {
+    const [j, d] = file[h];
     if (D.ouvert[j] || D.drap[j] || D.mine[j]) continue;
     D.ouvert[j] = 1; D.nOuvert++;
-    if (D.nb[j] === 0) for (const k of voisins(j)) if (!D.ouvert[k] && !D.drap[k]) pile.push(k);
+    ouvertes.push([j, d]);
+    if (D.nb[j] === 0) for (const k of voisins(j)) if (!D.ouvert[k] && !D.drap[k]) file.push([k, d + 1]);
   }
+  return ouvertes;
 }
 
 /** Clic sur un chiffre entouré du bon nombre de drapeaux : ouvre les voisines non marquées. */
@@ -344,20 +456,28 @@ function accorder(i) {
   if (D.nb[i] === 0) return;
   const vs = voisins(i);
   if (vs.reduce((s, j) => s + D.drap[j], 0) !== D.nb[i]) return;
+  const toutes = [];
+  let n = 0;
   for (const j of vs) {
     if (D.ouvert[j] || D.drap[j]) continue;
     if (D.mine[j]) { perdre(j); return; }
-    reveler(j);
+    for (const [k, d] of reveler(j)) toutes.push([k, d + n * 1.3]);
+    n++;
   }
+  if (toutes.length) { son('DE5'); anneau(D.cases[i], 'rgba(226,199,126,.45)', 14, 400); }
   verifierGain();
   maj();
+  animerOuverture(toutes);
 }
 
 /** Pose ou retire un drapeau (ne démarre pas la partie). */
 function basculer(i) {
   if (D.fini || D.ouvert[i]) return;
-  D.drap[i] = D.drap[i] ? 0 : 1;
+  const pose = !D.drap[i];
+  D.drap[i] = pose ? 1 : 0;
   maj();
+  son(pose ? 'DE3' : 'DE4');
+  if (pose) { rebondDrapeau(D.cases[i]); anneau(D.cases[i], 'rgba(233,132,157,.6)', 8, 380); }
 }
 
 /** Toutes les cases sans cœur sont ouvertes : gagné. */
@@ -365,9 +485,12 @@ function verifierGain() {
   if (D.fini || D.nOuvert !== D.L * D.C - D.totalCoeurs) return;
   D.fini = true;
   arreterHorloge();
-  for (let i = 0; i < D.L * D.C; i++) if (D.mine[i]) D.drap[i] = 1;
+  const mines = [];
+  for (let i = 0; i < D.L * D.C; i++) if (D.mine[i]) { D.drap[i] = 1; mines.push(i); }
+  if (!doux()) D.attente = new Set(mines);
   maj();
   finir(true);
+  celebrer(mines);
 }
 
 /** Un cœur a été ouvert : perdu. */
@@ -376,6 +499,7 @@ function perdre(i) {
   D.explose = i;
   arreterHorloge();
   maj();
+  exploser(i);
   finir(false);
 }
 
@@ -397,6 +521,9 @@ function majCase(i) {
   if (D.ouvert[i]) {
     cls.push('is-ouverte');
     if (D.nb[i]) { html = String(D.nb[i]); n = html; }
+  } else if (D.attente?.has(i)) {
+    cls.push('is-coeur');
+    html = COEUR_SVG;
   } else if (D.drap[i]) {
     cls.push('is-drapeau');
     html = DRAPEAU_SVG;
@@ -409,7 +536,7 @@ function majCase(i) {
   const nom = cls.join(' ');
   if (b.className !== nom) b.className = nom;
   if (n) b.dataset.n = n; else delete b.dataset.n;
-  if (b.innerHTML !== html) b.innerHTML = html;
+  if (b._h !== html) { b.innerHTML = html; b._h = html; }
   b.setAttribute('aria-label', etiquette(i));
 }
 
@@ -459,15 +586,20 @@ function majFin({ gagne, ok, secondes, reward = 0, sansEnvoi = false }) {
   const box = q('#dm-fin');
   if (!box) return;
   const t = fmtTemps(secondes);
+  const ou = D.explose >= 0 ? `Un cœur caché était là, ligne ${Math.floor(D.explose / D.C) + 1}, colonne ${(D.explose % D.C) + 1}.` : '';
   let titre, detail = '', ton = 'is-ko';
   if (sansEnvoi) { titre = gagne ? 'Gagné' : 'Perdu'; detail = 'Partie non enregistrée : le serveur n’a pas ouvert la partie.'; }
   else if (gagne && ok) {
     titre = `Gagné en ${t}`; ton = 'is-ok';
     detail = reward > 0 ? `Paillettes reçues : +${nf(reward)} ${paillSym()}` : (D.recompense ? 'Paillettes déjà reçues aujourd’hui.' : 'Partie enregistrée.');
   } else if (gagne) { titre = 'Partie non comptée'; detail = 'Le serveur n’a pas accepté ce temps.'; }
-  else { titre = `Perdu en ${t}`; detail = 'Le temps est mesuré par le serveur.'; }
-  box.hidden = false;
+  else { titre = `Perdu en ${t}`; detail = ou || 'Le temps est mesuré par le serveur.'; }
+  box.className = `sol-fin ${ton}`;
   box.innerHTML = `<p class="sol-grand ${ton === 'is-ok' ? 'jg-sand' : ''}">${esc(titre)}</p><p class="small muted">${esc(detail)}</p>`;
+  // La carte attend la fin de l'effet (explosion ou victoire), sans jamais retarder l'état de la partie.
+  const montrer = () => { box.hidden = false; rejoue(box, 'fxj-pop'); };
+  const attente = (D.finPret || 0) - performance.now();
+  if (attente > 0 && !doux()) plus(montrer, attente); else montrer();
 }
 
 /* ---------- Événements ---------- */

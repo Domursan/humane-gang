@@ -4,10 +4,14 @@
  * ou « Passer » dévoile l'image suivante, 6 essais au plus. Trouver à la 1re image rapporte 10 points, à la 6e 5 points.
  * Les images sont privées (bucket hg-jeux) : le stockage ne laisse lire que les images déjà dévoilées (politique
  * hg_jeux_obj_read), lues ici par URL signée courte.
+ * Effets (effets-jour.js), seulement après un essai confirmé par le serveur, jamais à l'ouverture : image suivante en fondu
+ * sur la précédente, numéro qui saute, champ secoué, sons D1 à D4, puis finDePartie (tampon, Paillettes).
  * RPC : hg_framed_state, hg_framed_guess. Gains versés par le serveur (10 ✦ trouvé, 3 ✦ sinon, réglables).
  * Exporte : mount(panel, ctx).
  */
 import { paillSym } from '../../commun/paillettes.js';
+import { motionAllowed } from '../../commun/core.js';
+import { sonJour, pointsDeGain, rejoue, secouer, finDePartie } from './effets-jour.js';
 import { loadCss, guessFormHtml, bindGuess, boardHtml, shareText, copyText } from './devine.js';
 import { boutonReponses } from '../../commun/core/admin-reponses.js';
 
@@ -18,7 +22,7 @@ const dateLong = new Intl.DateTimeFormat('fr-CH', { day: 'numeric', month: 'long
 const day = (d, f = dateFmt) => (d ? f.format(new Date(d + 'T12:00:00Z')) : '');
 
 let P = null, C = null;
-const S = { st: null, busy: false, urls: {}, view: 0, err: null };
+const S = { st: null, busy: false, urls: {}, view: 0, err: null, attendFin: false };
 
 /** Monte l'onglet. */
 export async function mount(panel, ctx) {
@@ -102,7 +106,7 @@ function render() {
       <p class="jd-end-t">${st.solved ? `Trouvé en ${esc(st.guesses.length)} essai${st.guesses.length > 1 ? 's' : ''} !` : 'Pas trouvé cette fois.'}</p>
       <p class="jd-end-ans">${esc(f.title || '')}${f.year ? ` <span class="muted">(${esc(f.year)})</span>` : ''}</p>
       ${f.seen_on ? `<p class="muted small">vu le ${esc(day(f.seen_on, dateLong))}${f.viewers ? `, ${esc(f.viewers)} spectateurs` : ''}</p>` : ''}
-      <p class="small">${st.reward ? `+${esc(st.reward)} ${paillSym()} crédités` : ''}</p>
+      <p class="small">${st.reward ? `<span class="jd-gain-v">+${esc(st.reward)} ${paillSym()}</span> crédités` : ''}</p>
       <div class="jd-actions"><button type="button" class="btn btn-sand" data-act="share">Partager le résultat</button>
       <button type="button" class="btn btn-ghost" data-act="livre">Le livre est mieux</button></div></div>`;
   } else {
@@ -119,22 +123,85 @@ function render() {
       exclude: new Set((st.guesses || []).map((x) => String(x.id)).filter(Boolean)),
       onPick: (id) => guess(id), onSkip: () => guess(null),
     });
+  } else if (!S.attendFin) {
+    habillerFin(false);
+  }
+}
+
+/**
+ * Habille la carte de fin (tampon, gain). animer: false pour une partie déjà finie à l'ouverture.
+ * @param {boolean} animer Vrai juste après le dernier essai du membre.
+ */
+function habillerFin(animer) {
+  const st = S.st, carte = P.querySelector('.jd-end');
+  if (!st || !carte) return;
+  const gain = Number(st.reward) > 0 ? Number(st.reward) : null;
+  const points = st.score != null && Number.isFinite(Number(st.score)) ? Number(st.score) : pointsDeGain(st.reward);
+  finDePartie(carte, { points, gain, animer, cibleGain: gain ? carte.querySelector('.jd-gain-v') : null });
+}
+
+/**
+ * Effets d'un essai confirmé par le serveur : image suivante en fondu sur la précédente, numéro qui saute, champ secoué, sons.
+ * @param {object} avant État avant l'essai.
+ * @param {object} st État après l'essai.
+ * @param {HTMLImageElement|null} ancienne Copie de l'image affichée avant l'essai.
+ */
+function effets(avant, st, ancienne) {
+  const g = st.guesses || [], n = g.length, x = g[n - 1];
+  if (!x) return;
+  const anime = motionAllowed();
+  const type = st.solved && st.finished ? 'ok' : x.id ? 'ko' : 'pas';
+  sonJour(type === 'ok' ? 'D4' : type === 'pas' ? 'D2' : 'D1');
+  rejoue(P.querySelectorAll('.jf-num')[n - 1], 'fxj-saut');
+  if (type === 'ko') secouer(P.querySelector('.jd-combo'));
+  const zone = P.querySelector('.jf-img'), neuve = zone?.querySelector('img');
+  if (anime && ancienne && neuve && st.frames.length > (avant?.frames?.length || 0)) {
+    // L'ancienne image reste dessous le temps que la nouvelle apparaisse.
+    ancienne.alt = '';
+    ancienne.setAttribute('aria-hidden', 'true');
+    ancienne.style.cssText = 'position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;';
+    zone.style.position = 'relative';
+    neuve.style.cssText = 'position: relative; opacity: 0; transition: none;';
+    neuve.before(ancienne);
+    void neuve.offsetWidth;
+    neuve.style.transition = 'opacity .45s ease';
+    neuve.style.opacity = '1';
+    setTimeout(() => { ancienne.remove(); neuve.style.cssText = ''; zone.style.position = ''; }, 520);
+  }
+  if (st.finished) {
+    const carte = P.querySelector('.jd-end');
+    const delai = anime ? (type === 'ok' ? 700 : 500) : 0;
+    if (delai && carte) carte.style.visibility = 'hidden';
+    setTimeout(() => {
+      const c = P.querySelector('.jd-end');
+      if (c) c.style.visibility = '';
+      S.attendFin = false;
+      habillerFin(true);
+    }, delai);
+  } else {
+    setTimeout(() => sonJour('D3'), anime ? 300 : 0);
   }
 }
 
 /** Envoie un essai (null = passer). */
 async function guess(id) {
   if (S.busy) return;
+  const avant = S.st;
+  const ancienne = P.querySelector('.jf-img img')?.cloneNode(true) || null;
+  let nouveau = false;
   S.busy = true; render();
   try {
     const { data, error } = await C.sb.rpc('hg_framed_guess', { p_film: id });
     if (error) throw error;
     S.st = data;
+    nouveau = (data.guesses?.length || 0) > (avant?.guesses?.length || 0);
+    S.attendFin = nouveau && !!data.finished;
     await signFrames();
     S.view = data.frames.length - 1;
     if (data.finished) C.toast(data.solved ? `Bravo ! +${data.reward} ${paillSym()}` : `C’était « ${data.film?.title} ». +${data.reward} ${paillSym()}`, 'ok');
   } catch (e) { C.toast(e?.message || String(e), 'error'); }
   S.busy = false; render();
+  if (nouveau && S.st) effets(avant, S.st, ancienne);
   P.querySelector('#jf-input')?.focus();
 }
 

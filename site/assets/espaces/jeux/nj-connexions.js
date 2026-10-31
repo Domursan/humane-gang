@@ -4,9 +4,13 @@
  * trouvé s'affiche en bandeau de couleur (sable, sauge, ardoise, prune, selon le niveau de difficulté). Trois mots sur quatre
  * dans un même groupe = « À un mot près ». Quatre erreurs et la grille est perdue ; en fin de partie, les quatre groupes
  * sont montrés. « Mélanger » réordonne les tuiles en local. Moteur : nj-grilles.js (hg_nj_grille_etat / hg_nj_grille_essai).
+ * Effets (réponse du serveur seulement, jamais à l'ouverture) : tuile choisie = son C1 ; groupe juste = les quatre tuiles sautent
+ * (90 ms d'écart) puis le bandeau apparaît en pop avec C2 ; « à un mot près » = secousse + C3 ; erreur = secousse + C4.
  * Exporte : mount(panel, ctx), resume(ctx).
  */
 import { monterGrille, resumerGrille, voisinFleche } from './nj-grilles.js';
+import { motionAllowed } from '../../commun/core.js';
+import { sonJour, secouer, rejoue, enCascade } from './effets-jour.js';
 
 const JEU = 'connexions';
 /** Erreurs permises avant la défaite. */
@@ -86,7 +90,7 @@ function lier(racine, st, ui, env) {
     const m = b.dataset.mot;
     if (ui.sel.includes(m)) ui.sel = ui.sel.filter((x) => x !== m);
     else if (ui.sel.length >= ERREURS_MAX) { env.dire('Quatre mots au plus : désélectionne-en un pour en choisir un autre.'); return; }
-    else ui.sel = [...ui.sel, m];
+    else { ui.sel = [...ui.sel, m]; sonJour('C1'); }
     majSelection();
   }));
   racine.querySelector('[data-act="vider"]').addEventListener('click', () => { ui.sel = []; majSelection(); });
@@ -111,6 +115,34 @@ function reponse(res) {
   if (res.ok && res.groupe) return { texte: `Groupe trouvé : ${res.groupe.titre}.`, ton: 'ok' };
   if (res.presque) return { texte: 'À un mot près !' };
   return { texte: 'Pas un groupe cette fois.', ton: 'error' };
+}
+
+/** Pause (ms) ; 0 n'attend pas. */
+const pause = (ms) => new Promise((r) => { if (ms > 0) setTimeout(r, ms); else r(); });
+
+/**
+ * Avant le redessin : groupe juste = les tuiles choisies sautent l'une après l'autre ; sinon secousse de la grille de tuiles.
+ * Les sons des erreurs partent ici, en même temps que la secousse. Sans mouvement : aucune attente, les sons restent.
+ */
+async function avantRendu({ res, panel }) {
+  const choisies = [...panel.querySelectorAll('.ng-tile.is-sel')];
+  if (res.ok && res.groupe) {
+    const ms = enCascade(choisies, (t) => rejoue(t, 'fxj-saut'), 90);
+    await pause(ms ? ms + 260 : 0);
+    return;
+  }
+  sonJour(res.presque ? 'C3' : 'C4');
+  secouer(panel.querySelector('.ng-tiles'));
+  await pause(motionAllowed() ? 420 : 0);
+}
+
+/** Après le redessin : le bandeau du groupe trouvé apparaît en pop avec C2 ; la carte de fin attend un instant. */
+function apresRendu({ res, apres, panel }) {
+  if (!(res.ok && res.groupe)) return 0;
+  sonJour('C2');
+  const bande = [...panel.querySelectorAll('.ng-bands .ng-band.is-trouve')].find((b) => b.querySelector('.ng-band-t')?.textContent === res.groupe.titre);
+  rejoue(bande, 'fxj-pop');
+  return apres.partie?.fini ? 500 : 0;
 }
 
 /** Texte de partage : une ligne de quatre carrés par essai (couleur du groupe trouvé, gris sinon). */
@@ -143,6 +175,8 @@ const CFG = {
   corps,
   lier,
   apresEssai: (ui) => { ui.sel = []; },
+  avantRendu,
+  apresRendu,
   reponse,
   finTexte: (st) => (st.partie.gagne ? 'Grille trouvée !' : 'Grille perdue : quatre erreurs.'),
   copie,

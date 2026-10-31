@@ -4,17 +4,22 @@
  * commune (vert sauge), 8 rare (ardoise), 16 épique (prune), 32 légendaire (sable), 64 mythique (arc-en-ciel), puis des
  * dégradés de plus en plus brillants. Flèches du clavier ou glissement du doigt (seuil 30 px ; la page ne défile pas).
  * Animations légères (glissement, fusion, apparition), désactivées si le système demande moins de mouvement.
+ * Fusions : un effet qui monte en gamme avec la rareté (étincelles, anneaux, halo doré, arc-en-ciel, rayons pour Au-delà),
+ * dessiné en DOM (CSS + WAAPI) dans un calque au-dessus de la grille, avec « +N » qui monte et le nom de la rareté.
+ * Plusieurs fusions au même coup : un seul son, celui de la plus haute (TU1 sans fusion, TU2 à TU7 sinon).
+ * Mouvement réduit : pas d'animation, seulement « +N » et le nom, immobiles. Fin : carte (plus grande tuile, score, record).
  * Score : somme des fusions ; meilleur score : le plus haut de ce navigateur et de ta place au classement de la semaine.
  * La partie se termine quand plus aucun coup n'est possible, ou avec « Terminer et enregistrer ». Le serveur reçoit
  * le score (hg_nj_solo_fin) ; la première partie du jour donne des Paillettes. Le temps de jeu est mesuré par le serveur
  * (hg_nj_solo_debut au premier coup).
  * Onglet : /pages/jeux/jeux.html#2048. Contrat : mount(panel, ctx), unmount(), resume(ctx).
- * Dépendances : core.js (errMsg), jeux/commun.js (chargerCss, nf, classementHtml).
+ * Dépendances : core.js (errMsg, motionAllowed), jeux/commun.js (chargerCss, nf, classementHtml), arcade/fx.js (sonFlash).
  * Données : RPC hg_nj_solo_etat, hg_nj_solo_debut, hg_nj_solo_fin (migration 138). Variante : 'classique'.
  * Exporte : mount, unmount, resume.
  */
 import { paillSym } from '../../commun/paillettes.js';
-import { esc, errMsg } from '../../commun/core.js';
+import { esc, errMsg, motionAllowed } from '../../commun/core.js';
+import { sonFlash } from '../arcade/fx.js';
 import { chargerCss, nf, classementHtml } from './commun.js';
 
 /* ---------- Constantes ---------- */
@@ -35,11 +40,20 @@ const RARETES = [
   { v: 128, nom: 'Au-delà', seuil: '128 et plus', fond: 'linear-gradient(135deg, #E2C77E, #FFF1BE 50%, #D8A75E)', txt: '#0E0E10' },
 ];
 
+/** Couleurs de l'arc-en-ciel (le logo) et or de la rareté légendaire. */
+const LOGO = ['#FE3104', '#FCA301', '#FBD32D', '#159946', '#2B5AE2', '#4E2398'];
+const OR = '#E2C77E';
+/** Couleurs des fusions par rang (2 à 7) : principale, puis claires. */
+const COUL_FX = [null, null, ['#6FA37F', '#B5E0C2'], ['#7E93C9', '#C4D1F2'], ['#9A88C4', '#D6CCF0'], [OR, '#FFF1BE'], LOGO, ['#FFF6D5', OR, '#FFFFFF']];
+/** Bordure de la carte de fin selon la rareté de la plus grande tuile (rang 1 à 7). */
+const BORD_FIN = [null, '#ABA7A0', '#6FA37F', '#7E93C9', '#9A88C4', OR, '#FBD32D', '#FFF1BE'];
+
 /* ---------- État ---------- */
 // panel, ctx : panneau et contexte ; gen : numéro de partie (ignore les réponses tardives) ; plateau, zone : éléments ;
 // tuiles : Map identifiant -> tuile { id, v, r, c, el } ; grille : 16 identifiants (0 = vide) ; nextId : dernier identifiant ;
 // score ; over : plus aucun coup ; fini : partie terminée et envoyée ; run : promesse de l'identifiant de partie ;
-// t0 : premier coup ; officiel : réponse de hg_nj_solo_fin ; gain, recompense, board ; touche : départ du glissement au doigt.
+// t0 : premier coup ; officiel : réponse de hg_nj_solo_fin ; gain, recompense, board ; touche : départ du glissement au doigt ;
+// fx : calque des effets ; record : meilleur score connu au début de la partie (pour « nouveau record » en fin).
 let G = null;
 
 /* ---------- Outils ---------- */
@@ -58,6 +72,9 @@ function memoriserMeilleur(v) {
 
 /** Rang de rareté d'une valeur : 2 → 1, 4 → 2, … (log2). */
 const rang = (v) => Math.round(Math.log2(v));
+
+/** Nom de la rareté d'une valeur. */
+const nomRarete = (v) => RARETES[Math.min(rang(v), 7) - 1].nom;
 
 /** Index d'une case (ligne, colonne) dans la grille à plat. */
 const idx = (r, c) => r * TAILLE + c;
@@ -99,7 +116,7 @@ function peutJouer() {
 export async function mount(panel, ctx) {
   chargerCss('solo');
   G = { panel, ctx, gen: 0, tuiles: new Map(), grille: new Array(TAILLE * TAILLE).fill(0), nextId: 0, score: 0, over: false, fini: false,
-    run: null, t0: 0, officiel: null, gain: 0, recompense: false, board: [], touche: null, timers: new Set() };
+    run: null, t0: 0, officiel: null, gain: 0, recompense: false, board: [], touche: null, timers: new Set(), fx: null, record: 0 };
   panel.innerHTML = `<div class="jg sol sol-jeu2048">
     <header class="sol-head">
       <div>
@@ -159,6 +176,10 @@ export async function mount(panel, ctx) {
 
   G.plateau = q('#g-plateau');
   G.zone = q('#g-zone');
+  G.fx = document.createElement('div');
+  G.fx.className = 'sol-2048-fx';
+  G.fx.setAttribute('aria-hidden', 'true');
+  G.zone.appendChild(G.fx);
   panel.addEventListener('click', onClic);
   q('#g-jeu').addEventListener('keydown', onClavier);
   G.plateau.addEventListener('pointerdown', onAppui);
@@ -239,7 +260,7 @@ async function terminer(cause) {
   try {
     const id = await G.run;
     if (!G || gen !== G.gen) return;
-    if (!id) { majFin({ type: 'non_envoye' }); return; }
+    if (!id) { majFin({ type: 'non_envoye', score }); return; }
     const { data, error } = await sb.rpc('hg_nj_solo_fin', { p_run: id, p_res: { gagne: true, score } });
     if (!G || gen !== G.gen) return;
     if (error) throw error;
@@ -252,7 +273,7 @@ async function terminer(cause) {
     majMeilleur();
   } catch (e) {
     toast(`2048 : ${errMsg(e)}`, 'error');
-    if (G && gen === G.gen) majFin({ type: 'non_envoye' });
+    if (G && gen === G.gen) majFin({ type: 'non_envoye', score });
   }
 }
 
@@ -263,6 +284,8 @@ function nouvellePartie() {
   for (const t of G.tuiles.values()) t.el?.remove();
   G.tuiles.clear();
   G.grille.fill(0);
+  G.fx?.replaceChildren();
+  G.record = recordActuel();
   G.score = 0; G.over = false; G.fini = false; G.run = null; G.t0 = 0; G.officiel = null;
   q('#g-fin').hidden = true;
   apparaitre();
@@ -366,7 +389,116 @@ function glisser(dir) {
     t.el.classList.add('is-fusion');
     minuterie(() => t.el.classList.remove('is-fusion'), 200);
   }
-  return { gagne };
+  return { gagne, fusions: survivantes.map((t) => ({ t, v: t.v })) };
+}
+
+/* ---------- Effets de fusion (DOM, calque au-dessus de la grille) ---------- */
+/** Petit élément du calque, avec ses propriétés CSS. */
+function piece(parent, cls, css) {
+  const e = document.createElement('span');
+  e.className = 'sol-fx-e ' + cls;
+  if (css) e.style.cssText = css;
+  parent.appendChild(e);
+  return e;
+}
+
+/** Anime un élément (WAAPI) ; il reste invisible avant son départ (opacité de base 0). */
+function anime(e, images, duree, delai = 0) {
+  e.animate(images, { duration: duree, delay: delai, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' });
+}
+
+/** Éclats carrés ou étoiles qui partent du centre. */
+function eclatsFx(pt, k, n, cols, v, vie, cls, taille) {
+  for (let i = 0; i < n; i++) {
+    const a = (Math.PI * 2 * i) / n + Math.random(), d = v * k * (.5 + Math.random() * .7) * vie / 1000 * 1.4;
+    const e = piece(pt, cls, `background:${cols[i % cols.length]};width:${taille}px;height:${taille}px;margin:-${taille / 2}px 0 0 -${taille / 2}px`);
+    anime(e, [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${Math.cos(a) * d}px,${Math.sin(a) * d + 22 * k}px) scale(.4)`, opacity: 0 }], vie);
+  }
+}
+
+/** Anneau qui s'élargit (rayons r0 à r1 en px de maquette). */
+function anneauFx(pt, k, r0, r1, c, vie, delai = 0) {
+  const e = piece(pt, 'sol-fx-anneau', `border-color:${c}`);
+  anime(e, [{ transform: `scale(${r0 * k / 50})`, opacity: 1 }, { transform: `scale(${r1 * k / 50})`, opacity: 0 }], vie, delai);
+}
+
+/** Rayons qui partent du centre. */
+function rayonsFx(pt, k, n, r0, r1, c, vie) {
+  for (let i = 0; i < n; i++) {
+    const a = (360 * i) / n, e = piece(pt, 'sol-fx-rayon', `background:${c}`);
+    anime(e, [{ transform: `rotate(${a}deg) translateX(${r0 * k}px) scaleX(.2)`, opacity: 1 }, { transform: `rotate(${a}deg) translateX(${r1 * k}px) scaleX(1)`, opacity: 0 }], vie);
+  }
+}
+
+/** Halo lumineux qui s'éteint. */
+function haloFx(pt, k, r, rgb) {
+  const e = piece(pt, 'sol-fx-halo', `background:radial-gradient(circle, rgba(${rgb},.55), rgba(${rgb},0) 70%)`);
+  anime(e, [{ transform: `scale(${.3 * r * k / 100})`, opacity: 1 }, { transform: `scale(${r * k / 100})`, opacity: 0 }], 700);
+}
+
+/** Texte qui monte (« +N », nom de la rareté) ; immobile en mouvement réduit. */
+function texteFx(pt, k, txt, c, haut, taille, anim) {
+  const e = piece(pt, 'sol-fx-txt', `color:${c};font-size:${taille}px;opacity:1;margin-top:-${haut}px`);
+  e.textContent = txt;
+  if (anim) anime(e, [{ transform: 'translate(-50%,0)', opacity: 1, offset: 0 }, { transform: `translate(-50%,${-34 * k}px)`, opacity: 1, offset: .65 }, { transform: `translate(-50%,${-40 * k}px)`, opacity: 0 }], 950);
+}
+
+/** Éclair de couleur sur toute la grille. */
+function eclairFx(rgb, alpha) {
+  const e = piece(G.fx, 'sol-fx-eclair', `background:rgb(${rgb})`);
+  const a = e.animate([{ opacity: alpha }, { opacity: 0 }], { duration: 320, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' });
+  a.onfinish = a.oncancel = () => e.remove();
+}
+
+/** Petite secousse de la grille. */
+function secoueFx(ms = 260, a = 5) {
+  G.plateau.animate([{ transform: 'translate(0,0)' }, { transform: `translate(${a}px,${-a / 2}px)` }, { transform: `translate(${-a}px,${a / 2}px)` },
+    { transform: `translate(${a / 2}px,0)` }, { transform: 'translate(0,0)' }], { duration: ms, easing: 'ease-out' });
+}
+
+/**
+ * Effet d'une fusion : monte en gamme avec la rareté (2 = Peu commune … 7 et plus = Au-delà).
+ * @param {{r: number, c: number, el: HTMLElement}} t Tuile d'arrivée.
+ * @param {number} v Valeur obtenue.
+ */
+function effetFusion(t, v) {
+  const r = Math.min(rang(v), 7);
+  if (r < 2) return;
+  const anim = motionAllowed(), nom = nomRarete(v), cols = COUL_FX[r];
+  const pt = document.createElement('div');
+  pt.className = 'sol-fx-pt';
+  pt.style.setProperty('--r', String(t.r));
+  pt.style.setProperty('--c', String(t.c));
+  G.fx.appendChild(pt);
+  const k = (t.el.offsetWidth || 69) / 69;
+  texteFx(pt, k, `+${nf(v)}`, cols[0], 40 * k, 20, anim);
+  if (r >= 4) texteFx(pt, k, `${nom} !`, r === 4 ? cols[1] : r === 5 ? OR : '#fff', 62 * k, r === 4 ? 14 : 16, anim);
+  if (anim) {
+    if (r === 2) { eclatsFx(pt, k, 6, cols, 80, 450, 'sol-fx-p', 3); anneauFx(pt, k, 10, 46, cols[0], 350); }
+    else if (r === 3) { eclatsFx(pt, k, 9, cols, 95, 500, 'sol-fx-p', 3); eclatsFx(pt, k, 2, [cols[1]], 60, 500, 'sol-fx-etoile', 8); anneauFx(pt, k, 10, 54, cols[0], 400); }
+    else if (r === 4) { eclatsFx(pt, k, 12, cols, 110, 550, 'sol-fx-p', 3); eclatsFx(pt, k, 4, [cols[1]], 80, 600, 'sol-fx-etoile', 8); anneauFx(pt, k, 10, 60, cols[0], 400); anneauFx(pt, k, 6, 80, cols[1], 500); }
+    else if (r === 5) {
+      eclatsFx(pt, k, 14, [cols[1]], 130, 800, 'sol-fx-etoile', 8); eclatsFx(pt, k, 12, cols, 120, 600, 'sol-fx-p', 3);
+      anneauFx(pt, k, 10, 70, OR, 500); rayonsFx(pt, k, 12, 30, 80, cols[1], 500); haloFx(pt, k, 180, '251,211,45');
+    } else if (r === 6) {
+      LOGO.forEach((c, i) => anneauFx(pt, k, 10, 60 + i * 12, c, 550, i * 60));
+      eclatsFx(pt, k, 24, LOGO, 150, 800, 'sol-fx-p', 4); eclatsFx(pt, k, 10, ['#fff'], 140, 800, 'sol-fx-etoile', 8);
+      haloFx(pt, k, 240, '255,255,255'); eclairFx('255,255,255', .22);
+    } else {
+      rayonsFx(pt, k, 18, 34, 150, '#FFF6D5', 900); rayonsFx(pt, k, 12, 20, 110, OR, 700);
+      eclatsFx(pt, k, 20, ['#fff'], 170, 1000, 'sol-fx-etoile', 8); eclatsFx(pt, k, 24, LOGO.concat(['#fff']), 170, 900, 'sol-fx-p', 4);
+      for (let j = 0; j < 4; j++) anneauFx(pt, k, 10, 70 + j * 25, j % 2 ? OR : '#fff', 600, j * 90);
+      haloFx(pt, k, 320, '255,241,190'); eclairFx('255,246,213', .4); secoueFx();
+    }
+  }
+  minuterie(() => pt.remove(), 1500);
+}
+
+/** Effets et son d'un coup : un seul son, celui de la fusion la plus haute (TU1 si rien ne fusionne). */
+function retourCoup(fusions) {
+  let max = 0;
+  for (const f of fusions) { max = Math.max(max, f.v); effetFusion(f.t, f.v); }
+  sonFlash('TU' + (max ? Math.min(7, rang(max)) : 1));
 }
 
 /** Un coup : glisse, fait apparaître une tuile, et termine si plus rien n'est possible. */
@@ -376,11 +508,13 @@ function jouer(dir) {
   if (!res) return;
   demarrer();
   G.score += res.gagne;
+  retourCoup(res.fusions);
   apparaitre();
   if (G.score > meilleurLocal()) memoriserMeilleur(G.score);
   maj();
   if (!peutJouer()) {
     G.over = true;
+    if (motionAllowed()) { secoueFx(350); eclairFx('78,35,152', .3); }
     maj();
     terminer('bloquee');
   }
@@ -403,6 +537,12 @@ function maj() {
   const st = q('#g-statut');
   if (st.textContent !== texte) st.textContent = texte;
   q('#g-finir').disabled = !G.run || G.fini;
+}
+
+/** Meilleur score connu : ce navigateur et ta place au classement de la semaine. */
+function recordActuel() {
+  const moi = G.ctx.me?.id;
+  return Math.max(meilleurLocal(), G.board.find((r) => r.user_id === moi)?.score || 0);
 }
 
 /** Meilleur score : le plus haut entre ce navigateur, la partie en cours et le classement de la semaine. */
@@ -450,8 +590,21 @@ function majFin({ type, cause, score = 0, reward = 0 }) {
     titre = 'Partie non enregistrée'; detail = 'Le serveur n’a pas ouvert la partie. Rafraîchis la page pour réessayer.';
   }
   if (cause === 'bloquee' && type === 'ok') detail = `Plus aucun coup possible. ${detail}`;
+  let max = 0;
+  for (const t of G.tuiles.values()) max = Math.max(max, t.v);
+  const compte = type === 'ok';
+  const nouveau = compte && score > G.record, ecart = G.record - score;
+  const stats = max ? `<p class="sol-fin-tuile">Plus grande tuile : ${esc(nf(max))}, ${esc(nomRarete(max))}.</p>` : '';
+  const scoreJoue = !compte ? `<p class="small muted">Score joué : ${esc(nf(score))}.</p>` : '';
+  const record = !compte ? scoreJoue : nouveau ? '<p class="sol-fin-record">Nouveau record</p>'
+    : G.record > 0 ? `<p class="small muted">Meilleur score ${esc(nf(G.record))}. Il t’a manqué ${esc(nf(ecart))} point${ecart > 1 ? 's' : ''}.</p>` : '';
+  box.style.setProperty('--bord', BORD_FIN[Math.min(rang(max || 2), 7)]);
   box.hidden = false;
-  box.innerHTML = `<p class="sol-grand ${ton === 'is-ok' ? 'jg-sand' : ''}">${esc(titre)}</p><p class="small muted">${esc(detail)}</p>`;
+  box.innerHTML = `<p class="sol-grand ${ton === 'is-ok' ? 'jg-sand' : ''}">${esc(titre)}</p>${stats}${record}<p class="small muted">${esc(detail)}</p>`;
+  box.classList.remove('is-entree');
+  void box.offsetWidth;
+  if (motionAllowed()) box.classList.add('is-entree');
+  sonFlash('SO5');
 }
 
 /* ---------- Événements ---------- */

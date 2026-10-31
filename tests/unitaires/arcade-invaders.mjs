@@ -95,5 +95,18 @@ check(!JEU.fini(im.s) && im.t >= 120 - 1e-6 && im.info.vieMin === 3, `code « im
 const f = joue({ coeurs: false, immortel: false }, 300, immobile);
 check(JEU.fini(f.s) && f.t < 300, `sans code et sans jouer : la partie finit (après ${f.t.toFixed(1)} s, score ${f.s.score})`);
 
+// 5. Derniers effets (dureeFin) : le dernier cœur éclate, plus rien ne compte ; la formation ne bouge plus.
+const m = JEU.init({ reduit: false });
+m.triche = { coeurs: false, immortel: false };
+m.vies = 1; m.attente = 0; m.tirE = 9;
+m.gouttes = [{ x: m.x, y: 379 }];
+const vide = { cible: null, fleche: 0, action: false, tenu: false };
+JEU.update(m, 0.016, vide);
+const formX = m.formX, gouttes = m.gouttes.length;
+check(JEU.fini(m) && m.coeurs.length === 1, 'dernière goutte : partie finie, cœur différé en attente');
+let eclat = false;
+for (let t = 0; t < JEU.dureeFin(m); t += 0.016) { JEU.update(m, 0.016, vide); eclat ||= m.fx.some((x) => x.k === 'demi'); }
+check(eclat && m.vies === 0 && m.score === 0 && m.formX === formX && m.gouttes.length === gouttes, 'dureeFin : le cœur éclate, score, vies et formation figés');
+
 console.log(`\n${ok} OK, ${ko} ECHEC(S)`);
 process.exit(ko ? 1 : 0);

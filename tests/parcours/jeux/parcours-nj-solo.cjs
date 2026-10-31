@@ -163,7 +163,11 @@ const entier = (t) => Number(String(t).replace(/\D/g, '')) || 0;
   check(finSu && finSu[2].p_res.gagne === true && finSu[2].p_res.grille === SOLUTION, 'sudoku : grille complète envoyée au serveur (81 chiffres, solution)');
   const tempsSu = await p.evaluate(() => window.__SOLO.parties.find((x) => x.jeu === 'sudoku')?.secondes ?? -1);
   check((await p.locator('#su-fin .sol-grand').innerText()) === `Grille du jour terminée en ${mmss(tempsSu)}`, `sudoku : temps officiel affiché (${mmss(tempsSu)})`);
+  check((await p.locator('.sol-s.fxj-eclat').count()) > 0, 'sudoku effets : une ligne, une colonne ou un bloc complété s’est éclairé');
+  check((await p.locator('#su-fin.fxj-entree .fxj-tampon').count()) === 1, 'sudoku effets : la carte de fin gagnée reçoit le tampon et l’entrée');
+  await sleep(1800); // le gain défile après l'entrée de la carte de fin
   check((await p.locator('#su-fin').innerText()).includes('Paillettes reçues : +10 ✦'), 'sudoku : Paillettes reçues');
+  check((await p.locator('#su-fin .fxj-gain').count()) === 0 && ((await p.locator('#su-fin').innerText()).match(/\+10/g) || []).length === 1, 'sudoku effets : le gain n’est affiché qu’une fois');
   check((await p.locator('#su-board').innerText()).includes('Ethan'), 'sudoku : classement du jour mis à jour');
   check((await hscroll(p)) <= 0, '1280 px : pas de défilement horizontal (sudoku)');
   await p.screenshot({ path: `${SHOTS}/nj-sudoku-1280.png`, fullPage: true });
@@ -176,6 +180,7 @@ const entier = (t) => Number(String(t).replace(/\D/g, '')) || 0;
   await p.waitForFunction(() => !document.querySelector('#su-fin')?.hidden, null, { timeout: 3000 }).catch(() => {});
   check((await p.locator('#su-fin .sol-grand').innerText()) === 'Grille du jour terminée en 05:12', 'déjà terminée : « Grille du jour terminée en 05:12 »');
   check(await p.locator('#su-rejouer').isVisible(), 'déjà terminée : bouton « Rejouer sans score » visible');
+  check((await p.locator('#su-fin .fxj-tampon').count()) === 1 && (await p.locator('#su-fin.fxj-entree').count()) === 0 && (await p.locator('.fxj-eclat').count()) === 0, 'déjà terminée : tampon seul, aucune animation à l’ouverture');
   await p.click('.sol-s[data-i="2"]');
   await p.keyboard.press('4');
   await sleep(200);
@@ -196,6 +201,7 @@ const entier = (t) => Number(String(t).replace(/\D/g, '')) || 0;
   }
   await p.waitForFunction(() => document.querySelector('#su-fin')?.textContent.includes('Grille incorrecte'), null, { timeout: 5000 }).catch(() => {});
   check((await p.locator('#su-fin').innerText()).includes('Grille incorrecte'), 'refusée : « Grille incorrecte » affiché');
+  check((await p.locator('#su-grille.fxj-secoue').count()) === 1 && (await p.locator('#su-fin .fxj-tampon').count()) === 0, 'refusée : la grille secoue, pas de carte de fin habillée');
   deb = (await log(p)).filter((e) => e[0] === 'rpc' && e[1] === 'hg_nj_solo_debut');
   check(deb.length === 2, 'refusée : une nouvelle partie chronométrée est ouverte (2 débuts)');
   check(erreursJs(p).length === 0, 'refusée : aucune erreur JS' + (erreursJs(p).length ? ' — ' + erreursJs(p).join(' | ') : ''));

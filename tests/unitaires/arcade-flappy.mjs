@@ -24,7 +24,7 @@ const rien = () => ({});
 // 1. Joueur intelligent : 120 s sans exception, il tient la partie et marque des points.
 let a;
 try {
-  a = simule(F, { secondes: 120, entree: intelligent });
+  a = simule(F, { secondes: 120, reduit: true, entree: intelligent }); // reduit : pas de particules, qui consommeraient le hasard fixé
   check(a.s.score > 0 && !F.fini(a.s), `joueur intelligent : 120 s sans exception, partie en cours (score ${a.s.score})`);
 } catch (e) {
   ko++; console.log('ECHEC  joueur intelligent : exception ' + e.message);
@@ -57,6 +57,11 @@ check(F.fini(sansCode.s) && sansCode.t < 5, 'sans code, le même jeu mal joué f
 // 4. Sans code et sans jouer, la partie finit (tuyau, sol ou plafond).
 const seul = simule(F, { secondes: 600, entree: rien });
 check(F.fini(seul.s) && seul.t < 600, `sans code et sans jouer : la partie finit (à ${seul.t.toFixed(1)} s)`);
+
+// 5. Derniers effets (dureeFin) : l'éclat du cœur finit de se jouer, le score ne bouge plus.
+const scoreMort = seul.s.score, ecoule = seul.s.ecoule;
+for (let t = 0; t < F.dureeFin(seul.s); t += 1 / 30) F.update(seul.s, 1 / 30, { action: false });
+check(seul.s.fx.length === 0 && seul.s.flash === 0 && seul.s.score === scoreMort && seul.s.ecoule === ecoule, 'dureeFin : éclat terminé, partie figée');
 
 console.log(`\n${ok} OK, ${ko} ECHEC(S)`);
 process.exit(ko ? 1 : 0);

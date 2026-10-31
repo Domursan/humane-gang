@@ -120,7 +120,8 @@ function jeux(fn, a = {}) {
       if (x.answer) return ko('Tu as déjà répondu à cette question');
       x.answer = a.p_response;
       const c = x.answer === x.good;
-      return ok({ correct: c, reward: c ? x.reward : 0, explanation: x.context, solution: [x.good] });
+      const jour = G.jourFait ? 0 : (c ? 200 : 50); G.jourFait = true; // première citation du jour : la partie du jour (migration 181)
+      return ok({ correct: c, reward: c ? x.reward : 0, jour_gain: jour, explanation: x.context, solution: [x.good] });
     }
     case 'hg_quote_propose': {
       window.__LOG.push(['quote_propose', a.p_quote, a.p_author, a.p_context]);

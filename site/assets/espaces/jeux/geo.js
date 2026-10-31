@@ -4,15 +4,21 @@
  * puis le résultat : vraie position, ligne entre les deux points, distance, score sur 5 000, Paillettes, sortie
  * d'origine. Classements du jour et de la semaine ; archive des manches passées jouable « pour l'honneur ».
  * La réponse ne quitte le serveur qu'après le vote (RPC hg_geo_guess).
+ * Après le vote (effets de la maquette des jeux quotidiens) : épingle posée + son, trajet tracé + son, vraie épingle + son,
+ * score qui défile + son, puis finDePartie (tampon de points, Paillettes) ; une manche « pour l'honneur » n'a pas de fin.
+ * Rien de tout cela à l'ouverture d'une manche déjà jouée : résultat direct, tampon sans animation. Sans mouvement : résultat
+ * immédiat, sons conservés.
  * Onglet : /pages/jeux/jeux.html#geo. Contrat : mount(panel, ctx), unmount().
- * Dépendances : photos.js (adresses signées, visionneuse), leaflet-load.js (carte), jeux/commun.js, core.js (errMsg).
+ * Dépendances : photos.js (adresses signées, visionneuse), leaflet-load.js (carte), jeux/commun.js, core.js (errMsg, motionAllowed),
+ *   jeux/effets-jour.js (sons, compteur, fin de partie).
  * Données : RPC hg_geo_today, hg_geo_guess, hg_geo_board, hg_geo_archive (migration 083).
  */
-import { errMsg } from '../../commun/core.js';
+import { errMsg, motionAllowed } from '../../commun/core.js';
 import { signedUrl, signedUrls, openLightbox } from '../irl/photos.js';
 import { loadLeaflet, addOsmTiles } from '../../commun/leaflet-load.js';
 import { chargerCss, nf, km, gainHtml, classementHtml, jourLong } from './commun.js';
 import { boutonReponses } from '../../commun/core/admin-reponses.js';
+import { sonJour, rejoue, compteur, finDePartie } from './effets-jour.js';
 
 /* ---------- Constantes ---------- */
 /** Vue de départ de la carte : Suisse et pays voisins. */
@@ -217,8 +223,7 @@ async function valider() {
   if (!G.round.honor && G.today) G.today.mine = data;
   q('#geo-actions').hidden = true;
   q('#geo-hint').hidden = true;
-  resultat(data, true);
-  if (data.reward > 0) toast(`+${nf(data.reward)} Paillettes`, 'success');
+  resultat(data, true, true);
   G.archive = null;
   if (q('#geo-archive').open) chargerArchive();
   chargerClassement();
@@ -226,39 +231,115 @@ async function valider() {
 
 /**
  * Résultat d'une manche jouée : deux épingles et la ligne qui les relie, score, distance, gain et sortie d'origine.
+ * Juste après le vote (animer) : épingle posée, trajet tracé, vraie épingle, score qui défile, puis finDePartie.
  * @param {object} m Tentative { lat, lon, distance_m, score, reward, honor, solution }.
  * @param {boolean} focus Donne le focus au résultat (juste après le vote).
+ * @param {boolean} [animer] true seulement juste après le vote du membre (jamais à l'ouverture d'une manche déjà jouée).
  */
-function resultat(m, focus) {
+function resultat(m, focus, animer = false) {
   const { esc } = G.ctx;
+  const manche = G.round;
   const sol = m.solution || {};
-  if (G.map && Number.isFinite(sol.lat) && Number.isFinite(sol.lon)) {
-    const L = G.L;
-    G.layer.clearLayers();
-    G.pinMarker = null;
-    const moi = [m.lat, m.lon], vrai = [sol.lat, sol.lon];
-    L.polyline([moi, vrai], { color: '#F2EFEA', weight: 2, dashArray: '6 5', interactive: false }).addTo(G.layer);
-    L.marker(vrai, { icon: pinIcon('vrai'), title: 'Vrai lieu', alt: 'Vrai lieu', keyboard: false }).addTo(G.layer)
-      .bindTooltip('Vrai lieu', { permanent: true, direction: 'top', className: 'geo-tip geo-tip-vrai', offset: [0, -10] });
-    L.marker(moi, { icon: pinIcon('moi'), title: 'Ton épingle', alt: 'Ton épingle', keyboard: false }).addTo(G.layer)
-      .bindTooltip('Ton épingle', { permanent: true, direction: 'bottom', className: 'geo-tip geo-tip-moi', offset: [0, 10] });
-    G.map.fitBounds([moi, vrai], { padding: [48, 48], maxZoom: 15 });
-  }
-  const gain = m.honor ? '<span class="pill">Pour l’honneur</span>' : m.reward > 0 ? gainHtml(m.reward) : '<span class="pill">0 Paillette</span>';
+  const points = Math.max(0, Math.min(10, Math.round((Number(m.score) || 0) / 500))); // 500 points sur 5 000 = 1 point
+  const avecGain = !m.honor && m.reward > 0;
+  const placee = G.map && Number.isFinite(sol.lat) && Number.isFinite(sol.lon);
+  const moi = [m.lat, m.lon], vrai = [sol.lat, sol.lon];
+  const fx = animer && motionAllowed();
+  const vivant = () => !!G && G.round === manche;
+  const mettre = (kind, pos, titre, tip) => {
+    const mk = G.L.marker(pos, { icon: pinIcon(kind), title: titre, alt: titre, keyboard: false }).addTo(G.layer);
+    mk.bindTooltip(titre, tip);
+    return mk;
+  };
+  const tipVrai = { permanent: true, direction: 'top', className: 'geo-tip geo-tip-vrai', offset: [0, -10] };
+  const tipMoi = { permanent: true, direction: 'bottom', className: 'geo-tip geo-tip-moi', offset: [0, 10] };
+  const cadrer = () => G.map.fitBounds([moi, vrai], { padding: [48, 48], maxZoom: 15, animate: false });
+  const trait = { color: '#F2EFEA', weight: 2, dashArray: '6 5', interactive: false };
   const date = sol.event_date ? ` (${new Intl.DateTimeFormat('fr-CH', { month: 'long', year: 'numeric', timeZone: 'Europe/Zurich' }).format(new Date(sol.event_date))})` : '';
   const origine = sol.label ? `<div class="geo-origin">
       <span class="small">C’était : <b>${esc(sol.label)}</b>${sol.event_title ? `, ${esc(sol.event_title)}${esc(date)}` : ''}</span>
       ${sol.event_id ? `<a class="small geo-album" href="/pages/irl/irl.html#event-${encodeURIComponent(sol.event_id)}">Voir l’album</a>` : ''}
     </div>` : '';
+  // Le gain est écrit par finDePartie dans la pastille (+ N, qui défile) ; sinon pastille fixe.
+  const gain = m.honor ? '<span class="pill">Pour l’honneur</span>' : avecGain ? '<span class="pill jg-gain" data-geo-gain></span>' : '<span class="pill">0 Paillette</span>';
   const box = q('#geo-result');
-  box.innerHTML = `<div class="jg-between">
-      <div><div class="jg-display geo-score">${nf(m.score)} <span class="small muted">/ 5 000</span></div>
+  const ecrireScore = (v) => `${nf(v)} <span class="small muted">/ 5 000</span>`;
+  /** Carte de résultat (la fin de partie précédente est effacée : la carte est réutilisée d'une manche à l'autre). */
+  const remplir = (score) => {
+    delete box.dataset.fxj;
+    box.classList.remove('fxj-carte', 'fxj-entree');
+    box.innerHTML = `<div class="jg-between">
+      <div><div class="jg-display geo-score">${ecrireScore(score)}</div>
       <div class="small muted">Ton épingle est à ${esc(km(m.distance_m))}</div></div>
       ${gain}
     </div>${origine}`;
-  box.hidden = false;
-  q('#geo-status').textContent = `Résultat : ${nf(m.score)} points sur 5 000, à ${km(m.distance_m)} du vrai lieu${sol.label ? ` (${sol.label})` : ''}.`;
-  if (focus) box.focus({ preventScroll: false });
+    box.hidden = false;
+  };
+  /** Dernier temps : message d'état, tampon et gain (sauf manche pour l'honneur), toast, focus. */
+  const finir = () => {
+    if (!vivant()) return;
+    q('#geo-status').textContent = `Résultat : ${nf(m.score)} points sur 5 000, à ${km(m.distance_m)} du vrai lieu${sol.label ? ` (${sol.label})` : ''}.`;
+    const cible = box.querySelector('[data-geo-gain]');
+    if (cible) cible.style.visibility = '';
+    if (!m.honor) finDePartie(box, { points, gain: avecGain ? m.reward : null, animer, cibleGain: avecGain ? cible : null });
+    if (animer && avecGain) G.ctx.toast(`+${nf(m.reward)} Paillettes`, 'success');
+    if (focus) box.focus({ preventScroll: false });
+  };
+
+  if (!fx) {
+    // Ouverture d'une manche déjà jouée, ou mouvement réduit : résultat direct.
+    if (placee) {
+      G.layer.clearLayers();
+      G.pinMarker = null;
+      G.L.polyline([moi, vrai], trait).addTo(G.layer);
+      mettre('vrai', vrai, 'Vrai lieu', tipVrai);
+      mettre('moi', moi, 'Ton épingle', tipMoi);
+      cadrer();
+    }
+    remplir(m.score);
+    if (animer && m.honor) sonJour('P3');
+    finir();
+    return;
+  }
+
+  // Juste après le vote : la séquence de la maquette (0 ms, 450 ms, 1150 ms, 1500 ms, 2350 ms).
+  const etape = (ms, fn) => setTimeout(() => { if (vivant()) fn(); }, ms);
+  q('#geo-status').textContent = 'Résultat en cours…';
+  if (placee) {
+    cadrer();
+    if (G.pinMarker) G.pinMarker.bindTooltip('Ton épingle', tipMoi);
+    else G.pinMarker = mettre('moi', moi, 'Ton épingle', tipMoi);
+    rejoue(G.pinMarker.getElement?.()?.firstElementChild, 'fxj-pop');
+  }
+  sonJour('P1');
+  etape(450, () => {
+    sonJour('P2');
+    if (!placee) return;
+    const ligne = G.L.polyline([moi, vrai], trait).addTo(G.layer);
+    const el = ligne.getElement?.();
+    if (!el?.getTotalLength) return;
+    const lg = el.getTotalLength();
+    el.style.strokeDasharray = String(lg);
+    el.style.strokeDashoffset = String(lg);
+    void el.getBoundingClientRect();
+    el.style.transition = 'stroke-dashoffset .7s ease';
+    el.style.strokeDashoffset = '0';
+    setTimeout(() => { el.style.transition = ''; el.style.strokeDasharray = ''; el.style.strokeDashoffset = ''; }, 760);
+  });
+  etape(1150, () => {
+    sonJour('P1');
+    if (!placee) return;
+    const mk = mettre('vrai', vrai, 'Vrai lieu', tipVrai);
+    rejoue(mk.getElement?.()?.firstElementChild, 'fxj-pop');
+  });
+  etape(1500, () => {
+    sonJour('P3');
+    remplir(0);
+    const cible = box.querySelector('[data-geo-gain]');
+    if (cible) cible.style.visibility = 'hidden';
+    compteur(box.querySelector('.geo-score'), Number(m.score) || 0, ecrireScore, 700);
+  });
+  etape(2350, finir);
 }
 
 /* ---------- Classement ---------- */

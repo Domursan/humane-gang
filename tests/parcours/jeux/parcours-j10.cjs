@@ -52,6 +52,8 @@ const FAKE_YT = () => {
   await p.click('[data-act="passer"]');
   await p.waitForFunction(() => document.querySelector('.jd-pts-pill')?.textContent.includes('2 s'), null, { timeout: 3000 }).catch(() => {});
   check((await p.locator('.jd-pts-pill').innerText()).includes('2 s'), 'passer : 2 s débloquées');
+  check((await p.locator('.jh-seg.is-now.fxj-lueur').count()) === 1, 'effets : le segment débloqué s’éclaire');
+  check((await p.locator('.fxj-tampon').count()) === 0, 'effets : pas de tampon avant la fin');
   check((await p.locator('.jd-try').first().innerText()).includes('Passé'), 'essais : « 1 · Passé »');
   check((await p.locator('[data-act="passer"]').innerText()).includes('+2 s'), 'bouton : « Passer · +2 s »');
   // Erreur : 4 s
@@ -62,6 +64,7 @@ const FAKE_YT = () => {
   await p.waitForFunction(() => document.querySelector('.jd-pts-pill')?.textContent.includes('4 s'), null, { timeout: 3000 }).catch(() => {});
   check((await p.locator('.jd-pts-pill').innerText()).includes('4 s'), 'erreur : 4 s débloquées (durée cohérente avec les essais)');
   check((await p.locator('.jd-try.is-miss').innerText()).includes('Daft Punk — One More Time'), 'essais : « Daft Punk — One More Time · Raté »');
+  check((await p.locator('.jd-combo.fxj-secoue').count()) === 1, 'effets : mauvais essai, le champ est secoué');
   // Suggestions par artiste
   await p.fill('#jh-input', 'Stro');
   await sleep(100);
@@ -69,13 +72,17 @@ const FAKE_YT = () => {
   await p.keyboard.press('Enter');
   await p.click('#jh-form button[type="submit"]');
   await p.waitForSelector('.jd-end', { timeout: 3000 }).catch(() => {});
+  await p.waitForFunction(() => document.querySelector('.fxj-tampon') && /^\+\d+ /.test(document.querySelector('.jd-gain-v')?.textContent || '') && !/^\+0 /.test(document.querySelector('.jd-gain-v').textContent), null, { timeout: 5000 }).catch(() => {});
+  check((await p.locator('.jd-end .fxj-tampon').count()) === 1 && (await p.locator('.jh-cover.fxj-pop').count()) === 1, 'effets : trouvé, vidéo dévoilée en pop et tampon posé');
+  check((await p.locator('.fxj-gain').count()) === 0, 'effets : le gain n’est pas affiché en double');
   check((await p.locator('.jd-end').innerText()).includes('Trouvé en 3 essais'), 'fin : « Trouvé en 3 essais »');
   check((await p.locator('.jd-end').innerText()).includes('proposé par Alice dans #musique, mars 2023'), 'fin : « proposé par Alice dans #musique, mars 2023 »');
   check((await p.locator('.jh-sleeve').count()) === 0 && (await p.locator('.jh-box.is-open').count()) === 1, 'fin : la vidéo se dévoile');
   check((await hscroll(p)) <= 0, '390 px : pas de défilement horizontal');
   await p.screenshot({ path: __dirname + '/../../shots/j10-heardle.png', fullPage: true });
-  // Proposer un morceau
+  // Proposer un morceau (le redessin de la partie finie ne rejoue aucun effet)
   await p.click('[data-act="propose"]');
+  check((await p.locator('.jd-end .fxj-tampon').count()) === 1 && (await p.locator('.jd-end.fxj-entree, .fxj-confettis, .jh-cover.fxj-pop').count()) === 0, 'effets : partie déjà finie redessinée, tampon posé sans animation');
   await p.fill('#jh-p-title', 'Le morceau du RDV');
   await p.fill('#jh-p-artist', 'Groupe');
   await p.fill('#jh-p-url', 'https://youtu.be/abcdefghijk');

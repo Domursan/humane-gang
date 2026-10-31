@@ -312,6 +312,12 @@ const HANDLERS = {
   },
 };
 
+// Scénario nerdleFini : la partie du jour est déjà gagnée à l'ouverture (pas d'effet de fin attendu).
+if (S.nerdleFini) {
+  Object.assign(J.nerdle, { debut: new Date(Date.now() - 60000).toISOString(), essais: [{ calcul: NERDLE_SOL, couleurs: Array(8).fill('v') }] });
+  termine('nerdle', true, 10);
+}
+
 /** Client : celui du faux de base, avec les RPC des grilles du jour en plus. */
 export function createClient(...args) {
   const c = base.createClient(...args);

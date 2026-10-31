@@ -44,3 +44,5 @@ supabase/migrations/177_theme_pixel_pop.sql
 supabase/migrations/178_heardle_historique.sql
 supabase/migrations/179_jeux_dix_points.sql
 supabase/migrations/180_adrep_carte_mystere.sql
+supabase/migrations/181_jeux_gain_affiche.sql
+supabase/migrations/182_arcade_prises.sql

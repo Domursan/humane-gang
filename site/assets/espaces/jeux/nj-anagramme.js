@@ -6,9 +6,13 @@
  * sans être dévoilé. « Passer » révèle le mot, qui ne compte pas dans le score. « Mélanger » réordonne les tuiles en local.
  * Les mots trouvés ou passés sont gardés sur l'appareil (par jour) pour rester visibles après un rechargement.
  * Le chrono ne sert qu'au classement du jour. Moteur : nj-grilles.js (hg_nj_grille_etat / hg_nj_grille_essai).
+ * Effets (effets-jour.js), seulement après la réponse du serveur : un mot trouvé s'allume lettre après lettre (saut, M1 par
+ * lettre, M2 à la fin) ; un mauvais mot garde sa secousse et ajoute le son G4 ; « Passer » joue D2.
  * Exporte : mount(panel, ctx), resume(ctx).
  */
 import { monterGrille, resumerGrille, formatDuree, voisinFleche } from './nj-grilles.js';
+import { motionAllowed } from '../../commun/core.js';
+import { sonJour, rejoue, enCascade } from './effets-jour.js';
 
 const JEU = 'anagramme';
 
@@ -150,8 +154,39 @@ function lettreClavier(env, st, i, ch) {
   env.rerendre(`.ang-mot[data-i="${i}"] .ang-tuile[data-t="${t}"]`);
 }
 
+/**
+ * Joue l'effet noté par apresEssai (une seule fois, après le dessin). Mot trouvé : le mot révélé est écrit lettre après
+ * lettre ; le texte final est remis en place à la fin (et tout de suite sans mouvement).
+ */
+function jouerEffets(racine, ui) {
+  const fx = ui.effet;
+  ui.effet = null;
+  if (!fx) return;
+  if (fx.type === 'faux') { sonJour('G4'); return; }
+  if (fx.type === 'passe') { sonJour('D2'); return; }
+  const carteMot = racine.querySelector(`.ang-mot[data-i="${fx.i}"]`);
+  const revele = carteMot?.querySelector('.ang-mot-revele');
+  if (!revele || !motionAllowed()) { sonJour('M2'); return; }
+  const texte = revele.textContent;
+  revele.setAttribute('aria-label', `Le mot : ${texte}`);
+  revele.innerHTML = Array.from(texte).map((l) => `<span style="visibility:hidden" aria-hidden="true">${l.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</span>`).join('');
+  const lettres = [...revele.children];
+  const duree = enCascade(lettres, (s) => {
+    s.style.visibility = '';
+    s.style.display = 'inline-block';
+    rejoue(s, 'fxj-saut');
+    sonJour('M1');
+  }, 90);
+  setTimeout(() => {
+    sonJour('M2');
+    if (revele.isConnected) revele.textContent = texte;
+    rejoue(carteMot, 'fxj-bon');
+  }, duree + 80);
+}
+
 /** Écouteurs : tuiles, cases de réponse, Mélanger, Effacer, Passer, Valider ; le mot cliqué devient le mot actif. */
 function lier(racine, st, ui, env) {
+  jouerEffets(racine, ui);
   if (st.partie?.fini) return;
   const choisir = (i) => {
     if (ui.actif === i) return;
@@ -242,6 +277,9 @@ function init(panel, env) {
 }
 
 /** Après un essai : mot trouvé ou passé => révélé et retiré de la saisie ; mot faux => secousse, saisie gardée. */
+/** La carte de fin attend que le dernier mot ait fini de s'allumer (effet joué par lier, après le dessin). */
+const apresRendu = () => (motionAllowed() ? 1000 : 0);
+
 function apresEssai(ui, res, st) {
   const i = ui.envoi;
   ui.envoi = null;
@@ -250,8 +288,11 @@ function apresEssai(ui, res, st) {
     ui.pose[i] = [];
     ui.revele[i] = { mot: res.mot, passe: !!res.passe };
     sauveRevele(ui, st.day);
+    ui.effet = res.passe ? { type: 'passe', i } : { type: 'trouve', i };
   } else {
     ui.secoue = i;
+    setTimeout(() => { ui.secoue = null; }, 450); // une seule secousse : les dessins suivants ne la rejouent pas
+    ui.effet = { type: 'faux', i };
   }
 }
 
@@ -287,6 +328,7 @@ const CFG = {
   lier,
   init,
   apresEssai,
+  apresRendu,
   reponse,
   finTexte: (st) => {
     const p = st.partie;

@@ -3,6 +3,8 @@
 // réponse sans quitter l'accueil : explication, score du gang, gains ; aucune réponse avant la réponse.
 // Jeux : /pages/jeux/jeux.html#jour, onglets ARIA, classement complet ; question déjà jouée dans le quiz (message dédié).
 // Admin : onglet « Question du jour » des Questions du gang, programmation d'un jour à venir.
+// Effets : bonne réponse = halo vert puis tampon « 10 PTS » ; mauvaise = secousse puis tampon « 0 PT » ; question déjà répondue à
+// l'ouverture = tampon posé sans animation d'entrée (accueil compris).
 // Faux Supabase : fixtures/fake-sb.mjs + fixtures/fake-jeux.js (injecté par openPage({ init })).
 // Lancer : node tests/parcours/compte/parcours-j4.cjs
 const { SHOTS, check, finish, openPage, adminSection, hscroll, log, sleep, chromium } = require('../../lib/harness.cjs');
@@ -33,7 +35,10 @@ const fs = require('fs');
   check((await hscroll(p)) <= 0, 'accueil 390 px : pas de défilement horizontal');
   await p.screenshot({ path: path.join(SHOTS, 'j4-accueil-390.png'), fullPage: true });
   await tuile.locator('.qdj-choice', { hasText: '2022' }).click();
+  await p.waitForSelector('#qdj-home .qdj-choice.fxj-bon', { timeout: 1500 }).catch(() => {});
+  check(await tuile.locator('.qdj-choice.fxj-bon').count() === 1 && await tuile.locator('.qdj-result').count() === 0, 'effet : bonne réponse en halo vert avant le résultat');
   await p.waitForSelector('#qdj-home .qdj-result', { timeout: 4000 }).catch(() => {});
+  check((await tuile.locator('.qdj-result .fxj-tampon').innerText().catch(() => '')) === '10 PTS' && await tuile.locator('.qdj-result.fxj-entree').count() === 1, 'fin : tampon « 10 PTS » après une bonne réponse');
   const res = await tuile.locator('.qdj-result').innerText().catch(() => '');
   check(res.includes('Bravo'), 'réponse juste : « Bravo »');
   check(res.includes('Un Worldle de mars 2022'), 'réponse : explication affichée');
@@ -58,7 +63,10 @@ const fs = require('fs');
   check((await p.locator('#jeux-panel-jour .qdj-row').count()) === 12, 'Jeux : « Tout le classement » montre tout');
   check((await p.locator('#jeux-panel-jour .qdj-row.is-me').count()) === 1, 'Jeux : ma ligne mise en avant');
   await p.locator('#jeux-panel-jour .qdj-choice', { hasText: '2023' }).click();
+  await p.waitForSelector('#jeux-panel-jour .qdj-choice.fxj-secoue', { timeout: 1500 }).catch(() => {});
+  check(await p.locator('#jeux-panel-jour .qdj-choice.fxj-secoue').count() === 1 && await p.locator('#jeux-panel-jour .qdj-result').count() === 0, 'effet : mauvaise réponse secouée avant le résultat');
   await p.waitForSelector('#jeux-panel-jour .qdj-result', { timeout: 4000 }).catch(() => {});
+  check((await p.locator('#jeux-panel-jour .qdj-result .fxj-tampon').innerText().catch(() => '')) === '0 PT' && await p.locator('#jeux-panel-jour .qdj-result .fxj-tampon.is-rate').count() === 1, 'fin : tampon « 0 PT » après une mauvaise réponse');
   const r2 = await p.locator('#jeux-panel-jour .qdj-result').innerText().catch(() => '');
   check(r2.includes('Raté') && r2.includes('Bonne réponse : 2022'), 'réponse fausse : « Raté » et bonne réponse');
   check(!r2.includes('pour la bonne réponse'), 'déjà jouée : aucun gain du quiz annoncé');
@@ -70,6 +78,13 @@ const fs = require('fs');
   check((await p.locator('.site-header .nav-group[data-menu="jeux"] > .nav-top').innerText()).includes('Jeux'), 'menu : « Jeux » déroulant dans la barre du haut');
   check((await hscroll(p)) <= 0, 'Jeux 390 px : pas de défilement horizontal');
   check(p.errs.length === 0, 'Jeux : aucune erreur JS' + (p.errs.length ? ' — ' + p.errs.join(' | ') : ''));
+  await p.ctx.close();
+
+  /* ---------- Question déjà répondue à l'ouverture : tampon sans animation ---------- */
+  p = await openPage(browser, { page: 'accueil', width: 390, init: 'fake-jeux.js', scenario: { jeux: { repondue: true } } });
+  await p.waitForSelector('#qdj-home .qdj-result', { timeout: 6000 }).catch(() => {});
+  check((await p.locator('#qdj-home .qdj-result .fxj-tampon').innerText().catch(() => '')) === '10 PTS' && await p.locator('#qdj-home .qdj-result.fxj-entree').count() === 0
+    && await p.locator('#qdj-home [class*="fxj-bon"], #qdj-home [class*="fxj-secoue"]').count() === 0, 'déjà répondue : tampon posé sans animation ni halo');
   await p.ctx.close();
 
   /* ---------- Sans question ---------- */

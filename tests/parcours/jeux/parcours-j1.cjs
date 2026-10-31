@@ -3,6 +3,8 @@
 // Photo de la manche ; pas de réponse avant le vote ; épingle posée puis validée (une seule tentative) ; résultat :
 // score, distance, Paillettes, lieu et lien vers l'album ; classements jour / semaine ; archive pour l'honneur ;
 // manche déjà jouée ; pas de manche ; carte indisponible ; 390 px sans défilement horizontal ; panel admin.
+// Effets après le vote : résultat sans tampon à 1,5 s puis tampon de points (fin de partie) ; rien à l'ouverture d'une manche
+// déjà jouée (tampon sans animation) ; une manche « pour l'honneur » n'a pas de tampon.
 // Lancer : node tests/parcours/jeux/parcours-j1.cjs
 const path = require('path');
 const fs = require('fs');
@@ -46,11 +48,15 @@ async function ouvrir(browser, opts) {
   check((await p.locator('#geo-status').innerText()).includes('Épingle posée'), 'épingle : message d’état');
   await p.locator('.geo-valider').click();
   await p.waitForSelector('#geo-result:not([hidden])', { timeout: 4000 }).catch(() => {});
+  check(await p.locator('#geo-result .fxj-tampon').count() === 0, 'effets : le tampon de points n’est pas là avant la fin de la séquence');
+  await p.waitForSelector('#geo-result .fxj-tampon', { timeout: 4000 }).catch(() => {});
+  check(/^\d+ PTS?$/.test(await p.locator('#geo-result .fxj-tampon').innerText().catch(() => '')) && await p.locator('#geo-result.fxj-entree').count() === 1, 'effets : après le vote, tampon de points et entrée animée');
+  await sleep(1400); // le score des Paillettes finit de défiler
   const res = await p.locator('#geo-result').innerText();
   check(/\/ 5 000/.test(res) && /km/.test(res), 'résultat : score sur 5 000 et distance');
   check(res.includes('Gare de la Part-Dieu') && res.includes('RDV Lyon 2026'), 'résultat : lieu et sortie d’origine');
   check(await p.locator('#geo-result a.geo-album').getAttribute('href').then((h) => h.startsWith('/pages/irl/irl.html#event-')), 'résultat : lien vers l’album');
-  check(/\+\d+ Paillettes/.test(res), 'résultat : Paillettes gagnées');
+  check(/\+\d+/.test(await p.locator('#geo-result [data-geo-gain]').innerText().catch(() => '')) && await p.locator('#geo-result .fxj-gain').count() === 0, 'résultat : Paillettes gagnées, affichées une seule fois');
   check(await p.locator('#geo-actions').isHidden(), 'après le vote : plus de bouton valider');
   const map = await p.evaluate(() => { const items = window.__fakeMap.items.flatMap((x) => x.layers || []); return { markers: items.filter((x) => x.kind === 'marker').length, lines: items.filter((x) => x.kind === 'line').length, fit: !!window.__fakeMap.bounds }; });
   check(map.markers === 2 && map.lines === 1 && map.fit, 'carte : deux épingles, une ligne, cadrage');
@@ -74,8 +80,9 @@ async function ouvrir(browser, opts) {
   check(!(await p.locator('.geo-back').isHidden()), 'archive : bouton « Manche du jour »');
   await p.evaluate(() => window.__fakeMapClick(46.2, 6.14));
   await p.locator('.geo-valider').click();
-  await sleep(600);
+  await sleep(2800);
   check((await p.locator('#geo-result').innerText()).includes('Pour l’honneur'), 'archive : résultat sans Paillettes');
+  check(await p.locator('#geo-result .fxj-tampon').count() === 0, 'archive : pas de fin de partie pour une manche pour l’honneur');
   await p.locator('.geo-back').click();
   await sleep(600);
   check((await p.locator('#geo-sub').innerText()).includes('une tentative par jour') && !(await p.locator('#geo-result').isHidden()), 'retour à la manche du jour (déjà jouée)');
@@ -87,6 +94,7 @@ async function ouvrir(browser, opts) {
   await sleep(500);
   check(!(await p.locator('#geo-result').isHidden()) && /4.210/.test(await p.locator('#geo-result').innerText()), 'déjà jouée : résultat directement');
   check(await p.locator('#geo-actions').isHidden(), 'déjà jouée : pas de nouvelle tentative');
+  check(await p.locator('#geo-result .fxj-tampon').count() === 1 && await p.locator('#geo-result.fxj-entree').count() === 0, 'déjà jouée : tampon posé sans animation d’entrée');
   await p.evaluate(() => { location.hash = 'aujourdhui'; }); // colonne d'onglets masquée : navigation par adresse
   await sleep(800);
   check((await p.locator('[data-badge="geo"]').innerText()).includes('Fait') && (await p.locator('#jeux-bal-v').innerText()).includes('+42'), 'tableau de bord : GeoGuessr fait, +42 du jour');

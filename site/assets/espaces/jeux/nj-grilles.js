@@ -1,4 +1,4 @@
-// ===== Humane Gang — page « Jeux » : moteur commun des grilles du jour (Connexions, Mot mêlé, Nerdle) =====
+// ===== Humane Gang — page « Jeux » : moteur commun des grilles du jour (Connexions, Mots croisés, Mot mêlé, Anagramme, Nerdle) =====
 /*
  * Rôle : briques communes des trois grilles du jour, une seule partie par personne et par jour, la même grille pour tous.
  * Le moteur charge l'état (hg_nj_grille_etat), envoie les essais (hg_nj_grille_essai) et dessine la mise en page :
@@ -7,12 +7,19 @@
  * « Réponses » (administrateurs) est posé dans l'en-tête. Les réponses s'affichent dans la page ; seules les erreurs du serveur
  * (messages en français) font un toast. Chaque jeu fournit sa configuration (voir cfg dans monterGrille) : corps du jeu, interactions, texte
  * de partage. Le chrono ne sert qu'au classement du jour : il n'empêche jamais de jouer.
- * Dépendances : jeux/devine.js (loadCss, boardHtml, copyText), core/admin-reponses.js. Styles : jeux-grilles.css.
+ * Fin de partie : le moment de fin (tampon de points, son, Paillettes qui défilent, confettis à 10) vient de effets-jour.js et ne se
+ * joue que si la partie se termine sous les yeux du membre ; à l'ouverture d'une partie déjà finie, la carte s'affiche sans effet.
+ * Effets propres à un jeu (facultatifs, dans cfg) : avantRendu({ res, avant, apres, panel, env }) → Promise (animation sur
+ * l'ancien dessin, avant le redessin) ; apresRendu({ res, avant, apres, panel, env }) → durée en ms de l'animation jouée après
+ * le redessin (la carte de fin attend la fin de cette durée) ; refus({ err, p, panel, env }) après un essai refusé par le serveur.
+ * env.retarderFin(ms) rallonge ce délai depuis n'importe où (ex. dans cfg.reponse ou apresEssai).
+ * Dépendances : jeux/devine.js (loadCss, boardHtml, copyText), core/admin-reponses.js, effets-jour.js. Styles : jeux-grilles.css.
  * Exporte : monterGrille, lireEtat, resumerGrille, formatDuree, classementJourHtml.
  */
 import { paillSym } from '../../commun/paillettes.js';
 import { loadCss, boardHtml, copyText } from './devine.js';
 import { boutonReponses } from '../../commun/core/admin-reponses.js';
+import { finDePartie, pointsDeGain } from './effets-jour.js';
 
 /**
  * Durée affichée : « 1:05 », ou « 1:02:05 » au-delà d'une heure.
@@ -131,7 +138,7 @@ export async function monterGrille(panel, ctx, cfg) {
   loadCss('jeux-devine');
   loadCss('jeux-grilles');
   const esc = ctx.esc;
-  const e = { st: null, err: null, busy: false, msg: '', ui: {} };
+  const e = { st: null, err: null, busy: false, msg: '', ui: {}, fin: null, retard: 0 };
   let minuteur = null;
   const env = {
     ctx,
@@ -141,6 +148,8 @@ export async function monterGrille(panel, ctx, cfg) {
     envoyer,
     dire: (t) => { const l = panel.querySelector('.ng-live'); if (l) l.textContent = t; },
     rerendre: (sel = null) => dessiner(sel),
+    panel,
+    retarderFin: (ms) => { e.retard = Math.max(e.retard, Number(ms) || 0); },
   };
 
   panel.innerHTML = '<p class="muted">Chargement de la grille…</p>';
@@ -166,22 +175,52 @@ export async function monterGrille(panel, ctx, cfg) {
   async function envoyer(p, focusSel = null) {
     if (e.busy || !e.st?.grille || e.st.partie?.fini) return null;
     e.busy = true;
-    let res = null;
+    e.retard = 0;
+    const avant = JSON.parse(JSON.stringify(e.st)); // copie : l'état d'avant l'essai, pour comparer avec la réponse
+    let res = null, refus = null;
     try {
       const { data, error } = await ctx.sb.rpc('hg_nj_grille_essai', { p_jeu: cfg.jeu, p });
       if (error) throw error;
       res = data?.resultat || {};
-      e.st = data.etat;
+      const apres = data.etat;
+      // Animation sur l'ancien dessin (tuiles qui sautent, etc.) avant de montrer le nouvel état.
+      try { await cfg.avantRendu?.({ res, avant, apres, panel, env }); } catch (x) { console.warn('[grilles] animation', x); }
+      e.st = apres;
       cfg.apresEssai?.(e.ui, res, e.st);
       // Le message de la réponse reste dans la page (zone « live ») : pas de toast, qui recouvrirait la grille sur téléphone.
       e.msg = cfg.reponse?.(res, e.st)?.texte || '';
+      // La partie vient de se terminer sous les yeux du membre : la carte de fin attend l'animation, puis joue son moment.
+      e.fin = !avant.partie?.fini && e.st.partie?.fini ? { attente: true } : null;
     } catch (err) {
       res = null;
+      refus = err;
       ctx.toast(err?.message || String(err), 'error');
     }
     e.busy = false;
     dessiner(focusSel);
+    if (refus) { try { cfg.refus?.({ err: refus, p, panel, env }); } catch (x) { console.warn('[grilles] refus', x); } return res; }
+    let ms = 0;
+    try { ms = Number(cfg.apresRendu?.({ res, avant, apres: e.st, panel, env })) || 0; } catch (x) { console.warn('[grilles] animation', x); }
+    if (e.fin) setTimeout(libererFin, Math.max(ms, e.retard));
     return res;
+  }
+
+  /** Montre la carte de fin et joue son moment (tampon, son, Paillettes). */
+  function libererFin() {
+    if (!e.fin) return;
+    e.fin = null;
+    const carte = panel.querySelector('.ng-fin');
+    if (!carte) return;
+    carte.style.display = '';
+    habillerFin(carte, true);
+  }
+
+  /** Branche finDePartie sur la carte de fin dessinée : points, gain (dans la ligne « crédités »), effets si animer. */
+  function habillerFin(carte, animer) {
+    const p = e.st?.partie;
+    if (!p) return;
+    const gain = Number(p.reward) || 0;
+    finDePartie(carte, { points: p.points ?? p.score ?? pointsDeGain(gain), gain: gain || null, animer, cibleGain: gain ? carte.querySelector('[data-gain]') : null });
   }
 
   /** Texte de partage dans le presse-papiers. */
@@ -200,7 +239,7 @@ export async function monterGrille(panel, ctx, cfg) {
     return `<section class="ng-fin${gagne ? ' is-win' : ''}" aria-label="Fin de partie">
       <p class="ng-fin-t">${esc(texte)}</p>
       <p class="ng-fin-s">${esc(stats)}</p>
-      <p class="ng-reward">${p.reward ? `+${esc(p.reward)} ${paillSym()} crédités` : 'Aucune Paillette cette fois'}</p>
+      <p class="ng-reward">${p.reward ? `<span data-gain>+${esc(p.reward)} ${paillSym()}</span> crédités` : 'Aucune Paillette cette fois'}</p>
       ${cfg.copie ? '<div class="ng-actions"><button type="button" class="btn btn-sand" data-act="copier">Copier le résultat</button></div>' : ''}
       <h3 class="ng-label">Classement du jour</h3>${classementJourHtml(st.board?.jour || [], ctx.me?.id, esc)}
     </section>`;
@@ -225,6 +264,11 @@ export async function monterGrille(panel, ctx, cfg) {
     panel.innerHTML = `<div class="ng ng-${cfg.jeu}">${head}<div class="ng-main">${main}</div><aside class="ng-aside">${regles}${semaine}</aside></div>`;
     boutonReponses(panel.querySelector('.ng-head'), 'njg', () => cfg.jeu);
     if (jour) cfg.lier?.(panel.querySelector('.ng-jeu'), st, e.ui, env);
+    if (fini) {
+      const carte = panel.querySelector('.ng-fin');
+      if (carte && e.fin) carte.style.display = 'none'; // en attente de l'animation du jeu
+      else if (carte) habillerFin(carte, false);
+    }
     demarrerChrono(st);
     if (focusSel) panel.querySelector(focusSel)?.focus({ preventScroll: true });
   }

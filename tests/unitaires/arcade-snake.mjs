@@ -176,5 +176,40 @@ function espion() {
 check(JEU.id === 'snake' && JEU.titre === 'Snake' && typeof JEU.aide === 'string' && JEU.score(JEU.init({ reduit: true })) === 0,
   'identifiant « snake », titre, aide et score initial 0');
 
+// 7. Mort : fin de partie immédiate, le serpent se dissout pendant dureeFin (le moteur continue update), le score ne bouge plus ;
+// animation réduite : rien de dessiné en plus.
+{
+  const s = JEU.init({ reduit: false });
+  s.triche = { coeurs: false, immortel: false };
+  s.score = 30;
+  const ctx = fauxCtx(), neutre = { cible: null, cibleY: null, fleche: 0, pas: 0, vertical: 0, dir: null, action: false, tenu: false };
+  while (!s.mort) JEU.update(s, PAS, neutre);
+  check(JEU.fini(s) && s.fx.length > 0, 'à la mort : la partie finit à l’image même, le choc lance ses éclats');
+  const duree = JEU.dureeFin(s);
+  for (let t = 0; t < duree + PAS; t += PAS) { JEU.update(s, PAS, { ...neutre, dir: 'haut' }); JEU.draw(ctx, s); }
+  check(s.dissous && s.retire === s.corps.length && duree < 2.8, `dissolution complète pendant dureeFin (${duree.toFixed(2)} s)`);
+  check(JEU.score(s) === 30, 'la dissolution ne change pas le score');
+  check(!s.fx.some((f) => f.k === 'p'), 'plus aucun pixel en vol à la fin');
+
+  const long = JEU.init({ reduit: false });
+  long.triche = s.triche;
+  long.corps = Array.from({ length: 200 }, () => ({ x: COLS - 1, y: 0 }));
+  JEU.update(long, 0.21, neutre);
+  const dureeLong = JEU.dureeFin(long);
+  for (let t = 0; t < dureeLong + PAS; t += PAS) JEU.update(long, PAS, neutre);
+  check(JEU.fini(long) && long.dissous && dureeLong <= 2.75 + 1e-9, `serpent de 200 cases : dissolution bornée (${dureeLong.toFixed(2)} s)`);
+
+  const doux = JEU.init({ reduit: true });
+  doux.triche = s.triche;
+  let n = 0;
+  while (!JEU.fini(doux) && n < 2000) { JEU.update(doux, PAS, neutre); JEU.draw(ctx, doux); n++; }
+  check(JEU.fini(doux) && doux.retire === 0 && !doux.fx?.length && doux.flash === 0 && doux.secousse === 0, 'animation réduite : fin dès la mort, ni effet ni dissolution');
+}
+
+// 8. Écrans communs : champs repris de la maquette, cause de la mort à l'écran de fin.
+check(!!JEU.accroche && !!JEU.quip && typeof JEU.embleme === 'function', 'accroche, quip et embleme présents');
+check(JEU.finTexte({ mort: 'Aïe, un mur !' }).t === 'Aïe, un mur !' && !!JEU.finTexte({ mort: 'x' }).d, 'finTexte reprend la cause de la mort');
+JEU.embleme(fauxCtx(), 180, 200, 1);
+
 console.log(`\n${ok} OK, ${ko} ECHEC(S)`);
 process.exit(ko ? 1 : 0);

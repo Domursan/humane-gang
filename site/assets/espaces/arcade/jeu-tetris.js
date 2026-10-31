@@ -16,10 +16,16 @@
  *   (ces lignes ne rapportent rien).
  * Cadence serveur : une pièce au plus toutes les 0,25 s (4 points par seconde pour les pièces seules) ; le plafond
  * serveur est de 60 points par seconde, les lignes restant sous la moitié de cette cadence en jeu normal.
- * Moteur : eggs/arcade.js (creeArcade). Animation réduite : chute un peu plus lente.
+ * Effets (maquette jTetris, scènes TEa à TEe, sons TE1 à TE7 via fx.js) : déplacement et rotation sonores, pose avec flash
+ *   blanc et poussière, chute d'un coup avec traînées, onde et secousse, ligne pleine qui clignote puis tombe en pixels
+ *   (la chute des pièces est en pause pendant ce temps, le score et le compte de lignes sont ceux de la pose), Tetris à
+ *   4 lignes en arc-en-ciel avec « TETRIS ! », tremblement et flash, niveau de vitesse qui s'allume avec « Plus vite ! ».
+ * Moteur : eggs/arcade.js (creeArcade). Animation réduite : chute un peu plus lente, lignes effacées d'un coup, aucun
+ *   mouvement ni particule (sons et textes conservés).
  * Exporte : JEU (règles du mini-jeu pour creeArcade), FORMES, COLONNES, RANGEES (pour les tests).
  */
 import { coeur } from './arcade.js';
+import { sonFlash, poussiere, etoiles, flotte, onde, majFX, dessineFX } from './fx.js';
 
 /** Plateau : 10 colonnes × 20 rangées. */
 export const COLONNES = 10, RANGEES = 20;
@@ -35,6 +41,8 @@ const HAUSSE = 0.07;
 /** Nombre de remises à zéro du délai de pose après rotation ou déplacement à terre (anti-blocage). */
 const REPRISES_MAX = 15;
 const DECALAGES = [0, -1, 1, -2, 2];
+/** Effacement : secondes par clignotement, secondes de chute des rangées du dessus. */
+const DUREE_CLIGNOTE = 0.09, DUREE_CHUTE_LIGNES = 0.28;
 
 /** Formes de base des sept pièces (I O T S Z J L), 1 = case pleine. */
 const BASES = [
@@ -158,6 +166,7 @@ function deplace(s, d) {
   if (!p || !libre(s.plateau, p.type, p.rot, p.x + d, p.y)) return;
   p.x += d;
   reprise(s);
+  sonFlash('TE1');
 }
 
 /**
@@ -172,6 +181,7 @@ function tournePiece(s) {
     if (libre(s.plateau, p.type, nr, p.x + k, p.y)) {
       p.rot = nr; p.x += k;
       reprise(s);
+      sonFlash('TE2');
       return;
     }
   }
@@ -183,8 +193,17 @@ function tournePiece(s) {
  */
 function chuteImmediate(s) {
   const p = s.piece;
+  const depart = p.y;
   while (libre(s.plateau, p.type, p.rot, p.x, p.y + 1)) p.y++;
-  pose(s);
+  sonFlash('TE6');
+  if (!s.reduit) {
+    // Traînées derrière chaque case, onde et secousse à l'arrivée.
+    const n = p.y - depart;
+    s.trace = { t: 0, rects: FORMES[p.type][p.rot].map(([dx, dy]) => [BX + (p.x + dx) * CASE + CASE / 2 - 2, BY + (depart + dy) * CASE, 4, n * CASE + CASE / 2, COULEURS[p.type]]) };
+    s.secousse = Math.max(s.secousse, 0.2);
+    onde(s, BX + COLONNES * CASE / 2, BY + (p.y + 2) * CASE, 10, 120, 'rgba(242,239,234,.6)', 0.3, 2);
+  }
+  pose(s, true);
 }
 
 /**
@@ -202,22 +221,88 @@ function fantome(s) {
 /**
  * Verrouille la pièce sur le plateau, efface les lignes pleines et compte les points.
  * La pièce suivante n'apparaît qu'après DELAI_APPARITION secondes (cadence serveur).
+ * Le score et le compte de lignes sont mis à jour tout de suite ; les lignes pleines restent à l'écran le temps de
+ * l'animation (s.eff), pendant laquelle la chute est en pause, puis sont retirées par termineEffacement.
  * @param {object} s état de la partie
+ * @param {boolean} [chute] vrai après une chute d'un coup (son TE6 déjà joué)
  */
-function pose(s) {
+function pose(s, chute = false) {
   const p = s.piece;
-  for (const [dx, dy] of FORMES[p.type][p.rot]) s.plateau[p.y + dy][p.x + dx] = p.type + 1;
+  const cases = FORMES[p.type][p.rot];
+  for (const [dx, dy] of cases) s.plateau[p.y + dy][p.x + dx] = p.type + 1;
   s.piece = null;
   s.poses++;
   s.score += 1;
   s.attente = DELAI_APPARITION; s.chute = 0; s.sol = 0;
-  let k = 0;
-  for (let y = RANGEES - 1; y >= 0; y--) {
-    if (s.plateau[y].every((c) => c)) { s.plateau.splice(y, 1); k++; }
+  if (!chute) sonFlash('TE3');
+  if (!s.reduit) {
+    s.verr = { t: 0, cases: cases.map(([dx, dy]) => [p.x + dx, p.y + dy]) };
+    const bas = Math.max(...cases.map((c) => p.y + c[1]));
+    for (const [dx, dy] of cases) {
+      if (p.y + dy === bas) poussiere(s, BX + (p.x + dx) * CASE + CASE / 2, BY + (bas + 1) * CASE - 2, 3, ['rgba(242,239,234,.7)', COULEURS[p.type]], 40, 0.35, 3, 60);
+    }
   }
-  for (let i = 0; i < k; i++) s.plateau.unshift(new Array(COLONNES).fill(0));
+  const rangees = [];
+  for (let y = 0; y < RANGEES; y++) if (s.plateau[y].every((c) => c)) rangees.push(y);
+  const k = rangees.length;
+  if (!k) return;
+  const avant = Math.floor(s.lignes / 10);
   s.lignes += k;
   s.score += POINTS_LIGNES[k];
+  sonFlash(k === 4 ? 'TE5' : 'TE4');
+  const monte = Math.floor(s.lignes / 10) > avant;
+  s.eff = { rangees, t: 0, phase: 'clignote', nb: k === 4 ? 8 : 6, tetris: k === 4, monte, pts: POINTS_LIGNES[k] };
+  if (k === 4) {
+    s.bandeau = 1.5;
+    if (!s.reduit) { s.secousse = 0.45; s.flash = 0.2; }
+  }
+  if (s.reduit) termineEffacement(s);
+}
+
+/**
+ * Retire du plateau les lignes de l'animation, annonce les points et, si besoin, le niveau de vitesse.
+ * @param {object} s état de la partie
+ */
+function termineEffacement(s) {
+  const { rangees, tetris, monte, pts } = s.eff;
+  s.plateau = s.plateau.filter((_, y) => !rangees.includes(y));
+  for (let i = 0; i < rangees.length; i++) s.plateau.unshift(new Array(COLONNES).fill(0));
+  s.eff = null;
+  flotte(s, BX + COLONNES * CASE / 2, BY + rangees[0] * CASE + CASE / 2 - 6, `+${pts}`, tetris ? '#FFFFFF' : COULEURS[2], tetris ? 26 : 20);
+  if (!s.reduit) s.popT = 0.3;
+  if (monte) {
+    sonFlash('TE7');
+    if (!s.reduit) s.vitT = 1.2;
+    etoiles(s, PX + 22, 296, 8, COULEURS[2], 90, 0.7);
+    onde(s, PX + 22, 296, 6, 60, COULEURS[2], 0.5, 3);
+    flotte(s, PX + 40, 248, 'Plus vite !', COULEURS[2], 14);
+  }
+}
+
+/**
+ * Fait avancer l'animation d'effacement : clignotement, puis chute des rangées au-dessus.
+ * @param {object} s état de la partie
+ * @param {number} dt secondes écoulées
+ */
+function avanceEffacement(s, dt) {
+  const f = s.eff;
+  f.t += dt;
+  if (f.phase === 'clignote' && f.t >= f.nb * DUREE_CLIGNOTE) {
+    for (const y of f.rangees) {
+      for (let x = 0; x < COLONNES; x++) {
+        const v = s.plateau[y][x];
+        if (!v) continue;
+        poussiere(s, BX + x * CASE + CASE / 2, BY + y * CASE + CASE / 2, 3, f.tetris ? COULEURS.slice(0, 6) : [COULEURS[v - 1]], 70, 0.6, 4, 380);
+      }
+    }
+    if (f.tetris) {
+      onde(s, BX + COLONNES * CASE / 2, BY + f.rangees[1] * CASE + CASE / 2, 10, 150, '#FFFFFF', 0.5, 3);
+      onde(s, BX + COLONNES * CASE / 2, BY + f.rangees[1] * CASE + CASE / 2, 6, 110, COULEURS[2], 0.5, 3);
+    }
+    f.phase = 'tombe'; f.t = 0;
+  } else if (f.phase === 'tombe' && f.t >= DUREE_CHUTE_LIGNES) {
+    termineEffacement(s);
+  }
 }
 
 /**
@@ -260,24 +345,139 @@ function boite(cases) {
   return [x0, y0, Math.max(...xs) - x0 + 1, Math.max(...ys) - y0 + 1];
 }
 
+
+/** Rebond « retour élastique » de 0 à 1 (lettres de TETRIS !). */
+const rebond = (k) => (k <= 0 ? 0 : k >= 1 ? 1 : 1 + 2.70158 * (k - 1) ** 3 + 1.70158 * (k - 1) ** 2);
+
+/**
+ * Dessine le plateau (cases posées, effacement, flash de pose, traînées, pièce et fantôme).
+ * @param {CanvasRenderingContext2D} ctx contexte du canevas
+ * @param {object} s état de la partie
+ * @param {boolean} coeurs vrai pour dessiner des cœurs
+ */
+function dessinePlateau(ctx, s, coeurs) {
+  ctx.fillStyle = '#0E0E10';
+  ctx.fillRect(BX, BY, COLONNES * CASE, RANGEES * CASE);
+  ctx.fillStyle = 'rgba(242,239,234,.06)';
+  for (let x = 1; x < COLONNES; x++) ctx.fillRect(BX + x * CASE, BY, 1, RANGEES * CASE);
+  for (let y = 1; y < RANGEES; y++) ctx.fillRect(BX, BY + y * CASE, COLONNES * CASE, 1);
+  const f = s.eff;
+  const tombe = f && f.phase === 'tombe';
+  const pr = tombe ? 1 - (1 - Math.min(1, f.t / DUREE_CHUTE_LIGNES)) ** 3 : 0;
+  for (let y = 0; y < RANGEES; y++) {
+    if (tombe && f.rangees.includes(y)) continue;
+    let dec = 0;
+    if (tombe) { let n = 0; for (const r of f.rangees) if (r > y) n++; dec = n * CASE * pr; }
+    for (let x = 0; x < COLONNES; x++) {
+      const v = s.plateau[y][x];
+      if (v) dessineCase(ctx, BX + x * CASE, BY + y * CASE + dec, v - 1, coeurs);
+    }
+  }
+  if (f && f.phase === 'clignote') {
+    const kk = Math.floor(f.t / DUREE_CLIGNOTE);
+    f.rangees.forEach((r, i) => {
+      if (kk % 2) return;
+      ctx.fillStyle = f.tetris ? COULEURS[(i + kk / 2) % 6] : 'rgba(255,255,255,.88)';
+      ctx.fillRect(BX, BY + r * CASE, COLONNES * CASE, CASE);
+    });
+  }
+  if (s.verr) {
+    ctx.fillStyle = `rgba(255,255,255,${(1 - s.verr.t / 0.15) * 0.85})`;
+    for (const [cx, cy] of s.verr.cases) ctx.fillRect(BX + cx * CASE, BY + cy * CASE, CASE, CASE);
+  }
+  if (s.trace) {
+    ctx.globalAlpha = 0.6 * (1 - s.trace.t / 0.28);
+    for (const [x, y, w, h, c] of s.trace.rects) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
+    ctx.globalAlpha = 1;
+  }
+  const p = s.piece;
+  if (p) {
+    const gy = fantome(s);
+    if (gy !== p.y) for (const [dx, dy] of FORMES[p.type][p.rot]) contour(ctx, BX + (p.x + dx) * CASE, BY + (gy + dy) * CASE);
+    for (const [dx, dy] of FORMES[p.type][p.rot]) dessineCase(ctx, BX + (p.x + dx) * CASE, BY + (p.y + dy) * CASE, p.type, coeurs);
+  }
+  const eclat = f && f.tetris && !s.reduit && Math.floor(f.t * 12) % 2;
+  ctx.strokeStyle = eclat ? COULEURS[2] : '#9E3543'; ctx.lineWidth = 2;
+  ctx.strokeRect(BX - 1, BY - 1, COLONNES * CASE + 2, RANGEES * CASE + 2);
+}
+
+/**
+ * Écrit un nombre du panneau, gonflé et doré quand l'échelle dépasse 1.
+ * @param {CanvasRenderingContext2D} ctx contexte du canevas
+ * @param {number} y ligne de base
+ * @param {string} txt texte
+ * @param {number} ech échelle (1 = normale)
+ */
+function nombrePanneau(ctx, y, txt, ech) {
+  ctx.save(); ctx.translate(PX, y); ctx.scale(ech, ech);
+  ctx.fillStyle = ech > 1 ? COULEURS[2] : '#F2EFEA';
+  ctx.font = '26px "Archivo Black", system-ui, sans-serif';
+  ctx.fillText(txt, 0, 0);
+  ctx.restore();
+}
+
+/**
+ * Bandeau « TETRIS ! » : lettres arc-en-ciel qui rebondissent (immobiles en animation réduite).
+ * @param {CanvasRenderingContext2D} ctx contexte du canevas
+ * @param {object} s état de la partie
+ */
+function dessineBandeau(ctx, s) {
+  const bt = 1 - s.bandeau / 1.5;
+  ctx.globalAlpha = bt > 0.75 ? (1 - bt) * 4 : 1;
+  const tx = 'TETRIS !';
+  ctx.font = '38px "Archivo Black", system-ui, sans-serif';
+  const tw = ctx.measureText(tx).width;
+  let x0 = BX + COLONNES * CASE / 2 - tw / 2;
+  for (let i = 0; i < tx.length; i++) {
+    const w = ctx.measureText(tx[i]).width;
+    const dy = s.reduit ? 0 : Math.sin(bt * 13.5 + i * 0.7) * 4;
+    const ech = s.reduit ? 1 : rebond(bt * 4 - i * 0.1);
+    ctx.save(); ctx.translate(x0 + w / 2, BY + 150 + dy); ctx.scale(ech, ech);
+    ctx.lineWidth = 6; ctx.strokeStyle = '#08080B'; ctx.strokeText(tx[i], -w / 2, 0);
+    ctx.fillStyle = COULEURS[i % 6]; ctx.fillText(tx[i], -w / 2, 0);
+    ctx.restore();
+    x0 += w;
+  }
+  ctx.globalAlpha = 1;
+}
+
 export const JEU = {
   id: 'tetris',
   titre: 'Tetris du gang',
+  accroche: 'Empile, aligne, efface',
+  quip: 'Les pièces attendent en haut.',
   directions: true,
   action: true,
   tapeSeul: true,
   aide: 'Clavier : ← → déplacent la pièce (tenues, elle file), ↑ ou espace la tournent, ↓ tenue la fait descendre vite. Souris : un clic tourne la pièce. Doigt : une tape tourne la pièce, glisser à gauche ou à droite la décale d’une case, glisser vers le bas la fait tomber d’un coup.',
+  aideBorne: '← → · ↑ TOURNER · ↓ DESCENDRE',
+  /** Emblème de l'écran de départ : trois pièces. */
+  embleme(ctx, x, y, T) {
+    const doux = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    for (const [cx, cy] of [[0, 0], [1, 0], [2, 0], [1, -1]]) dessineCase(ctx, x - 76 + cx * CASE, y - 4 + cy * CASE, 2, false);
+    for (let i = 0; i < 4; i++) dessineCase(ctx, x + 4, y - 38 + i * CASE + (doux ? 0 : Math.sin(T * 4) * 3), 4, false);
+    for (const [cx, cy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) dessineCase(ctx, x + 36 + cx * CASE, y + 10 + cy * CASE, 0, false);
+  },
+  finTexte: () => ({ t: 'Le plateau déborde', d: 'Trop haut, trop vite, trop beau.' }),
   init: ({ reduit }) => {
     const s = {
       reduit, lent: reduit ? 1.4 : 1, plateau: vide(), sac: [], suivante: 0, piece: null,
       attente: 0, chute: 0, sol: 0, reprises: 0, fl: 0, rep: 0,
       lignes: 0, poses: 0, debordements: 0, score: 0, fin: false,
+      eff: null, verr: null, trace: null, bandeau: 0, popT: 0, vitT: 0, secousse: 0, flash: 0, fx: [],
     };
     s.suivante = tirer(s);
     return s;
   },
   update(s, dt, e) {
+    majFX(s, dt);
+    if (s.verr && (s.verr.t += dt) >= 0.15) s.verr = null;
+    if (s.trace && (s.trace.t += dt) >= 0.28) s.trace = null;
+    s.bandeau = Math.max(0, s.bandeau - dt); s.popT = Math.max(0, s.popT - dt); s.vitT = Math.max(0, s.vitT - dt);
+    s.secousse = Math.max(0, s.secousse - dt); s.flash = Math.max(0, s.flash - dt);
     if (s.fin) return;
+    // Effacement en cours : la chute est en pause, les flèches tenues ne s'accumulent pas.
+    if (s.eff) { avanceEffacement(s, dt); s.fl = e.fleche; s.rep = 0; return; }
     if (!s.piece) {
       s.attente -= dt;
       if (s.attente > 0) { s.fl = e.fleche; s.rep = 0; return; }
@@ -306,26 +506,13 @@ export const JEU = {
   },
   draw(ctx, s) {
     const coeurs = !!s.triche?.coeurs;
-    // Plateau
-    ctx.fillStyle = '#0E0E10';
-    ctx.fillRect(BX, BY, COLONNES * CASE, RANGEES * CASE);
-    ctx.fillStyle = 'rgba(242,239,234,.06)';
-    for (let x = 1; x < COLONNES; x++) ctx.fillRect(BX + x * CASE, BY, 1, RANGEES * CASE);
-    for (let y = 1; y < RANGEES; y++) ctx.fillRect(BX, BY + y * CASE, COLONNES * CASE, 1);
-    for (let y = 0; y < RANGEES; y++) {
-      for (let x = 0; x < COLONNES; x++) {
-        const v = s.plateau[y][x];
-        if (v) dessineCase(ctx, BX + x * CASE, BY + y * CASE, v - 1, coeurs);
-      }
+    ctx.save();
+    if (s.secousse > 0 && !s.reduit) {
+      const a = 8 * Math.min(1, s.secousse * 4);
+      ctx.translate((Math.random() - 0.5) * a, (Math.random() - 0.5) * a);
     }
-    const p = s.piece;
-    if (p) {
-      const gy = fantome(s);
-      if (gy !== p.y) for (const [dx, dy] of FORMES[p.type][p.rot]) contour(ctx, BX + (p.x + dx) * CASE, BY + (gy + dy) * CASE);
-      for (const [dx, dy] of FORMES[p.type][p.rot]) dessineCase(ctx, BX + (p.x + dx) * CASE, BY + (p.y + dy) * CASE, p.type, coeurs);
-    }
-    ctx.strokeStyle = '#9E3543'; ctx.lineWidth = 2;
-    ctx.strokeRect(BX - 1, BY - 1, COLONNES * CASE + 2, RANGEES * CASE + 2);
+    dessinePlateau(ctx, s, coeurs);
+    dessineFX(ctx, s);
     // Panneau : pièce suivante et nombre de lignes
     ctx.textAlign = 'left';
     ctx.fillStyle = COULEURS[6];
@@ -341,17 +528,23 @@ export const JEU = {
     ctx.fillStyle = COULEURS[6];
     ctx.font = '12px "Archivo Black", system-ui, sans-serif';
     ctx.fillText('LIGNES', PX, 200);
-    ctx.fillStyle = '#F2EFEA';
-    ctx.font = '26px "Archivo Black", system-ui, sans-serif';
-    ctx.fillText(String(s.lignes), PX, 232);
-    // Niveau de vitesse : un par tranche de 10 lignes.
+    nombrePanneau(ctx, 232, String(s.lignes), s.popT > 0 ? 1 + 0.35 * Math.sin((1 - s.popT / 0.3) * Math.PI) : 1);
+    // Niveau de vitesse : un par tranche de 10 lignes, allumé quand il monte.
+    const vf = 1 - s.vitT / 1.2;
+    if (s.vitT > 0) {
+      ctx.globalAlpha = 0.25 + 0.35 * Math.abs(Math.sin(vf * Math.PI * 4));
+      ctx.fillStyle = COULEURS[2]; ctx.fillRect(PX - 6, 254, PANNEAU + 4, 58);
+      ctx.globalAlpha = 1;
+    }
     ctx.fillStyle = COULEURS[6];
     ctx.font = '12px "Archivo Black", system-ui, sans-serif';
     ctx.fillText('VITESSE', PX, 270);
-    ctx.fillStyle = '#F2EFEA';
-    ctx.font = '26px "Archivo Black", system-ui, sans-serif';
-    ctx.fillText(String(Math.floor(s.lignes / 10) + 1), PX, 302);
+    nombrePanneau(ctx, 302, String(Math.floor(s.lignes / 10) + 1), s.vitT > 0 && vf < 0.4 ? 1 + 0.4 * Math.sin(vf / 0.4 * Math.PI) : 1);
     ctx.textAlign = 'start';
+    if (s.bandeau > 0) dessineBandeau(ctx, s);
+    dessineFX(ctx, s, true);
+    ctx.restore();
+    if (s.flash > 0 && !s.reduit) { ctx.fillStyle = `rgba(255,214,42,${s.flash})`; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height); }
   },
   score: (s) => s.score,
   /* Pas de vies : la partie finit quand une nouvelle pièce ne peut pas apparaître. */
