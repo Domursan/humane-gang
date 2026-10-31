@@ -36,7 +36,7 @@ const TREE = {
     ['Suivi', ['joueurs', 'stats']], ['Économie', ['economie', 'tirage', 'recyclage', 'limites']],
     ['Animations', ['quetes', 'defis', 'cagnotte', 'champions', 'recettes']]],
   fete: [['Événements', ['evenements', 'rdv', 'avent', 'saison-worlds', 'anniv-gang']],
-    ['Jeux', ['questions', 'sutom', 'geoguessr', 'citations', 'preuves', 'framed-heardle', 'arcade', 'secrets', 'mes-jeux', 'loup-garou', 'uno', 'nom-de-code', 'plateaux', 'duels']]],
+    ['Jeux', ['programmation', 'questions', 'sutom', 'geoguessr', 'citations', 'preuves', 'framed-heardle', 'arcade', 'secrets', 'mes-jeux', 'loup-garou', 'uno', 'nom-de-code', 'plateaux', 'duels']]],
   mairie: [['Organisation', ['planning', 'journal', 'staff']], ['Le site', ['identite', 'textes', 'menu', 'theme']],
     ['Technique', ['etat', 'erreurs', 'archives', 'reglages']]],
 };

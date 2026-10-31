@@ -173,7 +173,7 @@ const sansErreur = (p) => p.errs.filter((e) => !/Failed to load|404|favicon/.tes
     check(els.length === 2 && els[0].titre.startsWith('Sutom') && els[1].titre.startsWith('Heardle'),
       `(c) La Fête : Sutom et Heardle restent (${els.map((e) => e.titre).join(' | ')})`);
     // La Fête : 5 tuiles « Événements » et 14 tuiles « Jeux » (perms.js)
-    check((await p.$$eval('.lieu-tile', (as) => as.length)) === 19, '(c) La Fête : 19 tuiles (5 Événements, 14 Jeux), page complète');
+    check((await p.$$eval('.lieu-tile', (as) => as.length)) === 20, '(c) La Fête : 20 tuiles (5 Événements, 15 Jeux), page complète');
     await allerLieu(p, 'poste');
     check((await elements(p)).length === 3, '(c) La Poste : ses 3 éléments, indépendants des erreurs des autres lieux');
     check(sansErreur(p).length === 0, `(c) aucune erreur JavaScript${sansErreur(p).length ? ' : ' + sansErreur(p).join(' | ') : ''}`);

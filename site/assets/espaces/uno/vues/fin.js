@@ -3,11 +3,20 @@
  * Rôle : titre du vainqueur (ou « partie arrêtée »), podium des trois premiers, tableau de tous les joueurs
  * (cartes restantes, points de la manche ou cumul en mode points), récompense du joueur (membres seulement),
  * puis revanche ou retour à l'accueil.
- * Dépendances : core.js (esc, avatarHtml, toast), uno/api.js (uno, erreurTexte, estInvite).
+ * Mise en scène (scènes UNo et UNp, sons UN14 et UN3) quand on arrive de la table (ctx.depuisTable) : les marches montent de
+ * la 3e à la 1re, un tampon tombe sur ma marche (VICTOIRE, ou ma place en gris ; jamais sur un autre joueur), le podium encaisse
+ * le coup, puis les Paillettes défilent. Elle n'est jouée qu'une fois : ouverture directe, rechargement, onglet masqué : le
+ * résultat s'affiche d'un bloc, tampon compris. Mouvement réduit : pas d'animation, sons conservés.
+ * Dépendances : core.js (esc, avatarHtml, toast), uno/api.js (uno, erreurTexte, estInvite), uno/effets.js.
  * Exporte : creer.
  */
 import { esc, toast, avatarHtml } from '../../../commun/core.js';
 import { uno, erreurTexte, estInvite } from '../api.js';
+import { mouvementReduit, son, rejouer } from '../effets.js';
+
+const DEPART_TAMPON = 1500;        // ms après le début de la montée (maquette)
+const DEPART_GAIN = 1800;
+const DUREE_GAIN = 700;
 
 /** Couleur de pseudo (profil ; invités en gris). */
 const couleurPseudo = (j) => (j.invite ? '#9A968F' : (/^#[0-9a-f]{6}$/i.test(j.couleur || '') ? j.couleur : '#F2EFEA'));
@@ -39,6 +48,13 @@ export function creer(root, ctx) {
   const invite = estInvite();
   let fini = false;
   let busy = false;
+  // Mise en scène à venir : le tampon et le gain attendent leur tour.
+  let scene = !!ctx.depuisTable && !document.hidden && suivi.etat()?.partie?.statut === 'terminee';
+  let tamponMontre = !scene;
+  let gainMontre = !scene;
+  let image = 0;
+  const minuteurs = new Set();
+  const plus = (fn, ms) => { const t = setTimeout(() => { minuteurs.delete(t); fn(); }, ms); minuteurs.add(t); };
 
   root.innerHTML = `
     <div class="uno-fin">
@@ -69,7 +85,7 @@ export function creer(root, ctx) {
   const zActions = q('[data-zone="actions"]');
 
   // ----- Actions -----
-  async function rejouer(btn) {
+  async function lancerRevanche(btn) {
     if (busy) return;
     busy = true;
     btn.disabled = true;
@@ -87,7 +103,7 @@ export function creer(root, ctx) {
 
   zActions.addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-rejouer]');
-    if (b) rejouer(b);
+    if (b) lancerRevanche(b);
   });
 
   // ----- Rendus -----
@@ -114,6 +130,11 @@ export function creer(root, ctx) {
     if (!joueurs.length) { zone(zPodium, 'vide', '<p class="small muted">Pas encore de classement.</p>'); return; }
     // Ordre d'affichage : 2e à gauche, 1er au centre, 3e à droite.
     const place = (rang) => joueurs.find((j) => j.rang === rang);
+    const monId = e.moi?.user_id;
+    /** Tampon de ma marche, décoratif : le rang est déjà lu sur la marche. */
+    const tampon = (j, rang) => (j.user_id === monId
+      ? `<span class="uno-fx-tampon${rang === 1 ? '' : ' gris'}" aria-hidden="true"${tamponMontre ? '' : ' hidden'}>${rang === 1 ? 'VICTOIRE' : `${rang}E PLACE`}</span>`
+      : '');
     const colonne = (j, rang, taille, hauteur) => {
       if (!j) return '<div class="uno-podium-col vide"></div>';
       return `<div class="uno-podium-col rang-${rang}">
@@ -121,6 +142,7 @@ export function creer(root, ctx) {
         <span class="uno-podium-nom">${pseudoHtml(j)}</span>
         <div class="uno-podium-marche" style="height:${hauteur}px">
           <span class="uno-podium-rang"><span class="visually-hidden">${rang === 1 ? 'Premier' : rang === 2 ? 'Deuxième' : 'Troisième'} : </span>${rang}</span>
+          ${tampon(j, rang)}
         </div>
       </div>`;
     };
@@ -173,7 +195,7 @@ export function creer(root, ctx) {
           <h2 id="uno-fin-gain-titre">Tu gagnes</h2>
           <p>${texte}</p>
         </div>
-        ${pailles > 0 ? `<span class="uno-fin-pailles" aria-label="${esc(pailles)} Paillettes">+${esc(pailles)}</span>` : ''}
+        ${pailles > 0 ? `<span class="uno-fin-pailles" aria-label="${esc(pailles)} Paillettes" data-gain="${esc(pailles)}">+${gainMontre ? esc(pailles) : 0}</span>` : ''}
       </section>`;
     zone(zRecompense, JSON.stringify([pailles, badges.map((b) => b.code)]), html);
   }
@@ -205,13 +227,64 @@ export function creer(root, ctx) {
     rendreActions(e);
   }
 
+  /** Les Paillettes défilent jusqu'au gain. */
+  function compterGain() {
+    gainMontre = true;
+    const n = q('[data-gain]');
+    if (!n) return;
+    const gain = Number(n.dataset.gain);
+    if (mouvementReduit()) { n.textContent = `+${gain}`; return; }
+    const debut = performance.now();
+    const pas = (t) => {
+      const p = Math.max(0, Math.min(1, (t - debut) / DUREE_GAIN));
+      n.textContent = `+${Math.round(gain * p)}`;
+      if (p < 1) image = requestAnimationFrame(pas);
+    };
+    image = requestAnimationFrame(pas);
+  }
+
+  /** Montée du podium (une seule fois, à l'arrivée depuis la table). */
+  function jouerScene() {
+    scene = false;
+    const reduit = mouvementReduit();
+    const podium = q('.uno-podium');
+    if (podium && !reduit) {
+      [['.rang-3', 0], ['.rang-2', 420], ['.rang-1', 840]].forEach(([sel, retard]) => {
+        const col = podium.querySelector(sel);
+        const marche = col?.querySelector('.uno-podium-marche');
+        if (!marche) return;
+        marche.animate([{ height: '0px' }, { height: `${marche.offsetHeight}px` }], { duration: 380, delay: retard, easing: 'cubic-bezier(.2,1.2,.4,1)', fill: 'backwards' });
+        [col.querySelector('.uno-podium-avatar'), col.querySelector('.uno-podium-nom')].forEach((n) => {
+          n?.animate([{ opacity: 0, translate: '0 16px' }, { opacity: 1, translate: '0 0' }], { duration: 300, delay: retard + 220, fill: 'backwards' });
+        });
+      });
+    }
+    if (podium) son('UN14');
+    const tampon = q('.uno-fx-tampon');
+    plus(() => {
+      tamponMontre = true;
+      if (!tampon) return;
+      tampon.hidden = false;
+      son('UN3');
+      if (reduit) return;
+      rejouer(tampon, 'go');
+      rejouer(podium, 'uno-fx-cogne');
+      plus(() => { tampon.classList.remove('go'); podium.classList.remove('uno-fx-cogne'); }, 500);
+    }, reduit ? 200 : DEPART_TAMPON);
+    plus(compterGain, reduit ? 300 : DEPART_GAIN);
+  }
+
   maj(suivi.etat());
+  if (scene) jouerScene();
 
   return {
     maj,
     message() { /* pas de chat sur l'écran de fin */ },
     detruire() {
       fini = true;
+      minuteurs.forEach(clearTimeout);
+      minuteurs.clear();
+      cancelAnimationFrame(image);
       root.innerHTML = '';
     },
   };

@@ -128,7 +128,7 @@ const settle = async (p) => { await sleep(350); return p.evaluate(() => location
     const hs2 = await hscroll(p);
     check(hs2 <= 0, `(d) page de lieu au téléphone : pas de défilement horizontal (${hs2})`);
     // La Fête foraine : 5 tuiles « Événements » et 14 tuiles « Jeux » (perms.js)
-    check((await p.$$eval('.lieu-tile', (as) => as.length)) === 19, '(d) La Fête foraine : 19 tuiles (5 Événements, 14 Jeux)');
+    check((await p.$$eval('.lieu-tile', (as) => as.length)) === 20, '(d) La Fête foraine : 20 tuiles (5 Événements, 15 Jeux)');
     const erreurs = p.errs.filter((e) => !/Failed to load|404|favicon/.test(e));
     check(erreurs.length === 0, `(d) aucune erreur JavaScript${erreurs.length ? ' : ' + erreurs.join(' | ') : ''}`);
     await p.ctx.close();

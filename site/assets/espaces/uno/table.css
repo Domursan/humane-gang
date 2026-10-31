@@ -5,7 +5,8 @@
    Téléphone (≤ 760 px) : une colonne ; les joueurs défilent en bande ; le chat s'ouvre en volet par le bas.
    Cartes, dos et bouton UNO ! : uno.css. Roue des couleurs : uno.css (.uno-roue-voile, .uno-roue).
    Décor validé en maquette (oct. 2026) : tapis vert, anneau arc-en-ciel, HG en filigrane, étoiles, flèches dorées du sens,
-   photos de profil avec anneau doré (chrono) pour le joueur actif, main en éventail, animations des coups. */
+   photos de profil avec anneau doré (chrono) pour le joueur actif, main en éventail, animations des coups.
+   Effets validés en maquette (scènes UNa à UNn) : classes .uno-fx-* et .uno-calque, posées par uno/effets.js et vues/table.js. */
 
 .uno-table { display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 100%; color: var(--text); }
 .uno-table [hidden] { display: none !important; }
@@ -86,11 +87,21 @@
 /* Anneau arc-en-ciel posé sous les joueurs (ordinateur : ellipse ; les joueurs sont sur son bord) */
 .uno-tapis { position: absolute; inset: 0; z-index: 1; }
 .uno-ovale, .uno-fleches { position: absolute; left: 10%; right: 10%; top: 16%; bottom: 16%; border-radius: 50%; }
-.uno-ovale { background: conic-gradient(#FE3104, #FCA301, #FBD32D, #159946, #2B5AE2, #4E2398, #FE3104);
+@property --a-anneau { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+.uno-ovale { background: conic-gradient(from var(--a-anneau, 0deg), #FE3104, #FCA301, #FBD32D, #159946, #2B5AE2, #4E2398, #FE3104);
   box-shadow: 0 0 28px rgba(254, 120, 4, .35), 0 0 60px rgba(43, 90, 226, .2), 0 30px 60px rgba(0, 0, 0, .6); }
 .uno-ovale::after { content: 'HG'; position: absolute; inset: 5px; border-radius: 50%; display: grid; place-items: center;
   background: radial-gradient(ellipse at 50% 45%, #1C3A2A 0, #11261C 55%, #0B1912 100%); box-shadow: inset 0 0 60px rgba(0, 0, 0, .6);
   font: 400 clamp(80px, 14vw, 150px) 'Archivo Black', sans-serif; letter-spacing: 6px; color: rgba(255, 255, 255, .035); }
+/* Un tour d'anneau : UNO, Main vide ; à l'envers sur une Inversion vers l'antihoraire */
+.uno-ovale.uno-fx-vrille { animation: uno-fx-vrille .95s cubic-bezier(.3, .1, .2, 1); }
+.uno-ovale.uno-fx-vrille.inverse { animation-name: uno-fx-vrille-inv; }
+@keyframes uno-fx-vrille { to { --a-anneau: 360deg; box-shadow: 0 0 44px rgba(254, 120, 4, .7), 0 0 90px rgba(43, 90, 226, .4), 0 30px 60px rgba(0, 0, 0, .6); } }
+@keyframes uno-fx-vrille-inv { to { --a-anneau: -360deg; box-shadow: 0 0 44px rgba(226, 199, 126, .8), 0 0 90px rgba(226, 199, 126, .3), 0 30px 60px rgba(0, 0, 0, .6); } }
+/* Onde de couleur et teinte du tapis après un Joker */
+.uno-onde-tapis { position: absolute; left: calc(10% + 5px); right: calc(10% + 5px); top: calc(16% + 5px); bottom: calc(16% + 5px); border-radius: 50%; overflow: hidden; z-index: 1; pointer-events: none; }
+.uno-onde-tapis u { position: absolute; inset: 0; opacity: 0; transition: opacity .5s ease; }
+.uno-onde-tapis i { position: absolute; border-radius: 50%; opacity: 0; }
 /* Flèches dorées du sens du jeu (positionnées par table.js le long de l'ellipse) */
 .uno-fleches { pointer-events: none; z-index: 1; }
 .uno-fleches i { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
@@ -123,7 +134,9 @@
   font: 400 14px 'Archivo Black', sans-serif; color: #0B0A10; background: #E2C77E; padding: 5px 12px; border-radius: 999px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, .5); }
 .uno-legende { font-size: 13px; color: #F2EFEA; }
-.uno-defausse { display: block; }
+.uno-defausse { position: relative; display: block; }
+.uno-pile-bas { position: absolute; left: 0; top: 0; }
+.uno-pile-haut { display: block; position: relative; }
 .uno-dernier { margin: 0; min-height: 1.5em; font-size: 13px; color: var(--muted); text-align: center; }
 .uno-vide { margin: 0; font-size: 13px; color: var(--muted); }
 
@@ -149,7 +162,7 @@
 /* Main en éventail : chaque carte est placée par table.js (left, top, rotation --r) */
 .uno-main-cartes { position: relative; min-height: 120px; max-width: 100%; }
 .uno-main-cartes > .uno-vide { padding: 24px 0; text-align: center; }
-.uno-fan-carte { position: absolute; transform: rotate(var(--r, 0deg)); transform-origin: 50% 120%; transition: transform .18s ease, opacity .2s ease; }
+.uno-fan-carte { position: absolute; transform: rotate(var(--r, 0deg)); transform-origin: 50% 120%; transition: left .2s ease, top .2s ease, transform .18s ease, opacity .2s ease; }
 .uno-fan-carte button.uc.jouable:hover, .uno-fan-carte button.uc.jouable:focus-visible { transform: none; }
 .uno-fan-carte:hover, .uno-fan-carte:focus-within { z-index: 90 !important; transform: rotate(var(--r, 0deg)) translateY(-26px) scale(1.08); }
 .uno-fan-carte:has(.bloquee):hover { transform: rotate(var(--r, 0deg)) translateY(-10px); }
@@ -194,8 +207,17 @@
 .uno-siege-photo.bloque .uno-tampon { animation: uno-tampon 1.4s ease-out forwards; }
 @keyframes uno-tampon { 0% { opacity: 0; transform: translate(-50%, -50%) scale(2.2) rotate(-20deg); }
   25% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-12deg); } 80% { opacity: 1; } 100% { opacity: 0; } }
-/* Carte piochée qui vole de la pioche à la main (élément posé sur <body>) */
-.uno-vole { position: fixed; z-index: 70; pointer-events: none; transition: transform .4s cubic-bezier(.3, .7, .3, 1), opacity .4s ease; }
+/* Calque des vols (posé sur <body>) : cartes, jeton Passe, cercle et poussière de l'impact */
+.uno-calque { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 70; }
+.uno-fx-vol { position: absolute; left: 0; top: 0; }
+.uno-fx-cercle { position: absolute; border-radius: 16px; border: 3px solid var(--c); box-shadow: 0 0 18px var(--c); animation: uno-fx-cercle .5s ease-out forwards; }
+@keyframes uno-fx-cercle { from { opacity: .95; transform: scale(.92); } to { opacity: 0; transform: scale(1.75); } }
+.uno-fx-grain { position: absolute; width: 5px; height: 5px; border-radius: 1px; background: var(--c); }
+.uno-fx-jeton { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: #D93A3F; background: #FFFDF6; box-shadow: 0 0 0 2px #E2C77E, 0 4px 12px rgba(0, 0, 0, .5); }
+.uno-fx-pluie { position: absolute; top: -18px; z-index: 4; width: 10px; height: 15px; border-radius: 2px; border: 1px solid #FFFFFF; pointer-events: none; animation: uno-fx-pluie linear forwards; }
+@keyframes uno-fx-pluie { to { transform: translateY(640px) rotate(420deg); opacity: .6; } }
+.uno-fx-presse { animation: uno-fx-presse .3s ease; }
+@keyframes uno-fx-presse { 45% { scale: .93; filter: brightness(1.25); } }
 
 .uno-defi { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px;
   border-radius: 16px; border: 1px solid #E2C77E; background: rgba(23, 23, 26, .92); }
@@ -261,6 +283,7 @@
   .uno-badge-siege { right: -16px; font-size: 12px; }
   .uno-tapis { position: relative; inset: auto; height: 250px; }
   .uno-ovale, .uno-fleches { left: 4px; right: 4px; top: 4px; bottom: 4px; }
+  .uno-onde-tapis { left: 9px; right: 9px; top: 9px; bottom: 9px; }
   .uno-ovale::after { font-size: 80px; }
   .uno-tapis-centre { width: calc(100% - 44px); }
   .uno-pile { gap: 20px; }
@@ -270,8 +293,8 @@
   .uno-main-zone { padding: 8px 10px 0; }
   .uno-commandes { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
   .uno-cmd, .uno-contre { width: 100%; font-size: 14px; padding: 0 8px; }
-  .uno-commandes .uno-btn { width: 100%; font-size: 18px; transform: none; }
-  .uno-annonce .qui { font-size: 13px; }
+  .uno-commandes .uno-btn { width: 100%; font-size: 18px; transform: none; padding: 0 10px; white-space: nowrap; }
+  .uno-annonce .qui { font-size: 13px; white-space: normal; max-width: calc(100vw - 72px); margin: 0 auto; letter-spacing: .05em; }
   .uno-journal { max-height: 140px; }
 
   .uno-corps .uno-chat { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; height: 72vh; max-height: 72vh; border-radius: 20px 20px 0 0;
@@ -285,8 +308,8 @@
 @media (min-width: 761px) { .uno-aide-tel { display: none; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .uno-sens-icone, .uno-anneau circle[data-anneau], .uno-pioche .ub, .uno-corps .uno-chat, .uno-fan-carte, .uno-vole { transition: none !important; }
-  .uno-sens-icone, .uno-joue, .uno-pioche.oblige, .uno-cmd.oblige, .uno-contre, .uno-annonce.go, .uno-coup.go { animation: none !important; }
+  .uno-sens-icone, .uno-anneau circle[data-anneau], .uno-pioche .ub, .uno-corps .uno-chat, .uno-fan-carte, .uno-onde-tapis u { transition: none !important; }
+  .uno-sens-icone, .uno-joue, .uno-pioche.oblige, .uno-cmd.oblige, .uno-contre, .uno-annonce.go, .uno-coup.go, .uno-ovale.uno-fx-vrille, .uno-fx-presse, .uno-fx-cercle, .uno-fx-pluie { animation: none !important; }
   .uno-annonce, .uno-coup { display: none; }
 }
 

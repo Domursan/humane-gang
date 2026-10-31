@@ -85,6 +85,7 @@ const optionalP = Promise.all(OPTIONAL.map(async (o) => {
 // retire sa sous-section (comme OPTIONAL). Réorganisation (migration 103) : les routes suivent les nouveaux domaines.
 const PROVIDERS = [
   { route: 'mairie/planning', url: './planning.js', name: 'planningSub' },       // La Mairie › Planning
+  { route: 'fete/programmation', url: './admin-programme.js', name: 'programmeSub' }, // La Fête foraine › Jeux › Programmation (migration 183)
   { route: 'place/relance', url: './comptes/remind.js', name: 'remindSub' },    // La Place du gang › À relancer
   { route: 'fete/mes-jeux', url: './admin-mj.js', name: 'mjSub' },                   // La Fête foraine › Mes jeux
 ];
@@ -244,7 +245,8 @@ regSub('drops', { main: () => mountDropsSection($('#drops-root')) }); // drops :
 regSub('cagnotte', { main: () => import('./cartes/pots.js').then((m) => m.mountPotsSection($('#pots-root'))) });
 regSub('champions', { main: () => import('./cartes/champions.js').then((m) => m.mountChampionsSection($('#champions-root'))) });
 regSub('defis', { main: () => mountChallengesSection($('#challenges-root')) });
-regSub('questions', { main: () => mountQuizSection($('#quiz-root')) }); // questions du gang : un onglet réponses et statistiques
+// questions du gang : un onglet réponses et statistiques ; #fete/questions/jour ouvre l'onglet « Question du jour » (Programmation)
+regSub('questions', { main: () => mountQuizSection($('#quiz-root')), open: (_el, { id }) => { if (id === 'jour') $('#adq-tab-j')?.click(); } });
 regSub('sutom', { main: () => mountSutomSection($('#sutom-root')) }); // Sutom du gang (J8) : banque de mots, programmation
 if (MOUNT.secrets) regSub('secrets', { main: () => MOUNT.secrets($('#eggs-root')) }); // easter eggs : hg_settings.eggs et trouvailles
 if (MOUNT.arcade) regSub('arcade', { main: () => MOUNT.arcade($('#arcade-root')) }); // arcade des pages 404 : classement et effacement des scores
@@ -257,7 +259,9 @@ if (MOUNT.plateaux) regSub('plateaux', { main: () => MOUNT.plateaux($('#plateaux
 if (MOUNT.geoguessr) regSub('geoguessr', { main: () => MOUNT.geoguessr($('#geo-admin-root')) });
 if (MOUNT.citations) regSub('citations', { main: () => MOUNT.citations($('#citations-admin-root')) });
 if (MOUNT.preuves) regSub('preuves', { main: () => MOUNT.preuves($('#proofs-root')) });
-if (MOUNT['framed-heardle']) regSub('framed-heardle', { main: () => MOUNT['framed-heardle']($('#jeux-medias-root')) });
+// #fete/framed-heardle/heardle (ou /framed) choisit le jeu affiché (liens de la page Programmation)
+if (MOUNT['framed-heardle']) regSub('framed-heardle', { main: () => MOUNT['framed-heardle']($('#jeux-medias-root')),
+  open: (_el, { id }) => { if (id) document.querySelector(`#jeux-medias-root [data-part="${CSS.escape(id)}"]`)?.click(); } });
 if (MOUNT.bataille) regSub('arene', { main: () => MOUNT.bataille($('#bataille-root')) });
 if (MOUNT.gestion) regSub('gestion', { main: () => MOUNT.gestion($('#gestion-root')) }); // Gestion globale (Give, résumé, derniers gives)
 // Pilotage › Assistance (demandes, idées, messagerie, fil)

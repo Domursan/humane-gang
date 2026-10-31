@@ -296,8 +296,8 @@ const choice = (id) => `dialog.ui-drawer[open] .adq-choice[data-id="${id}"]`;
     await s.evaluate(() => { location.hash = '#fete'; });
     await s.waitForSelector('#lieu-root .lieu-tile', { timeout: 5000 }).catch(() => {});
     const subs = await s.$$eval('#lieu-root .lieu-tile', (as) => as.map((a) => a.dataset.sub));
-    // « citations » (Qui a dit ça ?) relève aussi du droit « quiz » (SECTION_PERM jeux-citations)
-    check(JSON.stringify(subs) === JSON.stringify(['questions', 'citations']), `(a) Staff « quiz » : domaine Autres jeux = ${subs.join(', ')}`);
+    // « citations » (Qui a dit ça ?) et « programmation » (Question du jour) relèvent aussi du droit « quiz » (SECTION_PERM)
+    check(JSON.stringify(subs) === JSON.stringify(['programmation', 'questions', 'citations']), `(a) Staff « quiz » : domaine Autres jeux = ${subs.join(', ')}`);
     const lieux = await s.$$eval('.plateau-lieu', (as) => as.map((a) => a.getAttribute('href')));
     check(!lieux.includes('#fabrique'), '(a) Staff « quiz » : La Fabrique de cartes absente du plateau');
     await adminSection(s, 'jeux/questions');

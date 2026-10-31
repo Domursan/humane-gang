@@ -5,7 +5,7 @@
  * Suit la préférence « Sons des jeux » (sonTour, active par défaut) et le volume des préférences ; jamais avant un geste
  * de l'utilisateur (le navigateur l'exige) ; silencieux si WebAudio manque. Anti-rafale : un même son 60 ms au plus.
  * Dépendances : aucune (lit localStorage « hg_prefs »).
- * Exporte : jouerSonJeu, SONS_JEUX (liste par jeu : numéro → nom ; « quotidien » : codes de effets-jour.js).
+ * Exporte : jouerSonJeu, reveillerSons, sonsPrets, SONS_JEUX (liste par jeu : numéro → nom ; « quotidien » : codes de effets-jour.js ; « uno » : UN1 à UN14, joués par espaces/uno).
  */
 let A = null; let M = null; const dernier = {};
 function prefs() {
@@ -281,6 +281,22 @@ const SONS = {
     DO5: () => { bruit(0, .5, 600, .7, .7, 'lowpass'); bruit(0, .15, 3500, .4, 1, 'highpass'); note(90, 0, .4, { type: 'sawtooth', vol: .14, f2: 40 }); }, // Accrochage
     DO6: () => { note(260, 0, .5, { type: 'sawtooth', vol: .05, f2: 520 }); }, // Palier de vitesse
   },
+  'uno': { // Uno : codes de la maquette validée (UN1 à UN14)
+    UN1: () => { bruit(0, .17, 3400, .2, .7, 'highpass'); bruit(.02, .13, 1500, .1, .8); }, // Carte qui glisse
+    UN2: () => { bruit(0, .04, 1500, .75, 1.2); note(155, 0, .09, { vol: .26, f2: 72 }); bruit(0, .02, 5200, .2, 1, 'highpass'); }, // Carte sur la table
+    UN3: () => { note(112, 0, .13, { vol: .32, f2: 54 }); bruit(0, .06, 700, .75, 1.5); bruit(.05, .03, 2600, .18); }, // Tampon
+    UN4: () => { note(300, 0, .24, { type: 'triangle', vol: .11, f2: 840 }); note(840, .24, .28, { type: 'triangle', vol: .11, f2: 280 }); bruit(.02, .46, 2100, .08, .7); }, // Le sens s’inverse
+    UN5: () => { note(168, 0, .14, { type: 'triangle', vol: .22, f2: 84 }); bruit(0, .05, 900, .5, 1.4); }, // Coup +N (une fois par carte)
+    UN6: () => { for (let i = 0; i < 5; i++) note(1250 + i * 130, i * .045, .03, { type: 'square', vol: .04 }); }, // La roue s’ouvre
+    UN7: () => { note(250, 0, .62, { vol: .11, f2: 790 }); bruit(0, .52, 1400, .07, .6); cloche(1047, .38, .6, .07); }, // Onde de couleur
+    UN8: () => { bruit(0, .08, 2500, .2, .8, 'highpass'); note(540, .03, .05, { type: 'triangle', vol: .06, f2: 390 }); }, // Carte piochée
+    UN9: () => { [523, 784, 1047].forEach((f, i) => { note(f, i * .08, .22, { type: 'sawtooth', vol: .05 }); note(f, i * .08, .3, { type: 'triangle', vol: .13 }); }); cloche(1319, .24, .7, .1); }, // UNO !
+    UN10: () => { note(330, 0, .12, { type: 'square', vol: .07 }); note(247, .13, .24, { type: 'square', vol: .07, f2: 196 }); bruit(.13, .04, 1200, .6, 1.2); }, // Contre-UNO
+    UN11: () => { arpege([587, 880, 1175], .09, .3); bruit(0, .04, 1500, .4, 1.2); }, // Défi gagné
+    UN12: () => { note(294, 0, .2, { type: 'sawtooth', vol: .06, f2: 247 }); note(220, .2, .42, { type: 'sawtooth', vol: .06, f2: 147 }); }, // Défi perdu
+    UN13: () => { bruit(0, .05, 1300, .7, 1.2); note(120, 0, .14, { vol: .26, f2: 60 }); arpege([659, 880, 1109, 1319], .07, .34); cloche(1760, .3, .9, .08); }, // Main vide
+    UN14: () => { [392, 523, 659].forEach((f, i) => { note(f / 4, i * .42, .16, { type: 'triangle', vol: .2, f2: f / 6 }); note(f, i * .42, .28, { type: 'triangle', vol: .14 }); }); [523, 659, 784, 1047].forEach((f) => { note(f, 1.26, .7, { type: 'triangle', vol: .08 }); }); cloche(1319, 1.26, 1, .09); }, // Podium
+  },
 };
 /** Noms des sons (pour les réglages et la documentation). */
 export const SONS_JEUX = {
@@ -529,8 +545,33 @@ export const SONS_JEUX = {
   "DO4": "Klaxon",
   "DO5": "Accrochage",
   "DO6": "Palier de vitesse"
+ },
+ "uno": {
+  "UN1": "Carte qui glisse",
+  "UN2": "Carte sur la table",
+  "UN3": "Tampon",
+  "UN4": "Le sens s’inverse",
+  "UN5": "Coup +N",
+  "UN6": "La roue s’ouvre",
+  "UN7": "Onde de couleur",
+  "UN8": "Carte piochée",
+  "UN9": "UNO !",
+  "UN10": "Contre-UNO",
+  "UN11": "Défi gagné",
+  "UN12": "Défi perdu",
+  "UN13": "Main vide",
+  "UN14": "Podium"
  }
 };
+
+/** À appeler sur un geste de l'utilisateur : crée ou relance le contexte audio (iOS ne le relance que pendant un geste). */
+export function reveillerSons() {
+  if (!prefs().on) return;
+  try { ctx(); } catch (e) { console.warn('[son]', e); }
+}
+
+/** Vrai si le contexte audio tourne : un son joué sinon resterait en attente, puis partirait avec tous les autres. */
+export const sonsPrets = () => A?.state === 'running';
 
 /**
  * Joue un son de jeu. Ne lève jamais d'erreur.

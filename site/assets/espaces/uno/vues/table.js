@@ -5,20 +5,29 @@
  * tournent dans le sens du jeu, pioche (on pioche en cliquant dessus ; elle pulse « Pioche ! » quand on n'a pas le choix)
  * et défausse, ma main en éventail (2 arcs au-delà de 12 cartes, triée par couleur ou par valeur), puis ma ligne :
  * moi, Passer, UNO ! (seulement juste après avoir posé l'avant-dernière carte), Contre-UNO rouge avec le nom de la cible.
- * Animations : cartes piochées qui volent une par une, +2/+4 et blocage sur le siège touché, grande annonce « UNO ! »
- * et « Inversion ». Son « Pièce arcade » quand mon tour commence (commun/tour-signal.js).
+ * Effets et sons des coups (maquette validée, scènes UNa à UNn, sons UN1 à UN13 ; briques dans uno/effets.js) : l'état arrive
+ * du serveur sans événements, alors chaque nouvel état est comparé au précédent et aux nouvelles lignes du journal (planifier),
+ * ce qui donne une courte suite d'étapes (derouler) : carte qui vole jusqu'à la défausse, jeton Passe, Inversion, cartes vers un
+ * siège ou ma main, annonces UNO, Contre-UNO, Bluff, Raté, Main vide. Ma propre carte part dès le clic, avant la réponse du
+ * serveur (poseLocale), et revient en main si le serveur refuse.
+ * Les effets ne retardent rien : l'état (tour, chrono, couleur, boutons, cartes jouables) est peint tout de suite ; seuls la
+ * défausse et les compteurs de cartes suivent le vol. Une rafale ne joue que le dernier coup ; lignes périmées (reprise après une
+ * veille, reconnexion) ou onglet masqué : aucun effet, l'état est juste. Mouvement réduit : pas d'animation, sons conservés.
+ * Les zones sont mises à jour sur place (sièges, ma ligne, main par identifiant) : un nouvel état ne coupe pas une animation.
  * Sur ordinateur : table à gauche, chat à droite. Sous 760 px : une colonne, les joueurs défilent en bande, la main est
  * un éventail compressé sur 2 rangées (un appui fait remonter la carte, un second la joue) et le chat s'ouvre en volet.
  * La mise en page est dans assets/espaces/uno/table.css ; ici, seulement le contenu et les actions.
  * Une seule action à la fois (anti double clic). Après chaque action : ctx.suivi.rafraichir().
- * Dépendances : core.js (esc, avatarHtml, toast), uno/api.js (uno, erreurTexte), uno/cartes.js (carteHtml, dosHtml, COULEURS),
- *   ./chat.js (creerChat), commun/tour-signal.js, uno.css (.uno-btn, .uno-roue, .uno-roue-voile, .uno-invite-tag).
- * Exporte : creer(root, ctx) -> { maj(etat), message(msg), detruire() }.
+ * Dépendances : core.js (esc, avatarHtml, toast), uno/api.js (uno, erreurTexte), uno/cartes.js (carteHtml, dosHtml, nomCarte, COULEURS),
+ *   uno/effets.js, ./chat.js (creerChat), commun/tour-signal.js, uno.css (.uno-btn, .uno-roue, .uno-roue-voile, .uno-invite-tag).
+ * Exporte : creer(root, ctx) -> { maj(etat), conclure(etat), message(msg), detruire() }.
+ *   conclure : dernier état avant l'écran de fin ; joue le dernier coup et rend une promesse tenue quand il est fini.
  *   ctx = { code, naviguer, moi, suivi } ; suivi = retour de suivrePartie (rafraichir, secondesRestantes, etat, decalage).
  */
 import { esc, avatarHtml, toast } from '../../../commun/core.js';
 import { uno, erreurTexte } from '../api.js';
-import { carteHtml, dosHtml, COULEURS } from '../cartes.js';
+import { carteHtml, dosHtml, nomCarte, COULEURS, ICONE_PASSE } from '../cartes.js';
+import { creerEffets, mouvementReduit, son, rejouer, presse, boite } from '../effets.js';
 import { creerChat } from './chat.js';
 import { boutonReponses } from '../../../commun/core/admin-reponses.js';
 import { creerSignalTour } from '../../../commun/tour-signal.js';
@@ -34,6 +43,15 @@ const COULEURS_ROUE = [['r', 'Rouge', 'q-r'], ['b', 'Bleu', 'q-b'], ['g', 'Vert'
 const ORDRE_COULEUR = { r: 0, y: 1, g: 2, b: 3, k: 4 };
 const ORDRE_VALEUR = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'passe', 'inv', '+2', 'joker', '+4'];
 const HEX = /^#[0-9a-f]{6}$/i;
+const LIGNE_FRAICHE = 6000;        // ms : une ligne du journal plus ancienne n'a plus d'effet (reprise après une veille)
+const VOL_POSE = 420;              // ms : ma carte vers la défausse (maquette)
+const VOL_POSE_FORT = 640;         // ms : dernière carte, tour complet
+const VOL_ADVERSAIRE = 480;        // ms : carte d'un adversaire, retournée à mi-vol
+const CLOTURE = 1500;              // ms : la table reste visible après la dernière carte
+const CARTES_MAX = 12;             // au-delà, les cartes arrivent sans vol
+const DELAI_ACTION = 9000;         // ms : au-delà, l'action est abandonnée et l'état relu (il fait foi)
+const ROUGE_COUP = '#FF5A5A';
+const ORANGE_BLOQUE = '#FF8A4C';
 
 const ETOILE = '<svg width="18" height="18" viewBox="0 0 24 24" fill="#FFFFFF" aria-hidden="true"><path d="M12 2l2.4 7.2H22l-6 4.6 2.3 7.2L12 16.6 5.7 21l2.3-7.2-6-4.6h7.6z"></path></svg>';
 const ICONE_SENS = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7"></path><path d="M20 4v4h-4"></path></svg>';
@@ -46,8 +64,6 @@ const nbCartes = (n) => (n === 1 ? '1 carte' : `${n ?? 0} cartes`);
 /** Chrono « 0:18 », ou un tiret quand il n'y a pas de tour en cours. */
 const chrono = (s) => (s == null ? '–' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
 const ligneJournal = (j) => `<li class="uno-journal-ligne">${esc(j.texte)}</li>`;
-const mouvementReduit = () => document.body.classList.contains('uno-calme')
-  || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const lireTri = () => { try { return localStorage.getItem(CLE_TRI) === 'valeur' ? 'valeur' : 'couleur'; } catch { return 'couleur'; } };
 const garderTri = (t) => { try { localStorage.setItem(CLE_TRI, t); } catch { /* stockage indisponible */ } };
 
@@ -106,6 +122,7 @@ function squelette(idChat) {
       <ol class="uno-sieges" aria-label="Autres joueurs" data-sieges></ol>
       <div class="uno-tapis">
         <div class="uno-ovale" aria-hidden="true"></div>
+        <div class="uno-onde-tapis" aria-hidden="true" data-onde><u></u><i></i></div>
         <div class="uno-fleches" aria-hidden="true" data-fleches>${'<i></i>'.repeat(NB_FLECHES)}</div>
         <div class="uno-tapis-centre">
           <p class="uno-pilules">
@@ -202,6 +219,7 @@ export function creer(root, ctx) {
   };
   const chat = creerChat(q('[data-chat]'), { code, moi: ctx.moi });
   const signal = creerSignalTour();
+  const fx = creerEffets({ table: el, plateau: q('.uno-plateau'), pile: q('.uno-pile'), ovale: q('.uno-ovale'), onde: q('[data-onde]') });
 
   let etat = null;
   let occupe = false;
@@ -213,10 +231,16 @@ export function creer(root, ctx) {
   const journalVus = new Set();
   let tri = lireTri();
   let mainAvant = null;              // ids de ma main au rendu précédent (null : premier rendu)
-  const enVol = new Set();           // cartes piochées pas encore arrivées (animation)
+  const enVol = new Set();           // cartes reçues pas encore arrivées dans ma main (animation)
+  const retenus = new Map();         // cartes en route vers un siège : pas encore comptées dans son compteur
   let leve = null;                   // téléphone : id de la carte remontée par un premier appui
-  let sensAvant = null;
-  const nbAvant = new Map();         // nombre de cartes de chaque adversaire au rendu précédent
+  const pile = [];                   // défausse montrée : { carte, angle }, trois au plus (seul le dessus vient du serveur)
+  let pileRetenue = false;           // une carte vole vers la défausse : le dessus de l'état attend son atterrissage
+  let clePile = '';
+  let poseLocale = null;             // ma carte partie au clic : { carte, vol, fin (promesse de l'atterrissage) }
+  let serie = 0;                     // numéro de la suite d'effets en cours
+  const pauses = new Set();          // attentes de la suite d'effets en cours
+  const annulations = new Set();     // promesses à tenir quand les effets sont annulés
 
   /* ---------- Lecture de l'état ---------- */
 
@@ -241,6 +265,21 @@ export function creer(root, ctx) {
     return ordre.filter((j) => j.user_id !== monId());
   }
 
+  /** Carte que j'ai déjà lancée mais que le serveur compte encore dans ma main. */
+  const poseNonConfirmee = () => !!poseLocale && (etat?.main || []).some((c) => c.id === poseLocale.carte.id);
+  /** Compteur montré : les cartes encore en vol n'y sont pas ; à la fin des vols, c'est celui du serveur. */
+  const nbAffiche = (j) => Math.max(0, (j.nb_cartes || 0) - (retenus.get(j.user_id) || 0));
+  const nbAfficheMoi = (m) => Math.max(0, (m.nb_cartes || 0) - enVol.size - (poseNonConfirmee() ? 1 : 0));
+  const piocheAffichee = () => {
+    let n = (etat?.partie?.pioche ?? 0) + enVol.size;
+    for (const r of retenus.values()) n += r;
+    return n;
+  };
+  const ecritTexte = (n, t) => { if (n && n.textContent !== t) n.textContent = t; };
+  const htmlPeint = new WeakMap();
+  /** Écrit du HTML dans un nœud seulement s'il a changé. */
+  const ecritHtml = (n, h) => { if (n && htmlPeint.get(n) !== h) { htmlPeint.set(n, h); n.innerHTML = h; } };
+
   /* ---------- Rendu (chaque zone se met à jour à part) ---------- */
 
   function rendreBarre() {
@@ -252,30 +291,75 @@ export function creer(root, ctx) {
     refs.sensBloc.classList.toggle('inverse', antihoraire);
   }
 
+  /** Partie fixe d'un siège (le reste est peint par peindreSiege, sans recréer le nœud : ses animations survivent). */
   function siege(j, pos, n) {
-    const tour = etat.partie.tour === j.user_id && etat.partie.statut === 'en_cours';
-    const nb = Math.min(j.nb_cartes || 0, 3);
-    const eventail = Array.from({ length: nb }, () => '<span></span>').join('');
-    return `<li class="uno-siege${tour ? ' est-tour' : ''}${j.exclu ? ' exclu' : ''}${n > 6 ? ' uno-serre' : ''}"
+    return `<li class="uno-siege${n > 6 ? ' uno-serre' : ''}"
         style="--x:${pos.x.toFixed(1)}%;--y:${pos.y.toFixed(1)}%" data-joueur="${esc(j.user_id)}">
-      <span class="uno-siege-photo">${avatar(j, n > 6 ? 44 : 56)}${j.uno ? '<span class="uno-badge-siege">UNO</span>' : ''}
+      <span class="uno-siege-photo">${avatar(j, n > 6 ? 44 : 56)}<span data-badge></span>
         <span class="uno-tampon" aria-hidden="true">${ICONE_BLOQUE}</span></span>
       <span class="uno-siege-infos">
         <span class="uno-siege-nom"><strong style="color:${couleurJoueur(j)}">${esc(j.pseudo || '?')}</strong>${j.invite ? ' <span class="uno-invite-tag">invité</span>' : ''}</span>
-        <span class="uno-siege-cartes"><span class="uno-mini-dos" aria-hidden="true">${eventail}</span><span>${nbCartes(j.nb_cartes)}</span></span>
-        <span class="uno-etiquettes">
-          ${tour ? '<span class="uno-joue">Joue</span>' : ''}
-          ${j.exclu ? '<span class="uno-tag">exclu</span>' : ''}
-        </span>
+        <span class="uno-siege-cartes"><span class="uno-mini-dos" aria-hidden="true"></span><span data-nb></span></span>
+        <span class="uno-etiquettes"></span>
       </span>
-      ${tour ? '<span class="visually-hidden">, à son tour</span>' : ''}${j.uno ? '<span class="visually-hidden">, a dit UNO</span>' : ''}
+      <span data-lecteur></span>
     </li>`;
   }
 
+  function peindreSiege(j) {
+    const li = refs.sieges.querySelector(`[data-joueur="${CSS.escape(String(j.user_id))}"]`);
+    if (!li) return;
+    const tour = etat.partie.tour === j.user_id && etat.partie.statut === 'en_cours';
+    const nb = nbAffiche(j);
+    li.classList.toggle('est-tour', tour);
+    li.classList.toggle('exclu', !!j.exclu);
+    ecritHtml(li.querySelector('.uno-mini-dos'), '<span></span>'.repeat(Math.min(nb, 3)));
+    ecritTexte(li.querySelector('[data-nb]'), nbCartes(nb));
+    ecritHtml(li.querySelector('[data-badge]'), j.uno ? '<span class="uno-badge-siege">UNO</span>' : '');
+    ecritHtml(li.querySelector('.uno-etiquettes'), `${tour ? '<span class="uno-joue">Joue</span>' : ''}${j.exclu ? '<span class="uno-tag">exclu</span>' : ''}`);
+    ecritHtml(li.querySelector('[data-lecteur]'), `${tour ? '<span class="visually-hidden">, à son tour</span>' : ''}${j.uno ? '<span class="visually-hidden">, a dit UNO</span>' : ''}`);
+  }
+
+  let cleSieges = '';
   function rendreSieges() {
     const liste = autres();
-    const pos = placer(liste.length);
-    refs.sieges.innerHTML = liste.map((j, k) => siege(j, pos[k], liste.length)).join('');
+    const cle = liste.map((j) => [j.user_id, j.pseudo, j.couleur, j.avatar_url, j.invite].join('|')).join('#');
+    if (cle !== cleSieges) {
+      cleSieges = cle;
+      const pos = placer(liste.length);
+      refs.sieges.innerHTML = liste.map((j, k) => siege(j, pos[k], liste.length)).join('');
+    }
+    liste.forEach(peindreSiege);
+  }
+
+  /** Empile une carte sur la défausse montrée (trois au plus). */
+  function empiler(carte, angle) {
+    const i = pile.findIndex((x) => x.carte.id === carte.id);
+    if (i >= 0) pile.splice(i, 1);
+    pile.push({ carte, angle });
+    if (pile.length > 3) pile.shift();
+  }
+
+  function peindrePile() {
+    const taille = grand.matches ? 'l' : '';
+    const cle = `${taille}|${pile.map((x) => x.carte.id).join(',')}`;
+    if (cle === clePile) return;
+    clePile = cle;
+    refs.dessus.innerHTML = pile.length
+      ? pile.map((x, i) => {
+        const haut = i === pile.length - 1;
+        return `<span class="${haut ? 'uno-pile-haut' : 'uno-pile-bas'}" style="rotate:${x.angle.toFixed(1)}deg"${haut ? '' : ' aria-hidden="true"'}>${carteHtml(x.carte, { taille })}</span>`;
+      }).join('')
+      : '<span class="uno-vide">Aucune carte</span>';
+  }
+
+  /** Aligne la défausse et la teinte du tapis sur l'état du serveur. */
+  function synchroPile() {
+    const d = etat.partie.dessus;
+    if (!d) pile.length = 0;
+    else if (pile[pile.length - 1]?.carte.id !== d.id) empiler(d, pile.length ? (Math.random() < 0.5 ? -1 : 1) * (4 + Math.random() * 6) : 0);
+    peindrePile();
+    fx.teinte(d?.couleur === 'k' ? etat.partie.couleur : null);
   }
 
   function rendreCentre() {
@@ -288,7 +372,7 @@ export function creer(root, ctx) {
     const cumul = Number(p.cumul || 0);
     refs.cumul.hidden = cumul <= 0;
     refs.cumul.textContent = cumul > 0 ? `+${cumul} à piocher` : '';
-    refs.piocheNb.textContent = p.pioche ?? 0;
+    ecritTexte(refs.piocheNb, String(piocheAffichee()));
     const peut = peutPiocher();
     const oblige = peut && aucunCoup();   // aucune carte jouable : il faut piocher
     refs.pioche.disabled = !peut;
@@ -298,22 +382,32 @@ export function creer(root, ctx) {
     refs.pioche.setAttribute('aria-label', peut
       ? `${cumul > 0 ? `Piocher ${cumul} cartes` : 'Piocher une carte'}${oblige ? ' : aucune carte jouable' : ''}. Il reste ${p.pioche ?? 0} cartes`
       : `Pioche : ${p.pioche ?? 0} cartes`);
-    refs.dessus.innerHTML = p.dessus ? carteHtml(p.dessus, { taille: grand.matches ? 'l' : '' }) : '<span class="uno-vide">Aucune carte</span>';
-    refs.dernier.textContent = etat.journal?.[0]?.texte || '';
+    if (!pileRetenue) synchroPile();
+    ecritTexte(refs.dernier, etat.journal?.[0]?.texte || '');
   }
 
+  /** Ma ligne : la partie fixe n'est écrite qu'une fois, ma photo garde ses animations entre deux états. */
+  let cleMoi = '';
   function rendreMoi() {
     const m = moiJoueur();
-    if (!m) { refs.moi.innerHTML = ''; return; }
-    const tour = monTour();
-    refs.moi.innerHTML = `
-      <span class="uno-siege-photo uno-moi-photo${tour ? ' est-tour' : ''}">${avatar(m, 52)}${m.uno ? '<span class="uno-badge-siege">UNO</span>' : ''}
+    if (!m) { cleMoi = ''; refs.moi.innerHTML = ''; return; }
+    const cle = [m.pseudo, m.couleur, m.avatar_url, m.invite].join('|');
+    if (cle !== cleMoi) {
+      cleMoi = cle;
+      refs.moi.innerHTML = `
+      <span class="uno-siege-photo uno-moi-photo">${avatar(m, 52)}<span data-badge></span>
         <span class="uno-tampon" aria-hidden="true">${ICONE_BLOQUE}</span></span>
       <div class="uno-moi-texte">
         <strong style="color:${couleurJoueur(m)}">${esc(m.pseudo || '?')} (toi)</strong>
-        <span class="uno-moi-detail">${nbCartes(m.nb_cartes)}</span>
-        ${tour ? '<span class="uno-joue">Ton tour</span>' : ''}
+        <span class="uno-moi-detail"></span>
+        <span data-tour></span>
       </div>`;
+    }
+    const tour = monTour();
+    refs.moi.querySelector('.uno-moi-photo').classList.toggle('est-tour', tour);
+    ecritHtml(refs.moi.querySelector('[data-badge]'), m.uno ? '<span class="uno-badge-siege">UNO</span>' : '');
+    ecritTexte(refs.moi.querySelector('.uno-moi-detail'), nbCartes(nbAfficheMoi(m)));
+    ecritHtml(refs.moi.querySelector('[data-tour]'), tour ? '<span class="uno-joue">Ton tour</span>' : '');
   }
 
   /** Place les cartes de ma main en éventail (positions calculées selon la largeur disponible). */
@@ -359,36 +453,62 @@ export function creer(root, ctx) {
     }
   }
 
+  /** Une carte de la main, avec son bouton. */
+  function noeudCarte(c, taille) {
+    const n = document.createElement('div');
+    n.className = 'uno-fan-carte';
+    n.dataset.id = c.id;
+    n.innerHTML = carteHtml(c, { taille, bouton: true, jouable: !!c.jouable, attrs: `data-cle="carte-${c.id}"` });
+    return n;
+  }
+
+  /** Met à jour une carte déjà en main sans recréer son bouton (le focus et la transition restent). */
+  function peindreCarte(n, c) {
+    const b = n.querySelector('button');
+    const ok = !!c.jouable;
+    if (b.classList.contains('jouable') === ok) return;
+    b.classList.toggle('jouable', ok);
+    b.classList.toggle('bloquee', !ok);
+    b.setAttribute('aria-label', `${nomCarte(c)}${ok ? '' : ', pas jouable'}`);
+    if (ok) b.removeAttribute('aria-disabled'); else b.setAttribute('aria-disabled', 'true');
+  }
+
+  /** Ma main : les cartes sont suivies par identifiant, celles qui restent glissent à leur nouvelle place. */
   function rendreMain() {
-    const cartes = trier(etat.main || [], tri);
+    const cartes = trier((etat.main || []).filter((c) => c.id !== poseLocale?.carte.id), tri);
     const ids = cartes.map((c) => c.id);
-    // Cartes nouvelles : on les fait arriver une par une depuis la pioche (seulement si la main a grandi).
-    if (mainAvant && !mouvementReduit()) {
-      const garde = [...mainAvant].every((id) => ids.includes(id));
-      const nouvelles = ids.filter((id) => !mainAvant.has(id));
-      if (garde && nouvelles.length && nouvelles.length <= 12) nouvelles.forEach((id) => enVol.add(id));
-    }
     for (const id of [...enVol]) if (!ids.includes(id)) enVol.delete(id);
     mainAvant = new Set(ids);
     if (leve != null && !ids.includes(leve)) leve = null;
 
     el.querySelectorAll('[data-tri]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tri === tri)));
-    if (etat.moi?.joue === false) {
-      refs.main.innerHTML = '<p class="uno-vide">Tu suis la partie sans y jouer.</p>';
-    } else if (!cartes.length) {
-      refs.main.innerHTML = '<p class="uno-vide">Aucune carte en main.</p>';
+    const zone = refs.main;
+    if (etat.moi?.joue === false || !cartes.length) {
+      ecritHtml(zone, `<p class="uno-vide">${etat.moi?.joue === false ? 'Tu suis la partie sans y jouer.' : 'Aucune carte en main.'}</p>`);
+      zone.style.height = '';
     } else {
-      const taille = grand.matches ? (refs.main.clientWidth >= 700 || !refs.main.clientWidth ? 'l' : '') : 's';
-      refs.main.innerHTML = cartes.map((c) =>
-        `<div class="uno-fan-carte${enVol.has(c.id) ? ' arrive' : ''}${leve === c.id ? ' leve' : ''}" data-id="${c.id}">${carteHtml(c, {
-          taille, bouton: true, jouable: !!c.jouable, attrs: `data-cle="carte-${c.id}"`,
-        })}</div>`).join('');
-      refs.main.setAttribute('aria-label', `Ta main : ${nbCartes(cartes.length)}`);
+      htmlPeint.delete(zone);
+      const taille = grand.matches ? (zone.clientWidth >= 700 || !zone.clientWidth ? 'l' : '') : 's';
+      const cleTaille = taille || 'm';
+      const existants = new Map();
+      for (const n of [...zone.children]) {
+        if (n.dataset.id && n.dataset.taille === cleTaille) existants.set(n.dataset.id, n);
+        else n.remove();
+      }
+      cartes.forEach((c, i) => {
+        let n = existants.get(String(c.id));
+        if (n) { existants.delete(String(c.id)); peindreCarte(n, c); }
+        else { n = noeudCarte(c, taille); n.dataset.taille = cleTaille; }
+        n.classList.toggle('arrive', enVol.has(c.id));
+        n.classList.toggle('leve', leve === c.id);
+        if (zone.children[i] !== n) zone.insertBefore(n, zone.children[i] || null);
+      });
+      existants.forEach((n) => n.remove());
+      zone.setAttribute('aria-label', `Ta main : ${nbCartes(cartes.length)}`);
       placerMain();
     }
     refs.indice.hidden = !(etat.partie.statut === 'en_cours' && !monTour() && cartes.some((c) => c.jouable));
     refs.aideTel.hidden = grand.matches || cartes.length < 2;
-    if (enVol.size) faireArriver();
   }
 
   function rendreCommandes() {
@@ -424,14 +544,15 @@ export function creer(root, ctx) {
     const d = etat.partie.defi;
     const pour = !!d && d.cible === monId();
     refs.defi.hidden = !pour;
-    if (!pour) { refs.defi.innerHTML = ''; return; }
+    if (!pour) { ecritHtml(refs.defi, ''); return; }
     const poseur = joueurPar(d.poseur);
-    refs.defi.innerHTML = `
+    ecritHtml(refs.defi, `
       <p class="uno-defi-texte"><strong>${esc(poseur?.pseudo || 'Un joueur')}</strong> a posé un Joker +4. Contester ?</p>
       <div class="uno-defi-actions">
-        <button type="button" class="btn btn-ghost" data-cle="defi-contester" data-defi="oui"${occupe ? ' disabled' : ''}>Contester</button>
-        <button type="button" class="btn btn-primary" data-cle="defi-accepter" data-defi="non"${occupe ? ' disabled' : ''}>Accepter (+4)</button>
-      </div>`;
+        <button type="button" class="btn btn-ghost" data-cle="defi-contester" data-defi="oui">Contester</button>
+        <button type="button" class="btn btn-primary" data-cle="defi-accepter" data-defi="non">Accepter (+4)</button>
+      </div>`);
+    refs.defi.querySelectorAll('button').forEach((b) => { b.disabled = occupe; });
   }
 
   /** Le journal ne s'ajoute qu'en tête : seules les nouvelles lignes sont annoncées (aria-relevant=additions). */
@@ -449,21 +570,29 @@ export function creer(root, ctx) {
       journalVus.add(j.id);
     }
     while (refs.journal.children.length > JOURNAL_MAX) refs.journal.lastElementChild.remove();
-    nouveaux.forEach(effetJournal);
   }
 
   /* ---------- Animations ---------- */
 
-  const rejouer = (n, cls) => { if (!n) return; n.classList.remove(cls); void n.offsetWidth; n.classList.add(cls); };
   /** Élément « photo » d'un joueur (siège, ou ma ligne). */
   const photoDe = (uid) => (uid === monId() ? refs.moi.querySelector('.uno-siege-photo')
     : refs.sieges.querySelector(`[data-joueur="${CSS.escape(String(uid))}"] .uno-siege-photo`));
+  const nomDe = (uid) => joueurPar(uid)?.pseudo || 'Un joueur';
+  /** Point d'arrivée vers un siège, ou null s'il n'est pas à l'écran (bande de joueurs repliée, spectateur). */
+  function boiteJoueur(uid) {
+    const av = photoDe(uid)?.querySelector('.uno-av');
+    if (!av || !av.getBoundingClientRect().width) return null;
+    return { ...boite(av), l: 44 };
+  }
 
   /** Grande annonce au centre de la table (« UNO ! », « Inversion »). */
+  let finAnnonce = 0;
   function annonce(titreHtml, sousTitre) {
     if (mouvementReduit()) return;
     refs.annonce.innerHTML = `${titreHtml}<span class="qui">${esc(sousTitre)}</span>`;
     rejouer(refs.annonce, 'go');
+    fx.moins(finAnnonce);
+    finAnnonce = fx.plus(() => { refs.annonce.classList.remove('go'); refs.annonce.innerHTML = ''; }, 1650);
   }
 
   /** « +2 », « +4 », « Bloqué ! » qui jaillit du siège touché. */
@@ -475,110 +604,351 @@ export function creer(root, ctx) {
     const n = document.createElement('div');
     n.className = 'uno-coup';
     n.textContent = texte;
-    n.style.cssText = `left:${r.left - b.left + r.width / 2}px;top:${r.top - b.top + 10}px;color:${couleur};--lueur:${couleur}`;
+    n.style.cssText = `top:${r.top - b.top + 10}px;color:${couleur};--lueur:${couleur}`;
     el.append(n);
+    const l = n.offsetWidth / 2 + 4;   // reste dans la table, même sur le bord d'un téléphone
+    n.style.left = `${Math.max(l, Math.min(b.width - l, r.left - b.left + r.width / 2))}px`;
     requestAnimationFrame(() => n.classList.add('go'));
-    setTimeout(() => n.remove(), 1500);
     rejouer(ph, 'touche');
     if (bloque) rejouer(ph, 'bloque');
+    fx.plus(() => { n.remove(); ph.classList.remove('touche', 'bloque'); }, 1500);
   }
 
-  /** Effet d'une nouvelle ligne du journal. */
-  function effetJournal(j) {
-    const t = j.texte || '';
-    if (j.type === 'uno') {
-      const nom = joueurPar(j.user_id)?.pseudo || 'Un joueur';
-      annonce('<span class="uno-txt">UNO !</span>', j.user_id === monId() ? 'Tu n\'as plus qu\'une carte' : `${nom} n'a plus qu'une carte`);
-    } else if (j.type === 'contre') {
-      annonce('<span class="uno-txt-rouge">Contre-UNO !</span>', 'Oubli de UNO : 2 cartes de pénalité');
-    } else if (j.type === 'pioche' || j.type === 'defi') {
-      const m = t.match(/pioche (\d+) cartes/);
-      if (m && Number(m[1]) >= 2) coup(j.user_id, `+${m[1]}`, '#FF5A5A', /passe son tour/.test(t));
-    } else if (j.type === 'info' && /passe son tour\.$/.test(t) && !/garde sa carte/.test(t)) {
-      coup(j.user_id, 'Bloqué !', '#FF8A4C', true);
-    }
+  /* ---------- Des états aux effets ---------- */
+
+  /** Attente dans une suite d'effets : annulée avec elle ; très courte en mouvement réduit (les sons gardent leur ordre). */
+  const pause = (ms) => new Promise((ok) => {
+    const t = setTimeout(() => { pauses.delete(t); ok(); }, mouvementReduit() ? Math.min(ms, 160) : ms);
+    pauses.add(t);
+  });
+
+  /** Promesse tenue à la prochaine annulation des effets. */
+  const surAnnulation = () => new Promise((ok) => { annulations.add(ok); });
+
+  /** Arrête la suite d'effets en cours : plus rien en attente, compteurs et défausse reviennent à l'état (à peindre ensuite). */
+  function arreterPlan({ garderPose = false } = {}) {
+    serie += 1;
+    pauses.forEach(clearTimeout);
+    pauses.clear();
+    annulations.forEach((ok) => ok());
+    annulations.clear();
+    enVol.clear();
+    retenus.clear();
+    fx.annulerVols(garderPose ? poseLocale?.vol : null);
+    if (!garderPose) { poseLocale = null; pileRetenue = false; }
   }
 
-  /** Les cartes piochées arrivent une par une : un dos vole de la pioche à sa place dans la main. */
-  let vols = 0;
-  function faireArriver() {
-    if (vols) return;
-    const suivante = () => {
-      const id = [...enVol][0];
-      if (id == null) { vols = 0; return; }
-      const cible = refs.main.querySelector(`.uno-fan-carte[data-id="${id}"]`);
-      const depart = refs.pioche.getBoundingClientRect();
-      if (!cible || !depart.width) { enVol.delete(id); cible?.classList.remove('arrive'); suivante(); return; }
-      const arrivee = cible.getBoundingClientRect();
-      const v = document.createElement('div');
-      v.className = 'uno-vole';
-      v.innerHTML = dosHtml({ taille: grand.matches ? '' : 's' });
-      v.style.left = `${depart.left}px`;
-      v.style.top = `${depart.top}px`;
-      document.body.append(v);
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        v.style.transform = `translate(${arrivee.left - depart.left}px, ${arrivee.top - depart.top}px) rotate(8deg)`;
-      }));
-      setTimeout(() => {
-        v.remove();
-        enVol.delete(id);
-        refs.main.querySelector(`.uno-fan-carte[data-id="${id}"]`)?.classList.remove('arrive');
-        suivante();
-      }, 420);
+  /** Nouvelles lignes du journal, de la plus ancienne à la plus récente. */
+  const lignesNouvelles = (e) => (journalPret ? (e.journal || []).filter((j) => !journalVus.has(j.id)).reverse() : []);
+
+  /** Vrai si cette ligne vient d'arriver (comparée à l'heure du serveur) : sinon c'est une reprise, sans effet. */
+  function fraiche(j, e) {
+    const age = new Date(e.maintenant).getTime() - new Date(j.created_at).getTime();
+    return !(age > LIGNE_FRAICHE);
+  }
+
+  /**
+   * Traduit les nouvelles lignes du journal en étapes d'effets.
+   * Seul le dernier coup est joué : une rafale ne s'étire jamais en longue suite d'animations.
+   * @param {object} avant état précédent. @param {object} e nouvel état. @param {Array} lignes nouvelles lignes.
+   * @returns {Array<object>} étapes (voir etape()).
+   */
+  function planifier(avant, e, lignes) {
+    const p = e.partie;
+    const moi = e.moi?.user_id ?? null;
+    const iJouer = lignes.map((l) => l.type).lastIndexOf('jouer');
+    const lesLignes = iJouer >= 0 ? lignes.slice(iJouer) : lignes.slice(-2);
+    const autreManche = avant.partie.manche !== p.manche;
+    const finDeMain = lesLignes.find((l) => l.type === 'manche' && /vide sa main/.test(l.texte || ''));
+    const nbDe = (uid, etatX) => etatX.joueurs?.find((j) => j.user_id === uid)?.nb_cartes || 0;
+    const plan = [];
+    /** Joueur dont le compteur a gagné n cartes (quand l'état précédent ne le dit pas). */
+    const gagneur = (n) => e.joueurs?.find((j) => nbDe(j.user_id, e) - nbDe(j.user_id, avant) === n)?.user_id ?? null;
+    /** Cartes reçues : jamais plus que ce que le compteur a vraiment gagné. */
+    const recoit = (uid, n, o = {}) => {
+      const gain = Math.max(0, nbDe(uid, e) - nbDe(uid, avant));
+      const nb = Math.min(n, gain || n, CARTES_MAX);
+      if (uid) plan.push({ t: 'cartes', uid, n: nb, son: 'UN5', pas: 260, ...o });
     };
-    vols = 1;
-    suivante();
-  }
 
-  /** Adversaires qui reçoivent des cartes : petits dos qui volent vers leur siège. */
-  function volsAdversaires() {
-    if (mouvementReduit()) { nbAvant.clear(); }
-    for (const j of autres()) {
-      const avant = nbAvant.get(j.user_id);
-      nbAvant.set(j.user_id, j.nb_cartes || 0);
-      if (avant == null || mouvementReduit()) continue;
-      const plus = Math.min(4, (j.nb_cartes || 0) - avant);
-      const ph = photoDe(j.user_id);
-      if (plus <= 0 || plus > 4 || !ph) continue;
-      const d = refs.pioche.getBoundingClientRect();
-      const a = ph.getBoundingClientRect();
-      for (let i = 0; i < plus; i++) {
-        setTimeout(() => {
-          const v = document.createElement('div');
-          v.className = 'uno-vole petit';
-          v.innerHTML = dosHtml({ taille: 's' });
-          v.style.left = `${d.left}px`;
-          v.style.top = `${d.top}px`;
-          document.body.append(v);
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            v.style.transform = `translate(${a.left - d.left}px, ${a.top - d.top}px) scale(.45) rotate(-10deg)`;
-            v.style.opacity = '.2';
-          }));
-          setTimeout(() => v.remove(), 480);
-        }, i * 260);
+    for (const l of lesLignes) {
+      const t = l.texte || '';
+      if (autreManche && l.type !== 'manche') {           // nouvelle donne : mains et défausse sont repartis de zéro
+        if (l.type === 'jouer' && poseLocale) plan.push({ t: 'pose', uid: l.user_id, carte: poseLocale.carte, fort: true, nouvelleDonne: true });
+        continue;
+      }
+      if (l.type === 'jouer') {
+        if (p.dessus && p.dessus.id !== avant.partie.dessus?.id) {
+          plan.push({ t: 'pose', uid: l.user_id, carte: p.dessus, fort: !!finDeMain, depuis: departDeMaMain(p.dessus) });
+          if (p.dessus.valeur === 'inv' && p.sens !== avant.partie.sens) plan.push({ t: 'inversion', sens: p.sens === -1 ? -1 : 1 });
+        }
+      } else if (l.type === 'info' && /passe son tour\.$/.test(t)) {
+        plan.push({ t: 'bloque', uid: l.user_id });
+      } else if (l.type === 'pioche') {
+        const m = t.match(/pioche (\d+) cartes/);
+        const n = m ? Number(m[1]) : 1;
+        const moiCible = l.user_id === moi;
+        recoit(l.user_id, n, n >= 2
+          ? { coup: `+${n}`, pas: moiCible ? 300 : (n > 2 ? 200 : 260) }
+          : { son: 'UN8', pas: 420 });
+      } else if (l.type === 'uno') {
+        plan.push({ t: 'uno', uid: l.user_id });
+      } else if (l.type === 'contre') {
+        const cible = avant.partie.uno_attente ?? gagneur(2);
+        plan.push({ t: 'contre', uid: cible });
+        recoit(cible, 2, { pas: cible === moi ? 300 : 260 });
+      } else if (l.type === 'defi') {
+        const raison = /avec raison/.test(t);
+        const poseur = avant.partie.defi?.poseur ?? (raison ? gagneur(4) : null);
+        const uid = raison ? poseur : l.user_id;
+        plan.push({ t: raison ? 'bluff' : 'rate', uid, poseur });
+        recoit(uid, raison ? 4 : 6, { pas: uid === moi ? 240 : 200 });
+      } else if (l === finDeMain) {
+        plan.push({ t: 'mainVide', uid: l.user_id });
       }
     }
+
+    // Mes cartes : déjà dans l'état, mais cachées (.arrive) jusqu'à ce que leur vol arrive.
+    const moiRecoit = plan.find((s) => s.t === 'cartes' && s.uid === moi);
+    if (moiRecoit && !mouvementReduit()) {
+      const ids = new Set((e.main || []).map((c) => c.id));
+      const nouvelles = [...ids].filter((id) => !mainAvant?.has(id));
+      const garde = !!mainAvant && [...mainAvant].every((id) => ids.has(id) || id === p.dessus?.id);
+      moiRecoit.ids = garde && nouvelles.length <= CARTES_MAX ? nouvelles : [];
+    }
+    return plan;
   }
+
+  /** Point de départ de ma carte si elle est encore dans ma main (le robot a joué pour moi), mesuré avant le rendu. */
+  function departDeMaMain(carte) {
+    const fan = refs.main.querySelector(`.uno-fan-carte[data-id="${carte.id}"]`);
+    if (!fan || poseLocale?.carte.id === carte.id) return null;
+    return { de: boite(fan.querySelector('.uc')), r0: parseFloat(fan.style.getPropertyValue('--r')) || 0 };
+  }
+
+  /** La carte touche la défausse : elle s'y pose, impact, et onde de couleur pour un Joker. */
+  function atterrir(carte, angle, { fort = false, couleur = null } = {}) {
+    empiler(carte, angle);
+    peindrePile();
+    son('UN2');
+    fx.impact(carte, fort);
+    if (carte.couleur === 'k') {
+      son('UN7');
+      fx.onde(couleur || etat?.partie?.couleur);
+      if (couleur) fx.teinte(couleur);
+    }
+  }
+
+  /** Lance une carte vers la défausse. Rend le vol et la promesse de son atterrissage. */
+  function envoyerSurPile(carte, { depuis = null, uid = null, fort = false, couleur = null } = {}) {
+    const a = boite(refs.dessus);
+    const r1 = fort ? 0 : (Math.random() < 0.5 ? -1 : 1) * (4 + Math.random() * 6);
+    const siegeDe = depuis ? null : boiteJoueur(uid);
+    let duree = 0;
+    let vol = null;
+    son('UN1');
+    if (depuis) {
+      duree = fort ? VOL_POSE_FORT : VOL_POSE;
+      const taille = grand.matches ? (refs.main.clientWidth >= 700 ? 'l' : '') : 's';
+      vol = fx.voler(carteHtml(carte, { taille }), depuis.de, a, { duree, r0: depuis.r0, r1, rm: fort ? 200 : depuis.r0 + (r1 > 0 ? 18 : -18), arc: fort ? -70 : -44, gonfle: fort ? 1.3 : 1.1 });
+    } else if (siegeDe) {
+      duree = fort ? VOL_POSE_FORT : VOL_ADVERSAIRE;
+      vol = fx.voler(dosHtml(), siegeDe, a, { duree, r0: -12, r1, rm: fort ? 200 : 6, arc: fort ? -70 : 22, gonfle: fort ? 1.3 : 1.1, face: carteHtml(carte) });
+    }
+    if (!vol) duree = 0;
+    const fin = new Promise((ok) => {
+      const poser = () => {
+        if (vol && !vol.isConnected) return;   // vol annulé entre-temps
+        atterrir(carte, r1, { fort, couleur });
+        ok();
+      };
+      if (duree) fx.plus(poser, duree); else poser();
+    });
+    return { vol, fin };
+  }
+
+  /** Ma carte part dès le clic (ou le choix de la couleur), sans attendre le serveur. */
+  function lancerPose(carte, couleur) {
+    if (mouvementReduit()) return;
+    const fan = refs.main.querySelector(`.uno-fan-carte[data-id="${carte.id}"]`);
+    const uc = fan?.querySelector('.uc');
+    if (!uc) return;
+    arreterPlan();
+    synchroPile();                     // une carte adverse encore en vol va directement sur la défausse
+    const depuis = { de: boite(uc), r0: parseFloat(fan.style.getPropertyValue('--r')) || 0 };
+    const fort = (etat.main || []).length === 1;
+    poseLocale = { carte, vol: null, fin: null };
+    pileRetenue = true;
+    Object.assign(poseLocale, envoyerSurPile(carte, { depuis, fort, couleur }));
+  }
+
+  /** Le serveur a refusé : la carte revient en main, la défausse redevient celle de l'état. */
+  function annulerPose() {
+    if (!poseLocale) return;
+    const id = poseLocale.carte.id;
+    arreterPlan();
+    const i = pile.findIndex((x) => x.carte.id === id);
+    if (i >= 0) pile.splice(i, 1);
+  }
+
+  /** Des cartes partent de la pioche vers un adversaire, au rythme de la maquette ; son compteur suit. */
+  async function versSiege(s) {
+    const de = { ...boite(refs.pioche), l: 52 };
+    for (let i = 0; i < s.n; i++) {
+      if (i) await pause(s.pas);
+      son(s.son);
+      const a = boiteJoueur(s.uid);
+      if (a) fx.voler(dosHtml({ taille: 's' }), de, a, { duree: 420, r1: -10, e1: 0.45, arc: 0 });
+      const r = (retenus.get(s.uid) || 0) - 1;
+      if (r > 0) retenus.set(s.uid, r); else retenus.delete(s.uid);
+      rendreSieges();
+      ecritTexte(refs.piocheNb, String(piocheAffichee()));
+    }
+    await pause(480);
+  }
+
+  /** Mes cartes arrivent une par une : un dos vole de la pioche à sa place dans la main. */
+  async function versMain(s) {
+    const dessusPioche = refs.pioche.querySelector('.ub:nth-child(3)');
+    const ids = s.ids || [];
+    const n = mouvementReduit() ? s.n : ids.length;
+    for (let i = 0; i < n; i++) {
+      son('UN8');
+      const id = ids[i];
+      const fan = id == null ? null : refs.main.querySelector(`.uno-fan-carte[data-id="${id}"]`);
+      if (fan && !mouvementReduit()) {
+        dessusPioche?.animate([{ translate: '0 0' }, { translate: '0 -7px' }, { translate: '0 0' }], { duration: 200 });
+        fx.voler(dosHtml({ taille: grand.matches ? '' : 's' }), boite(refs.pioche), boite(fan.querySelector('.uc')), { duree: s.pas, r1: 8, arc: 0, rm: 4, gonfle: 1 });
+      }
+      await pause(mouvementReduit() ? 120 : s.pas);
+      if (id == null) continue;
+      enVol.delete(id);
+      refs.main.querySelector(`.uno-fan-carte[data-id="${id}"]`)?.classList.remove('arrive');
+      rendreMoi();
+      ecritTexte(refs.piocheNb, String(piocheAffichee()));
+    }
+  }
+
+  /** Une étape d'effets. */
+  async function etape(s) {
+    const moi = monId();
+    switch (s.t) {
+      case 'pose': {
+        if (poseLocale?.carte.id === s.carte.id) {
+          await poseLocale.fin;
+          poseLocale = null;
+        } else {
+          await envoyerSurPile(s.carte, { depuis: s.depuis, uid: s.uid, fort: s.fort }).fin;
+        }
+        pileRetenue = false;
+        if (s.nouvelleDonne) pile.length = 0;   // la défausse repart de la première carte de la nouvelle manche
+        synchroPile();
+        break;
+      }
+      case 'bloque': {
+        await pause(90);
+        const a = boiteJoueur(s.uid);
+        const haut = refs.dessus.querySelector('.uno-pile-haut');
+        if (a && haut) fx.voler(`<span class="uno-fx-jeton">${ICONE_PASSE(30)}</span>`, { ...boite(haut), l: 44 }, a, { duree: 340, r1: 360, rm: 180, arc: -16, gonfle: 1 });
+        await pause(340);
+        son('UN3');
+        coup(s.uid, 'Bloqué !', ORANGE_BLOQUE, true);
+        break;
+      }
+      case 'inversion':
+        son('UN4');
+        fx.vrille(s.sens === -1);
+        annonce('<span class="uno-txt-or">⟲ Inversion</span>', s.sens === -1 ? 'Le jeu tourne maintenant dans le sens antihoraire' : 'Le jeu tourne maintenant dans le sens horaire');
+        break;
+      case 'uno':
+        son('UN9');
+        fx.vrille(false);
+        annonce('<span class="uno-txt">UNO !</span>', s.uid === moi ? 'Tu n\'as plus qu\'une carte' : `${nomDe(s.uid)} n'a plus qu'une carte`);
+        break;
+      case 'contre':
+        son('UN10');
+        annonce('<span class="uno-txt-rouge">Contre-UNO !</span>', 'Oubli de UNO : 2 cartes de pénalité');
+        if (s.uid) coup(s.uid, '+2', ROUGE_COUP);
+        break;
+      case 'bluff':
+        son(s.poseur === moi ? 'UN12' : 'UN11');
+        annonce('<span class="uno-txt-or">Bluff !</span>', s.uid === moi ? 'Tu pioches 4 cartes' : `${nomDe(s.uid)} pioche 4 cartes`);
+        if (s.uid) coup(s.uid, '+4', ROUGE_COUP);
+        break;
+      case 'rate':
+        son(s.poseur === moi ? 'UN11' : 'UN12');
+        son('UN5');
+        annonce('<span class="uno-txt-rouge">Raté !</span>', `Pas de bluff : 6 cartes pour ${s.uid === moi ? 'toi' : nomDe(s.uid)}`);
+        coup(s.uid, '+6', ROUGE_COUP);
+        await pause(500);
+        break;
+      case 'cartes':
+        if (s.coup) {
+          await pause(120);
+          coup(s.uid, s.coup, ROUGE_COUP);
+        }
+        if (s.uid === moi) {
+          if (s.coup) { son('UN5'); await pause(240); }
+          await versMain(s);
+        } else {
+          await versSiege(s);
+        }
+        break;
+      case 'mainVide':
+        son('UN13');
+        fx.vrille(false);
+        fx.pluie();
+        annonce('<span class="uno-txt" style="font-size:.72em">Main vide !</span>', `${nomDe(s.uid)} pose sa dernière carte`);
+        break;
+      default:
+    }
+  }
+
+  /** Joue les étapes l'une après l'autre ; une nouvelle suite remplace celle-ci. */
+  async function jouerEtapes(plan, n) {
+    try {
+      for (const s of plan) {
+        await etape(s);
+        if (n !== serie) return;
+      }
+    } catch (err) {
+      console.warn('[uno] effets', err);
+      if (n !== serie) return;
+      // Rien ne doit rester caché ou retenu : l'état reprend la main.
+      arreterPlan();
+      if (etat?.partie) rendreTout();
+    }
+  }
+
+  /** Lance une suite d'effets. La promesse est tenue à sa fin, ou dès qu'elle est annulée. */
+  const derouler = (plan) => (plan.length ? Promise.race([jouerEtapes(plan, serie), surAnnulation()]) : Promise.resolve());
 
   /* ---------- Flèches dorées qui tournent sur l'anneau, dans le sens du jeu ---------- */
 
   let phase = 0;
   let t0 = 0;
   let raf = 0;
+  let vitesse = null;                // de -1 à 1 : les flèches freinent puis repartent sur une Inversion
   function tournerFleches(now) {
     raf = requestAnimationFrame(tournerFleches);
     if (document.hidden || !etat?.partie) { t0 = now; return; }
-    const dir = etat.partie.sens === -1 ? -1 : 1;
-    if (!mouvementReduit()) phase += ((now - (t0 || now)) / 1000) * 0.35 * dir;
+    const cible = etat.partie.sens === -1 ? -1 : 1;
+    const dt = (now - (t0 || now)) / 1000;
     t0 = now;
+    const reduit = mouvementReduit();
+    if (vitesse == null || reduit) vitesse = cible;
+    else vitesse += (cible - vitesse) * Math.min(1, dt * 2.6);
+    if (!reduit) phase += dt * 0.35 * vitesse;
+    const dir = vitesse < 0 ? -1 : 1;
     const w = refs.fleches.clientWidth / 2;
     const h = refs.fleches.clientHeight / 2;
     if (!w || !h) return;
-    [...refs.fleches.children].forEach((f, i) => {
+    const fleches = refs.fleches.children;
+    for (let i = 0; i < fleches.length; i++) {
       const a = phase + (i / NB_FLECHES) * Math.PI * 2;
       const ang = Math.atan2(Math.cos(a) * h * dir, -Math.sin(a) * w * dir) * 180 / Math.PI;
-      f.style.transform = `translate(${(Math.cos(a) * w).toFixed(1)}px, ${(Math.sin(a) * h).toFixed(1)}px) rotate(${ang.toFixed(1)}deg)`;
-    });
+      fleches[i].style.transform = `translate(${(Math.cos(a) * w).toFixed(1)}px, ${(Math.sin(a) * h).toFixed(1)}px) rotate(${ang.toFixed(1)}deg)`;
+    }
   }
 
   /* ---------- Chrono ---------- */
@@ -609,15 +979,6 @@ export function creer(root, ctx) {
     dernierTour = tour;
     if (premier || !tour) return;
     refs.annonceTour.textContent = tour === monId() ? "C'est ton tour." : `Au tour de ${joueurPar(tour)?.pseudo || 'un joueur'}.`;
-  }
-
-  /** Changement de sens : annonce « Inversion » (pas à l'ouverture de la page). */
-  function surveillerSens() {
-    const s = etat.partie.sens === -1 ? -1 : 1;
-    if (sensAvant != null && s !== sensAvant) {
-      annonce(`<span class="uno-txt-or">⟲ Inversion</span>`, s === -1 ? 'Le jeu tourne maintenant dans le sens antihoraire' : 'Le jeu tourne maintenant dans le sens horaire');
-    }
-    sensAvant = s;
   }
 
   /** Élément ayant le focus dans la table (pour le retrouver après un nouveau rendu). */
@@ -708,17 +1069,41 @@ export function creer(root, ctx) {
 
   /* ---------- Actions ---------- */
 
-  /** Lance une action serveur : une seule à la fois, erreurs en toast, puis relecture de l'état. */
-  async function agir(fn) {
-    if (occupe) return;
+  /** Attend une réponse du serveur, sans jamais rester bloqué. */
+  async function avecDelai(promesse) {
+    let t = 0;
+    try {
+      return await Promise.race([promesse, new Promise((_, non) => {
+        t = setTimeout(() => non(new Error('Le serveur ne répond pas : la table se remet à jour.')), DELAI_ACTION);
+      })]);
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  /**
+   * Lance une action serveur : une seule à la fois, erreurs en toast, puis relecture de l'état.
+   * Après une pose, l'action reste en cours jusqu'à la relecture : une autre action partirait d'un état périmé.
+   * Une pose locale n'est annulée que par l'action qui l'a lancée ; sans réponse, l'état relu fait foi (le serveur a pu accepter).
+   * @param {Function} fn appel serveur. @param {Function} [avant] effet immédiat, sans attendre la réponse.
+   */
+  async function agir(fn, avant = null) {
+    if (occupe || poseNonConfirmee()) return;
     occupe = true;
     const cle = focusCle();
-    rendreTout(); // boutons désactivés, sans déplacer le focus : il revient à la fin
+    let pose = null;
     try {
-      await fn();
+      avant?.();
+      pose = poseLocale;
+      // Boutons désactivés, sans déplacer le focus : il revient à la fin. Sauf si ma carte vient de quitter la main.
+      rendreTout(pose && cle?.startsWith('carte-') ? cle : null);
+      await avecDelai(fn());
+      if (pose) await avecDelai(suivi.rafraichir());
     } catch (e) {
+      if (pose && poseLocale === pose) annulerPose();
       toast(erreurTexte(e), 'error');
     } finally {
+      if (pose && poseLocale === pose && poseNonConfirmee()) annulerPose();   // relecture échouée : l'état affiché reste juste
       occupe = false;
       rendreTout(focusCle() || cle);
       suivi.rafraichir();
@@ -733,16 +1118,21 @@ export function creer(root, ctx) {
       <div class="uno-roue">${roue}<div class="centre">${carteHtml({ couleur: 'k', valeur: 'joker' }, { taille: 's' })}</div></div>
       <p>Touche un quart du cercle · <span data-roue-temps>${chrono(suivi.secondesRestantes())}</span> pour choisir</p>
       <button type="button" class="btn btn-ghost" data-annuler>Annuler</button>`, retour, 'Choisis la couleur');
+    son('UN6');
+    if (!mouvementReduit()) {
+      v.querySelector('.uno-roue').animate([{ transform: 'scale(.6) rotate(-90deg)', opacity: 0 }, { transform: 'scale(1) rotate(0)', opacity: 1 }],
+        { duration: 260, easing: 'cubic-bezier(.2,1.3,.4,1)' });
+    }
     v.querySelectorAll('[data-couleur-choix]').forEach((b) => b.addEventListener('click', () => {
       const couleur = b.dataset.couleurChoix;
       fermerVoile();
-      agir(() => uno.jouer(code, carte.id, { couleur }));
+      agir(() => uno.jouer(code, carte.id, { couleur }), () => lancerPose(carte, couleur));
     }));
   }
 
   function choisirCible(carte, retour) {
     const cibles = autres().filter((j) => !j.exclu);
-    if (!cibles.length) { agir(() => uno.jouer(code, carte.id)); return; }
+    if (!cibles.length) { agir(() => uno.jouer(code, carte.id), () => lancerPose(carte)); return; }
     const liste = cibles.map((j) => `<li><button type="button" class="uno-cible" data-cible="${esc(j.user_id)}">
         ${avatar(j, 40)}
         <span class="uno-cible-nom" style="color:${couleurJoueur(j)}">${esc(j.pseudo || '?')}</span>
@@ -754,7 +1144,7 @@ export function creer(root, ctx) {
     v.querySelectorAll('[data-cible]').forEach((b) => b.addEventListener('click', () => {
       const cible = b.dataset.cible;
       fermerVoile();
-      agir(() => uno.jouer(code, carte.id, { cible }));
+      agir(() => uno.jouer(code, carte.id, { cible }), () => lancerPose(carte));
     }));
   }
 
@@ -763,17 +1153,17 @@ export function creer(root, ctx) {
     if (occupe || !etat) return;
     if (carte.valeur === 'joker' || carte.valeur === '+4') { choisirCouleur(carte, bouton); return; }
     if (carte.valeur === '7' && etat.partie.variantes?.sept_zero) { choisirCible(carte, bouton); return; }
-    agir(() => uno.jouer(code, carte.id));
+    agir(() => uno.jouer(code, carte.id), () => lancerPose(carte));
   }
 
   /* ---------- Écouteurs ---------- */
 
-  refs.pioche.addEventListener('click', () => { if (peutPiocher()) agir(() => uno.piocher(code)); });
+  refs.pioche.addEventListener('click', () => { if (peutPiocher()) { presse(refs.pioche); agir(() => uno.piocher(code)); } });
   refs.passer.addEventListener('click', () => agir(() => uno.passer(code)));
-  refs.uno.addEventListener('click', () => agir(() => uno.direUno(code)));
+  refs.uno.addEventListener('click', () => { presse(refs.uno); agir(() => uno.direUno(code)); });
   refs.contrer.addEventListener('click', () => {
     const cible = refs.contrer.dataset.cible;
-    if (cible) agir(() => uno.contrer(code, cible));
+    if (cible) { presse(refs.contrer); agir(() => uno.contrer(code, cible)); }
   });
   refs.main.addEventListener('click', (ev) => {
     const b = ev.target.closest('button[data-carte]');
@@ -797,8 +1187,8 @@ export function creer(root, ctx) {
     if (etat?.partie) rendreMain();
   }));
   refs.defi.addEventListener('click', (ev) => {
-    const b = ev.target.closest('[data-defi]');
-    if (b) agir(() => uno.contester(code, b.dataset.defi === 'oui'));
+    const b = ev.target.closest('button[data-defi]');
+    if (b) { presse(b); agir(() => uno.contester(code, b.dataset.defi === 'oui')); }
   });
   refs.chatBouton.addEventListener('click', surBoutonChat);
   refs.chatFermer.addEventListener('click', () => {
@@ -810,35 +1200,80 @@ export function creer(root, ctx) {
   const observateur = typeof ResizeObserver === 'function' ? new ResizeObserver(() => placerMain()) : null;
   observateur?.observe(refs.main);
 
+  /** Onglet masqué : rien ne doit rester en attente, l'état revient d'un coup. */
+  function surVisibilite() {
+    if (!document.hidden) return;
+    arreterPlan();
+    fx.nettoyer();
+    refs.annonce.classList.remove('go');
+    el.querySelectorAll('.touche, .bloque').forEach((n) => n.classList.remove('touche', 'bloque'));
+    if (etat?.partie) rendreTout();
+  }
+  document.addEventListener('visibilitychange', surVisibilite);
+
   peindreChatBouton();
   const minuterie = setInterval(tic, 250);
   raf = requestAnimationFrame(tournerFleches);
 
+  /** Reçoit un état : peint tout de suite, puis joue les effets du dernier coup. Rend la promesse de leur fin. */
+  function recevoir(e) {
+    const avant = etat;
+    const lignes = lignesNouvelles(e);
+    const manche = !!avant && avant.partie.manche !== e.partie.manche;
+    const vivant = !!avant && lignes.length > 0 && !document.hidden && fraiche(lignes[lignes.length - 1], e);
+    const plan = vivant ? planifier(avant, e, lignes) : [];
+    etat = e;
+    // Ma carte en vol reste en l'air tant que le serveur ne l'a pas prise, ou si cet état la confirme.
+    const garderPose = !!poseLocale && (poseNonConfirmee() || plan.some((s) => s.t === 'pose' && s.carte.id === poseLocale.carte.id));
+    if (plan.length) {
+      arreterPlan({ garderPose });
+      for (const s of plan) {
+        if (s.t === 'pose' && !mouvementReduit()) pileRetenue = true;
+        if (s.t !== 'cartes' || mouvementReduit()) continue;
+        if (s.uid === monId()) (s.ids || []).forEach((id) => enVol.add(id));
+        else retenus.set(s.uid, (retenus.get(s.uid) || 0) + s.n);
+      }
+    } else if (avant && lignes.length) {
+      arreterPlan({ garderPose });   // reprise : pas d'effet, l'état est juste
+    }
+    if (manche) pile.length = 0;  // nouvelle donne : la défausse repart de sa première carte
+    rendreTout(focusCle());
+    chat.maj(e);
+    annoncerTour();
+    signal.maj(monTour());
+    lastS = undefined;
+    tic();
+    return derouler(plan);
+  }
+
   return {
     /** Nouvel état de la partie (appelé à chaque changement de version). */
     maj(e) {
+      if (e?.partie) recevoir(e);
+    },
+    /** Dernier état avant l'écran de fin : joue la dernière carte et laisse la table visible le temps de la voir. */
+    async conclure(e) {
       if (!e?.partie) return;
-      etat = e;
-      rendreTout(focusCle());
-      chat.maj(e);
-      annoncerTour();
-      surveillerSens();
-      volsAdversaires();
-      signal.maj(monTour());
-      lastS = undefined;
-      tic();
+      const n = (e.journal || []).some((j) => j.type === 'manche' && !journalVus.has(j.id) && fraiche(j, e)) && !document.hidden;
+      const effets = recevoir(e);
+      const s = serie;
+      await effets;
+      if (n && s === serie) await Promise.race([pause(CLOTURE), surAnnulation()]);
     },
     /** Message du chat (ancien ou nouveau). */
     message(msg) {
       chat.ajouter(msg);
     },
-    /** Arrête le chrono et retire la table de la page. */
+    /** Arrête le chrono, les effets, et retire la table de la page. */
     detruire() {
       clearInterval(minuterie);
       cancelAnimationFrame(raf);
       observateur?.disconnect();
       signal.arreter();
       grand.removeEventListener('change', surChangementEcran);
+      document.removeEventListener('visibilitychange', surVisibilite);
+      arreterPlan();
+      fx.detruire();
       fermerVoile(true);
       chat.detruire();
       el.remove();

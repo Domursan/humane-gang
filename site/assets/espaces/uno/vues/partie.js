@@ -2,11 +2,13 @@
 /*
  * Rôle : suit la partie en temps réel (uno/api.js) et affiche la bonne vue selon son statut :
  *   attente → vues/salle.js · en_cours → vues/table.js · terminee / annulee → vues/fin.js.
+ * Passage de la table à la fin : la table joue d'abord la dernière carte (vue.conclure), puis l'écran de fin reçoit
+ * depuisTable = true et met en scène le podium. Une ouverture directe de l'écran de fin ne joue rien.
  * La vue n'est recréée que si le statut change ; sinon on appelle vue.maj(etat).
  * Les messages du chat (anciens puis nouveaux) sont passés à la vue par vue.message(msg).
  * Quand on n'est pas (encore) inscrit dans une partie en attente, renvoie vers #rejoindre/CODE.
  * Contrat des vues : export function creer(root, ctx) → { maj(etat), message(msg), detruire() },
- *   ctx = { code, naviguer, moi, suivi } (suivi : rafraichir, secondesRestantes, etat).
+ *   ctx = { code, naviguer, moi, suivi, depuisTable } (suivi : rafraichir, secondesRestantes, etat).
  * Dépendances : core.js (esc), uno/api.js (suivrePartie, messages, estInvite).
  * Exporte : afficher.
  */
@@ -27,6 +29,9 @@ function vuePour(e) {
   if (statut === 'terminee' || statut === 'annulee') return 'fin';
   return null;
 }
+
+/** Temps maximum laissé à la table pour finir sa dernière carte (ms). */
+const CONCLUSION_MAX = 4500;
 
 /** Carte d'erreur « Partie introuvable » avec le lien de retour. */
 function erreurCarte(root, code, message) {
@@ -90,11 +95,17 @@ export async function afficher(root, { code, naviguer, moi }) {
     if (courant?.nom === nom) { courant.vue.maj(e); return; }
 
     charge = (async () => {
+      const depuisTable = courant?.nom === 'table' && nom === 'fin' && e.partie.statut === 'terminee';
+      const conclusion = depuisTable ? Promise.race([
+        Promise.resolve(courant.vue.conclure?.(e)).catch(() => {}),
+        new Promise((ok) => { setTimeout(ok, CONCLUSION_MAX); }),
+      ]) : null;
       const mod = await VUES[nom]();
+      await conclusion;
       if (fini) return;
       try { courant?.vue.detruire?.(); } catch { /* sans effet */ }
       root.innerHTML = '';
-      const vue = mod.creer(root, { code, naviguer, moi, suivi });
+      const vue = mod.creer(root, { code, naviguer, moi, suivi, depuisTable });
       courant = { nom, vue };
       vue.maj(dernier || e);
       msgs.forEach((m) => vue.message?.(m));

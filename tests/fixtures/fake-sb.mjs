@@ -671,6 +671,31 @@ function xa1Rpc(fn, args = {}) {
       status: b.cancelled_at ? 'annulee' : b.sent_at ? 'envoyee' : 'programmee', by: 'Ethan', detail: b.body, channels: b.channels, game: b.game_slug ? 'Campagne Serge (CK3)' : null, route: 'pilotage/bot' });
     return { data: out, error: null };
   }
+  // Programmation des jeux (migration 183). S.programme : { <cle>: [{ n, statut, titre, par }] (n : décalage en jours depuis
+  // aujourd'hui) } remplace les jours par défaut ; S.programmeReserves : { <cle>: [reserve, reserve_totale] }.
+  if (fn === 'hg_jeux_programme') {
+    if (!hasP('souvenirs') && !hasP('quiz')) return denied;
+    if (args.p_days < 1 || args.p_days > 92) return xErr('Période trop longue (92 jours au plus)');
+    const zday = (n) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zurich' }).format(Date.now() + n * 864e5);
+    const today = zday(0), from = args.p_from || today;
+    const to = new Date(Date.parse(from) + (args.p_days - 1) * 864e5).toISOString().slice(0, 10);
+    const std = { sutom: [{ n: 0, statut: 'auto', titre: 'PATATE' }, { n: 1, statut: 'programme', titre: 'FROMAGE', par: 'Ethan' }, { n: 2, statut: 'programme', titre: 'RACLETTE', par: 'Ethan' }],
+      heardle: Array.from({ length: 20 }, (_, n) => ({ n, statut: 'programme', titre: `Artiste — Titre ${n}`, par: 'Bruno' })), framed: [], geo: [], quiz: [] };
+    const jours = (c) => (S.programme?.[c] ?? std[c]).map((j) => ({ day: zday(j.n), statut: j.statut, titre: j.titre, par: j.par ?? null })).filter((j) => j.day >= from && j.day <= to);
+    const res = (c, d) => { const [reserve, reserve_totale] = S.programmeReserves?.[c] ?? d; return { reserve, reserve_totale }; };
+    const date = (cle, titre, route, filet, d) => ({ cle, titre, mode: 'date', route, filet, jours: jours(cle), ...res(cle, d) });
+    const reserve = (cle, titre, d) => ({ cle, titre, mode: 'reserve', route: null, jours: [], ...res(cle, d) });
+    const genere = (cle, titre) => ({ cle, titre, mode: 'genere', route: null, jours: [], reserve: null, reserve_totale: null });
+    const jeux = [];
+    if (hasP('souvenirs')) jeux.push(date('sutom', 'Sutom du gang', 'fete/sutom', true, [120, 200]), date('heardle', 'Heardle', 'fete/framed-heardle/heardle', false, [12, 40]),
+      date('framed', 'Framed', 'fete/framed-heardle/framed', false, [8, 30]), date('geo', 'GeoGuessr', 'fete/geoguessr', true, [15, 22]));
+    if (hasP('quiz')) jeux.push(date('quiz', 'Question du jour', 'fete/questions/jour', true, [60, 90]));
+    if (hasP('souvenirs')) jeux.push(reserve('carte', 'Carte mystère', [300, 320]), reserve('jv', 'Jeu vidéo du jour', [90, 100]), reserve('pochette', 'Pochette du jour', [10, 80]),
+      reserve('replique', 'Réplique du jour', [90, 100]), reserve('pays', 'Pays du jour', [190, 197]), reserve('plat', 'Plat du jour', [50, 60]), reserve('connexions', 'Connexions', [30, 30]),
+      reserve('motscroises', 'Mots croisés', [30, 30]), reserve('motmele', 'Mot mêlé', [30, 30]), reserve('anagramme', 'Anagramme', [500, 500]),
+      genere('nerdle', 'Nerdle du gang'), genere('code_jour', 'Code du jour'), genere('sudoku', 'Sudoku du jour'));
+    return { data: { today, jeux }, error: null };
+  }
   if (fn === 'hg_bot_schedule_save') {
     if (!hasP('bot')) return denied;
     if (!args.p_body || !args.p_channels?.length) return xErr('Choisis entre 1 et 5 salons');

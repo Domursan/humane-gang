@@ -61,6 +61,8 @@ export const SECTION_PERM = {
 
 // Planning (idée A2) : visible si l'une de ces permissions est accordée (quiz, cartes, événements, sorties, Secret Santa, bot).
 const PLANNING_PERMS = ['quiz', 'cartes', 'themes', 'evenements', 'secret_santa', 'bot'];
+// Programmation des jeux (migration 183) : visible avec l'une de ces permissions ; la base ne renvoie que les jeux permis.
+const PROGRAMME_PERMS = ['souvenirs', 'quiz'];
 
 /** Donne le groupe `heading` à chaque sous-section de la liste (titre de groupe sur la page du lieu et dans la palette). */
 const under = (heading, subs) => subs.map((s) => ({ ...s, heading }));
@@ -169,6 +171,7 @@ export const LIEUX = [
       { id: 'anniv-gang', label: 'Anniversaire du gang', section: 'saisons', part: 'anniv', help: 'Dates et cadeaux', icon: 'cake' },
     ]),
     ...under('Jeux', [
+      { id: 'programmation', label: 'Programmation', section: 'jeux-programme', help: 'Ce qui est prévu pour les jeux du jour', icon: 'calendar' },
       { id: 'questions', label: 'Questions du gang', section: 'quiz', help: 'Quiz sur le gang', icon: 'chat' },
       { id: 'sutom', label: 'Sutom du gang', section: 'sutom', help: 'Mot du jour', icon: 'type' },
       { id: 'geoguessr', label: 'GeoGuessr', section: 'jeux-geo', help: 'Lieux à deviner', icon: 'map' },
@@ -217,11 +220,12 @@ export function disableSubs(...ids) { for (const id of ids) disabled.add(id); }
 
 /**
  * Ai-je accès à cette section ?
- * « admin » exige l'administrateur ; « planning » est permis si une de ses sources l'est.
+ * « admin » exige l'administrateur ; « planning » et « jeux-programme » sont permis si une de leurs sources l'est.
  * @param {string} id Identifiant de section (voir SECTION_PERM).
  */
 export function canSection(id) {
   if (id === 'planning') return PLANNING_PERMS.some((k) => hasPerm(k));
+  if (id === 'jeux-programme') return PROGRAMME_PERMS.some((k) => hasPerm(k));
   const need = SECTION_PERM[id];
   if (!need) return false;
   if (need === 'admin') return !!getCachedPerms()?.is_admin;

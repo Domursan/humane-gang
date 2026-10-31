@@ -3,7 +3,7 @@
  * Rôle : produit le HTML d'une carte (face ou dos D « arc-en-ciel doré ») et les libellés lisibles.
  * Styles : assets/espaces/uno/uno.css (classes .uc, .ub). Aucune image : tout est en CSS et SVG.
  * Couleurs : r rouge, y jaune, g vert, b bleu, k noir (Joker). Valeurs : 0-9, +2, inv, passe, joker, +4.
- * Exporte : COULEURS, nomCouleur, nomCarte, carteHtml, dosHtml, pointsCarte.
+ * Exporte : COULEURS, ICONE_PASSE (aussi le jeton Passe de la table), nomCouleur, nomCarte, carteHtml, dosHtml, pointsCarte.
  */
 import { esc } from '../../commun/core.js';
 
@@ -20,7 +20,7 @@ export const COULEURS = {
 export const nomCouleur = (c) => COULEURS[c]?.nom || '';
 
 const ICONE_INV = (t) => `<svg width="${t}" height="${t}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h13l-3-3M20 15H7l3 3"/></svg>`;
-const ICONE_PASSE = (t) => `<svg width="${t}" height="${t}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M6.5 17.5l11-11"/></svg>`;
+export const ICONE_PASSE = (t) => `<svg width="${t}" height="${t}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M6.5 17.5l11-11"/></svg>`;
 
 /** Nom lisible d'une carte (« Rouge 7 », « Bleu Inversion », « Joker +4 »). */
 export function nomCarte(c) {
