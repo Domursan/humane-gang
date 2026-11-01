@@ -14,6 +14,11 @@ est `supabase/appliquees.txt` (depuis la 138) ; la liste à appliquer est `supab
 sont des résumés (le SQL exact a été exécuté pendant une session et n'a pas été conservé) : en cas
 de différence, c'est le schéma reconstitué qui fait foi.
 
+## Maintenance pendant une migration
+
+Jamais automatique : une migration qui veut l'écran de maintenance porte `-- hg:maintenance` en première ligne. `outils/appliquer-sql.mjs` active alors `site_identite.maintenance_active` juste avant ce fichier et le retire après (même en cas d'échec), sans toucher aux autres champs du réglage.
+Si la maintenance était déjà active (admin), elle est laissée telle quelle ; si le retrait échoue, le job finit en échec et prévient le salon Staff (à défaire dans Admin › Site › État du site).
+
 ## Numérotation
 
 | Fichier | Rôle | Statut |

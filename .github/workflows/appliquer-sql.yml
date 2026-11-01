@@ -2,6 +2,8 @@
 # Se lance quand ce fichier change sur main. Chaque fichier n'est appliqué qu'une fois : le résultat (ok ou erreur) est noté
 # dans supabase/appliquees.txt, ajouté au dépôt par un commit au nom de Domursan.
 # Une migration en erreur met le job en échec : le résultat est noté quand même, puis le salon Staff est prévenu.
+# Une migration dont la première ligne est « -- hg:maintenance » est encadrée par l'écran de maintenance du site (outils/appliquer-sql.mjs).
+# L'étape « Noter le résultat » remet aussi PLAN-DU-DEPOT.md à jour (outils/plan-depot.mjs) dans le même commit.
 # Utilise le secret GitHub SUPABASE_ACCESS_TOKEN (API de gestion Supabase, requête SQL en tant que propriétaire de la base).
 name: Appliquer du SQL
 
@@ -37,7 +39,9 @@ jobs:
         run: |
           git config user.name Domursan
           git config user.email domursan1@gmail.com
-          git add supabase/appliquees.txt
+          # Le plan du dépôt (dernière migration, plage, workflows manquants) suit dans le même commit ; une erreur du script ne bloque pas.
+          node outils/plan-depot.mjs || true
+          git add supabase/appliquees.txt PLAN-DU-DEPOT.md
           if git diff --cached --quiet; then echo "Rien à noter."; exit 0; fi
           git commit -m "SQL appliqué [skip ci]"
           for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break; sleep 5; done

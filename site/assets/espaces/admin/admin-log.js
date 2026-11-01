@@ -19,6 +19,9 @@ export const ACTION_LABEL = {
   exemplaire_retire: 'Exemplaire retiré',
   carte_supprimee: 'Carte supprimée',
   ajustement_paillettes: 'Ajustement de Paillettes',
+  entretien_purge: 'Purge manuelle',
+  entretien_apercu: 'Aperçu de la purge',
+  entretien_durees: 'Durées de purge',
 };
 // Libellés du type de conversation consultée.
 const KIND_LABEL = { santa: 'Secret Santa', direct: 'Conversation directe' };

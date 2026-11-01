@@ -24,6 +24,7 @@ const EXCEPTIONS = {
   'fabrique/limites': 'Limites : quêtes, drops, générations, échanges, puis les plafonds de Paillettes repliés (≈ 1 440 px) ; à répartir en pages plus tard',
   'mairie/menu': 'Menu et pied de page : libellés de tous les menus et de leurs entrées (≈ 1 650 px), en blocs côte à côte',
   'mairie/textes': 'Textes et intro : groupe « Page d’accueil » replié, puis textes des pages, intro et visite (≈ 1 550 px) ; à répartir en pages plus tard',
+  'mairie/entretien': 'Entretien : quotas, une ligne par tâche planifiée (≈ 1 460 px avec la fixture, davantage avec les 15 tâches réelles), purge ; maquette validée',
 };
 
 // Arbre attendu : lieu -> [titre de groupe (null : sans titre), [pages]] (dans l'ordre de LIEUX, admin/perms.js).
@@ -39,7 +40,7 @@ const TREE = {
   fete: [['Événements', ['evenements', 'rdv', 'avent', 'saison-worlds', 'anniv-gang']],
     ['Jeux', ['programmation', 'questions', 'sutom', 'geoguessr', 'citations', 'preuves', 'framed-heardle', 'arcade', 'secrets', 'mes-jeux', 'loup-garou', 'uno', 'nom-de-code', 'plateaux', 'duels']]],
   mairie: [['Organisation', ['planning', 'journal', 'staff']], ['Le site', ['identite', 'textes', 'menu', 'theme']],
-    ['Technique', ['etat', 'erreurs', 'archives', 'reglages']]],
+    ['Technique', ['etat', 'erreurs', 'entretien', 'archives', 'reglages']]],
 };
 const ROUTES = Object.entries(TREE).flatMap(([lieu, groups]) => groups.flatMap(([, subs]) => subs.map((s) => `${lieu}/${s}`)));
 

@@ -8,12 +8,14 @@
 // Fenêtres de temps : demande d'échange « en attente » après 3 jours ; enchère « bientôt » dans les 24 h ;
 // Framed, Heardle : 3 prochains jours ; Sutom : 7 prochains jours.
 // Pages sans source d'action retenue (Membres IRL, Secrets, Arcade…) : aucun élément, voir le compte rendu de l'ajout.
-// Dépend de core.js (sb), admin/state.js (S : demandes, idées, éditions), admin/perms.js, admin/lieux.js, admin/eco-health.js.
+// Dépend de core.js (sb), admin/state.js (S : demandes, idées, éditions), admin/perms.js, admin/lieux.js, admin/eco-health.js,
+// admin/entretien-sante.js.
 import { sb } from '../../commun/core.js';
 import { S } from './state.js';
 import { LIEUX, canSub } from './perms.js';
 import { registerTodo } from './lieux.js';
 import { ecoTodoItems } from './eco-health.js';
+import { loadQuotas, quotasTodoItems } from './entretien-sante.js';
 
 const DAY = 864e5;
 const fmtFin = new Intl.DateTimeFormat('fr-CH', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' });
@@ -189,7 +191,14 @@ registerTodo('fete', async () => {
   return manchesLibres('Heardle', await read('fete', sb.rpc('hg_heardle_admin')), (r) => !r.cancelled);
 });
 
-/* ---------- Mairie : erreurs du site ---------- */
+/* ---------- Mairie : quotas et erreurs du site ---------- */
+
+// Quotas à 80 % ou plus (alertes non suspendues) : une ligne par quota, avec la page Entretien et « Ignorer cette semaine ».
+registerTodo('mairie', async () => {
+  if (!allowed('entretien')) return [];
+  await loadQuotas();
+  return quotasTodoItems();
+});
 
 // Erreurs du site au statut « nouvelle » : une seule ligne, avec le nombre.
 registerTodo('mairie', async () => {

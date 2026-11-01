@@ -1,0 +1,101 @@
+/* Administration : Entretien (quotas, tâches planifiées, purge). Jetons de base.css uniquement (clair et sombre). */
+/* Bloc de réglages : mêmes règles que la chaîne STYLE de reglages/lot3-ui.js, qui n'est injectée que sur ses propres pages. */
+.ent-form .rg3-groupe { border: 1px solid currentColor; border-color: color-mix(in srgb, currentColor 22%, transparent); border-radius: 12px; padding: 10px 14px 12px; margin: 0 0 14px; min-width: 0; }
+.ent-form .rg3-groupe legend { padding: 0 6px; font-weight: 600; }
+.ent-form .rg3-field { margin-bottom: 12px; }
+.ent-form .rg3-line { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 4px 0 0; }
+.ent-form .rg3-line > .small { flex: 1 1 220px; }
+
+.ent-page { display: flex; flex-direction: column; gap: 16px; }
+.ent-page .eco-card { margin-bottom: 0; }
+/* social.css, chargée par le panel, élargit .btn-sm : la page garde le format validé (celui d'admin.css). */
+.ent-page .btn-sm, .pg-dialog .btn-sm { padding: 8px 12px; border-radius: 12px; }
+.ent-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.ent-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.ent-head .eco-note { margin: 4px 0 0; }
+.ent-rel { display: flex; align-items: center; gap: 10px; }
+.eco-card .card-title { scroll-margin-top: 16px; }
+
+/* Quotas */
+.qt-inds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.qt-ind { gap: 4px; }
+.ent-page .eco-dot, .eco-card .eco-dot { font-size: 12px; }
+.ent-page .ui-count, .eco-card .ui-count { font-size: 12px; }
+.eco-card .eco-more summary { gap: 8px; }
+.eco-card .eco-more summary::before { content: ""; width: 0; height: 0; border-left: 7px solid currentColor; border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+.eco-card .eco-more[open] summary::before { transform: rotate(90deg); }
+.eco-card .eco-more:not([open]) { margin-bottom: -8px; }
+.qt-nom { font-size: 14px; }
+.qt-bar { position: relative; height: 14px; margin-top: 8px; border-radius: 7px; background: var(--surface-2); }
+.qt-rempli { display: block; height: 100%; min-width: 4px; border-radius: 7px; background: var(--eco); }
+.qt-seuil { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--text); }
+.qt-plafond { background: var(--muted); }
+.qt-leg { display: flex; justify-content: flex-end; gap: 14px; flex-wrap: wrap; margin: 2px 0 0; }
+.qt-bars li { grid-template-columns: minmax(0, 15em) minmax(0, 1fr) 7.5em; }
+.qt-bars strong { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.qt-sn { min-width: 0; }
+.qt-susp { margin: 0; }
+
+/* Tâches planifiées */
+.crn-tbl { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.crn-tbl th, .crn-tbl td { text-align: left; padding: 8px; border-top: 1px solid var(--border); vertical-align: middle; }
+.crn-tbl thead th { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); border-top: 0; font-weight: 700; }
+.crn-tbl tbody th { font-weight: 600; }
+.crn-nom { display: block; }
+.crn-code { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-weight: 400; }
+.crn-edge { font-size: 12px; color: var(--sand); }
+html[data-mode="clair"] .crn-edge { color: var(--muted); font-weight: 600; }
+.crn-tbl tr.is-ko > * { background: color-mix(in srgb, var(--rose) 10%, transparent); }
+.crn-ko { color: var(--rose); }
+.crn-stat .ui-pill { white-space: nowrap; }
+.ent-page .stf-note, .eco-card .stf-note { font-size: 13.5px; }
+
+/* Purge */
+.ent-form { margin: 0; }
+.ent-duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
+.ent-form .rg3-groupe { margin-bottom: 0; padding-bottom: 2px; }
+.ent-form .field input { max-width: 180px; }
+.ent-form .field input[aria-invalid="true"] { border-color: var(--rose); }
+.ent-form .field input:disabled { color: var(--muted); background: var(--surface-2); opacity: 1; cursor: not-allowed; }
+.ent-form .rg3-actions { margin-top: 12px; }
+.ent-purge { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid var(--border); }
+.ent-purge-t { display: flex; flex-direction: column; gap: 4px; flex: 1 1 280px; min-width: 0; }
+.ent-pill { padding: 2px 8px; font-size: 12px; }
+.ent-dern { margin: 0; }
+
+/* Fenêtre « Purger maintenant » (style de confirmBox, contenu riche) */
+.pg-corps { display: contents; }
+.pg-tbl { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.pg-tbl th, .pg-tbl td { padding: 7px 0; border-top: 1px solid var(--border); text-align: left; font-weight: 400; vertical-align: top; }
+.pg-tbl thead th { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border-top: 0; font-weight: 700; }
+.pg-tbl tbody th span { display: block; }
+.pg-tbl td, .pg-tbl thead th:last-child { text-align: right; white-space: nowrap; }
+.pg-tbl td span { display: block; }
+.pg-tbl tbody td { font-weight: 700; }
+.pg-tbl tbody td.muted { font-weight: 400; }
+.pg-tbl tfoot th, .pg-tbl tfoot td { font-weight: 700; border-top: 2px solid var(--border-strong); }
+.pg-info, .pg-cap { margin: 0; }
+.hg-dialog .pg-cap { padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid color-mix(in srgb, var(--rose) 45%, transparent); background: color-mix(in srgb, var(--rose) 10%, transparent); }
+
+@media (max-width: 520px) {
+  .ent-page { gap: 14px; }
+  .qt-inds { grid-template-columns: minmax(0, 1fr); }
+  .qt-bars li { grid-template-columns: minmax(0, 1fr) auto; }
+  .qt-bars .er-track { grid-row: 2; grid-column: 1 / -1; }
+  .ent-duo { grid-template-columns: minmax(0, 1fr); }
+  .ent-form .field input { max-width: none; }
+  .ent-purge .btn { width: 100%; }
+  .ent-rel { width: 100%; justify-content: space-between; }
+  /* Tableau en lignes : tâche et statut, puis dernière exécution et erreurs */
+  .crn-tbl thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .crn-tbl, .crn-tbl tbody { display: block; }
+  .crn-tbl tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 10px 0; border-top: 1px solid var(--border); }
+  .crn-tbl th, .crn-tbl td { display: block; padding: 0; border: 0; }
+  .crn-tbl .crn-quand, .crn-tbl .crn-duree { display: none; }
+  .crn-tbl tbody th { grid-column: 1; grid-row: 1; }
+  .crn-tbl .crn-stat { grid-column: 2; grid-row: 1; justify-self: end; }
+  .crn-tbl .crn-der { grid-column: 1; grid-row: 2; }
+  .crn-tbl .crn-err { grid-column: 2; grid-row: 2; justify-self: end; }
+}
+.crn-tbl .ui-pill { font-size: 12px; }
+.ent-form .form-error { margin: 0; color: var(--rose); font-weight: 700; font-size: 14px; }

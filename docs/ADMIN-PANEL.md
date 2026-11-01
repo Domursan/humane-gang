@@ -25,7 +25,7 @@ de 12 colonnes. Chaque lieu a une couleur, une icône, une phrase d'accroche et 
 | **Le Camp IRL** (`#camp`) | Qui (Membres IRL), Vivre les sorties (Sorties IRL, Souvenirs et photos), Rendez-vous (Secret Santa) |
 | **La Fabrique de cartes** (`#fabrique`) | Agir (Gestion globale, Drops, Codes cadeaux), Arène, Catalogue (Séries, Cartes, Boosters), Suivi (Joueurs, Statistiques), Économie (Paillettes et dons, Tirage, Recyclage et fabrication, Limites), Animations (Quêtes, Défis du gang, Cagnotte et bulletin, Cartes Champions, Atelier) |
 | **La Fête foraine** (`#fete`) | Événements (Événements à thème, Calendrier et cinéma, Calendrier de l'Avent, Saison des Worlds, Anniversaire du gang), Jeux (Questions du gang, Sutom du gang, GeoGuessr, Citations, Preuves de quêtes, Framed et Heardle, Arcade, Secrets, Mes jeux, puis Loup-Garou, Uno, Codenames, Jeux de plateau et Duels, réservés à l'administrateur) |
-| **La Mairie** (`#mairie`) | Organisation (Planning, Journal, Staff), Le site (Identité et mentions légales, Textes et intro, Menu et pied de page, Thème), Technique (État du site, Erreurs du site, Archives, Clés avancées) |
+| **La Mairie** (`#mairie`) | Organisation (Planning, Journal, Staff), Le site (Identité et mentions légales, Textes et intro, Menu et pied de page, Thème), Technique (État du site, Erreurs du site, Entretien, Archives, Clés avancées) |
 
 - **Pages de lieu** (`#<lieu>`) : un bandeau à la couleur du lieu, une zone « À faire maintenant » (registre `registerTodo`,
   `admin/lieux.js`), puis les pages du lieu en tuiles groupées (icône, libellé, ligne d'aide, compteur « à traiter »).
@@ -76,7 +76,7 @@ remplacé par `hg_has_perm('<clé>')` (migrations 026 et 027). `hg_is_staff()` s
 | `messages` | Poste › Messagerie (lecture journalisée) | `hg_conversations`, `hg_conversation_members`, `hg_messages` |
 | `support` | Poste › Assistance, Boîte à idées | `hg_support`, `hg_support_replies`, `hg_ideas` |
 | `bot` | Poste › Bot Discord, Commandes slash | `hg_bot_log`, `hg_birthday_log` |
-| `reglages` | Mairie › Le site (sauf Erreurs et Archives), Poste › Fil d'activité, Place du gang › Champs du profil, Vie sociale, Accueil des membres ; Fête foraine › Arcade et Secrets | `hg_settings` (clés générales), `hg_pages`, `hg_activity` |
+| `reglages` | Mairie › Le site (sauf Erreurs et Archives), Mairie › Technique › Entretien (lecture), Poste › Fil d'activité, Place du gang › Champs du profil, Vie sociale, Accueil des membres ; Fête foraine › Arcade et Secrets | `hg_settings` (clés générales), `hg_pages`, `hg_activity` |
 | `journal` | Mairie › Journal (actions admin) | `hg_admin_log` |
 | `quiz` | Fête foraine › Questions du gang, Citations « Qui a dit ça ? » | — |
 | `preuves` | Fête foraine › Preuves de quêtes | — |
@@ -95,6 +95,9 @@ Ces droits ne se délèguent pas, même à un Staff qui a toutes les permissions
 - **Gestion du Staff** (Mairie › Organisation › Staff) : `hg_staff_list` et `hg_staff_set` exigent `is_admin` (écriture journalisée). La table `hg_staff`
   n'a pas de droit d'écriture direct.
 - **Archives** (Mairie › Technique › Archives) : section réservée à l'administrateur.
+- **Entretien** (Mairie › Technique › Entretien) : le Staff `reglages` voit quotas et tâches, durées en lecture seule. Durées (`hg_entretien_regler`),
+  aperçu et purge manuelle (`hg_entretien_apercu`, `hg_entretien_purger`, journalisés) et « Ignorer cette semaine » (`hg_entretien_ignorer`) exigent `is_admin`.
+  La clé `hg_settings.entretien` reste hors de `hg_settings_perm` : aucune écriture directe du Staff. Voir « Vues particulières ».
 - **Mode sans limite** : `hg_set_god_mode` et `hg_god_mode()` exigent `is_admin`.
 - **Arène v2 ouverte aux membres** : l'option `arena.v2_public` ne se modifie que par l'administrateur (voir « Sections particulières »).
 - **Journal des lectures de messages** (`hg_admin_access_log`) : lecture réservée à l'administrateur. Une lecture de
@@ -142,6 +145,19 @@ Source : `site/assets/espaces/admin/admin-gestion.js`, section `cartes-gestion`,
 Source : `site/assets/espaces/admin/admin-arcade.js`, droit `reglages`. Suit les trois mini-jeux des pages 404
 (Paillettes, Raclette, Domu-mobile) semaine par semaine : parties jouées, Paillettes versées, règles anti-triche en lecture seule,
 et classement des dix meilleurs scores. L'administrateur peut effacer le score d'un membre.
+
+### La Mairie › Technique › Entretien (`#mairie/entretien`)
+
+Sources : `site/assets/espaces/admin/admin-entretien.js`, `entretien-sante.js` (quotas, alertes, « À faire »), `entretien-purge.js` (fenêtre « Purger maintenant »),
+migration `192_entretien_admin.sql`, droit `reglages`. Une page, trois cartes :
+- **Quotas** (`hg_entretien_quotas`) : base et stockage du plan gratuit (500 Mo, 1 Go ; 1 Mo = 1 000 000 octets), détail par bucket. Alerte à 80 %, reprise dans « À faire » de La Mairie.
+  « Ignorer cette semaine » (`hg_entretien_ignorer`) suspend l'alerte, pas les barres. Le plafond d'import de `outils/images/importer-lots.mjs` vaut 700 × 1024 × 1024 octets (734 Mo dans
+  l'unité de la page) et ne porte que sur le stockage : le repère de la barre est à 73,4 %. Les quotas et ce plafond sont écrits dans `entretien-sante.js`.
+- **Tâches planifiées** (`hg_entretien_taches`) : planning, dernière exécution, durée, statut, erreurs sur la durée gardée au journal. `cron.job.command` et
+  `cron.job_run_details.return_message` peuvent contenir des clés : la base ne les lit pas et le panel ne les montre jamais. Libellés et « puis fonction edge » : liste `TACHES` de `admin-entretien.js`, à compléter pour toute nouvelle tâche.
+  Un échec dans une fonction edge appelée ensuite ne se voit pas ici.
+- **Purge de nuit** : durées dans `hg_settings.entretien` (journal des tâches 1 à 30 jours, 3 par défaut ; coups 14 à 365 jours, 30 par défaut). Une valeur absente ou hors bornes vaut la valeur par défaut, côté serveur.
+  La nuit, l'aperçu et la purge manuelle passent par `hg_entretien__passage` : mêmes durées, filtres, tables et plafond (50 000 lignes par table et par passage).
 
 ### La Fabrique de cartes › Arène (`#fabrique/arene`, ancien `#bataille`)
 

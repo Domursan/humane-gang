@@ -1,0 +1,96 @@
+# Sonde de santé externe : toutes les 15 minutes, teste le site (https://humane-gang.com/) et Supabase (point de santé de
+# l'authentification, public, sans aucune donnée). Un point n'est déclaré en panne qu'après 2 échecs de suite, à 60 secondes d'écart.
+#
+# Alerte Discord : un message à la panne et un au retour, pas un toutes les 15 minutes. Le passage en panne fait échouer le job ; le
+# passage suivant lit la conclusion du précédent (même méthode que l'alerte de ci.yml) et ne prévient qu'au changement d'état.
+# Secret GitHub DISCORD_CI_WEBHOOK (webhook du salon Staff) : sans lui, l'étape ne fait rien. Il n'est jamais écrit dans les journaux.
+#
+# Pas de checkout : l'adresse et la clé publique de Supabase sont lues dans site/assets/commun/config.js par l'API GitHub (une seule
+# source de vérité). La clé publique est faite pour être lue par tout le monde ; elle n'ouvre aucune donnée.
+# Dépôt public : les minutes d'Actions sont gratuites. GitHub désactive les workflows planifiés après 60 jours sans commit sur le dépôt
+# (le bouton « Enable workflow » de l'onglet Actions les réactive).
+name: Sonde de santé
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: sonde
+  cancel-in-progress: false
+
+jobs:
+  sonde:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Tester le site et Supabase
+        id: test
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Adresse et clé publique de Supabase (config.js du dépôt). Illisible : on teste le site seul, sans conclure sur Supabase.
+          config=$(gh api -H "Accept: application/vnd.github.raw" "repos/${{ github.repository }}/contents/site/assets/commun/config.js" 2>/dev/null || echo "")
+          sb_url=$(printf '%s' "$config" | sed -n "s/.*SUPABASE_URL = '\([^']*\)'.*/\1/p" | head -1)
+          sb_cle=$(printf '%s' "$config" | sed -n "s/.*SUPABASE_KEY = '\([^']*\)'.*/\1/p" | head -1)
+          [ -n "$sb_url" ] && [ -n "$sb_cle" ] || echo "::warning::config.js illisible : Supabase non testé."
+
+          # Code HTTP d'une adresse (000 : injoignable ou trop lent), 15 s au plus.
+          code_site() { curl -sS -o /dev/null -L -m 15 -w '%{http_code}' "https://humane-gang.com/" 2>/dev/null || true; }
+          code_sb() { curl -sS -o /dev/null -m 15 -w '%{http_code}' -H "apikey: $sb_cle" "$sb_url/auth/v1/health" 2>/dev/null || true; }
+          bon() { case "$1" in 2??|3??) return 0;; *) return 1;; esac; }
+
+          site=$(code_site); sb=000
+          [ -n "$sb_url" ] && [ -n "$sb_cle" ] && sb=$(code_sb) || sb=200
+          # Premier échec : on attend 60 s et on retente seulement ce qui a échoué.
+          if ! bon "$site" || ! bon "$sb"; then
+            echo "Premier essai : site $site, Supabase $sb. Nouvel essai dans 60 s."
+            sleep 60
+            bon "$site" || site=$(code_site)
+            if ! bon "$sb"; then sb=$(code_sb); fi
+          fi
+          echo "Site : $site, Supabase : $sb"
+
+          panne=""
+          bon "$site" || panne="le site (code $site)"
+          bon "$sb" || panne="${panne:+$panne et }Supabase (code $sb)"
+          if [ -n "$panne" ]; then etat=panne; else etat=ok; fi
+          { echo "etat=$etat"; echo "panne=$panne"; } >> "$GITHUB_OUTPUT"
+          echo "### Sonde : $etat ${panne:+($panne)}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Prévenir le salon Staff à la panne et au retour
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_CI_WEBHOOK }}
+          GH_TOKEN: ${{ github.token }}
+          ETAT: ${{ steps.test.outputs.etat }}
+          PANNE: ${{ steps.test.outputs.panne }}
+          RAPPORT: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then echo "Secret DISCORD_CI_WEBHOOK absent : pas d'alerte."; exit 0; fi
+          case "$ETAT" in ok|panne) ;; *) echo "Test non conclu : pas d'alerte."; exit 0;; esac
+          # Conclusion du dernier passage terminé (avant celui-ci) : il a échoué si la panne était déjà constatée.
+          avant=$(gh api "repos/${{ github.repository }}/actions/workflows/sonde.yml/runs?status=completed&per_page=10" \
+            --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }}) | select(.conclusion == \"success\" or .conclusion == \"failure\")][0].conclusion // \"\"" 2>/dev/null || echo "")
+          if [ "$ETAT" = "ok" ]; then
+            [ "$avant" = "failure" ] || { echo "Tout va bien (avant : ${avant:-inconnu}) : rien à envoyer."; exit 0; }
+            titre="Retour à la normale"; texte="Le site et Supabase répondent de nouveau."; couleur=1415494
+          else
+            [ "$avant" = "failure" ] && { echo "Panne déjà signalée : un seul message par panne."; exit 0; }
+            titre="Panne détectée"; texte="Ne répond pas après deux essais à 60 secondes d'écart : $PANNE."; couleur=16658692
+          fi
+          jq -n --arg t "$titre" --arg d "$texte" --arg u "$RAPPORT" --argjson c "$couleur" \
+            '{username: "Humane Gang CI", allowed_mentions: {parse: []}, embeds: [{title: $t, description: $d, url: $u, color: $c}]}' \
+            | curl -fsS -o /dev/null -X POST -H 'Content-Type: application/json' --data-binary @- "$WEBHOOK" \
+            && echo "Alerte envoyée : $titre" || echo "Alerte non envoyée (webhook injoignable)."
+      # Le job échoue en cas de panne : c'est ce que lira le passage suivant pour ne pas répéter l'alerte.
+      - name: Conclure
+        if: steps.test.outputs.etat != 'ok'
+        env:
+          PANNE: ${{ steps.test.outputs.panne }}
+        run: |
+          echo "::error::Panne : ${PANNE:-test non conclu}"
+          exit 1

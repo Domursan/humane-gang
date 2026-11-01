@@ -65,6 +65,7 @@ const OPTIONAL = [
   { sub: 'competences', url: './admin-social.js', fn: 'mountCompetencesSection' }, // Membres › Entraide › Compétences (idée P7)
   { sub: 'accueil', url: './admin-social.js', fn: 'mountAccueilSection' },         // Membres › Comptes › Accueil des membres (idées P9, P6)
   { sub: 'erreurs', url: './admin-errors.js', fn: 'mountErrorsSection' }, // Pilotage › Site › Erreurs du site (hg_client_errors, A9)
+  { sub: 'entretien', url: './admin-entretien.js', fn: 'mountEntretienSection' }, // La Mairie › Technique › Entretien (migration 192)
   { sub: 'archives', url: './admin-archive.js', fn: 'mountArchiveSection' }, // Pilotage › Site › Archives (fonction hg-archive, A8)
   { sub: 'loup-garou', url: './admin-loup-garou.js', fn: 'mountLoupGarouSection' }, // La Fête foraine › Jeux › Loup-Garou (Paillettes, badges, parties ; administrateur)
   { sub: 'uno', url: './admin-uno.js', fn: 'mountUnoSection' }, // La Fête foraine › Jeux › Uno (Paillettes, badges, parties en cours ; administrateur)
@@ -291,6 +292,7 @@ for (const [sub, part] of [['identite', 'identite'], ['textes', 'textes'], ['men
 for (const [p, v] of PROV) if (v) registerSub(p.route, v); // Planning, À relancer, Mes jeux (idées A2 à A4)
 regSub('theme', { main: () => mountThemesSection($('#theme-root')), open: () => setActions(themeActions()) });
 if (MOUNT.erreurs) regSub('erreurs', { main: () => MOUNT.erreurs($('#errors-root')) }); // A9 : erreurs JavaScript regroupées
+if (MOUNT.entretien) regSub('entretien', { main: () => MOUNT.entretien($('#entretien-root')) }); // quotas, tâches planifiées, purge
 if (MOUNT.archives) regSub('archives', { main: () => MOUNT.archives($('#archives-root')) }); // A8 : archive annuelle (admin)
 
 /* ---------- Démarrage : seulement les données partagées des sections permises (chaque donnée se charge une fois) ---------- */

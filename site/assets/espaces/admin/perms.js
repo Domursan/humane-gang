@@ -42,6 +42,8 @@ export const SECTION_PERM = {
   parrainage: 'membres', competences: 'membres', 'accueil-membres': 'reglages',
   // Idées A8 et A9 : Site › Erreurs du site (droit « reglages ») et Archives (administrateur seulement)
   erreurs: 'reglages', archives: 'admin',
+  // Entretien (migration 192) : voir la page ; durées, purge et « Ignorer cette semaine » sont réservés à l'administrateur en base
+  entretien: 'reglages',
   // Idées V8, V9 (calendrier, ciné-club) et D3 (commandes slash) : migration 087
   rdv: 'evenements', commandes: 'bot',
   saisons: 'themes', // rendez-vous saisonniers (migration 096) : calendrier de l'Avent, saison des Worlds, anniversaire du gang
@@ -203,6 +205,7 @@ export const LIEUX = [
     ...under('Technique', [
       { id: 'etat', label: 'État du site', section: 'reglages', part: 'etat', help: 'En ligne, maintenance, disponibilité', icon: 'pulse' },
       { id: 'erreurs', label: 'Erreurs du site', section: 'erreurs', help: 'Erreurs remontées par le site', icon: 'warn' },
+      { id: 'entretien', label: 'Entretien', section: 'entretien', help: 'Quotas, tâches planifiées et purge', icon: 'gauge' },
       { id: 'archives', label: 'Archives', section: 'archives', help: 'Anciennes versions rangées', icon: 'archive' },
       { id: 'reglages', label: 'Clés avancées', section: 'reglages', part: 'cles', help: 'Réglages techniques, à manier avec soin', icon: 'sliders' },
     ]),

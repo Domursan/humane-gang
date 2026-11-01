@@ -60,3 +60,5 @@ export async function loadCounts() {
 
 // Alertes économie : « Ignorer cette semaine » a changé leur état : on redessine les compteurs et les « À faire ».
 document.addEventListener('hg:eco-changed', () => { refreshCounts(); loadTodoCounts(); });
+// Alertes de quotas (entretien-sante.js) : même chose pour les « À faire » de La Mairie.
+document.addEventListener('hg:entretien-changed', () => loadTodoCounts());

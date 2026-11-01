@@ -24,6 +24,8 @@ const KEYS_BASE = {
   quiz: { label: 'Questions du gang', help: 'Récompenses par défaut selon la difficulté des questions. Modifiable dans la section Questions du gang.', managed: '#fete/questions', managedLabel: 'Questions du gang' },
   eggs: { label: 'Secrets (easter eggs)', help: 'Date d’anniversaire du gang, mot secret et récompenses en Paillettes de chaque secret.', managed: '#fete/secrets', managedLabel: 'Autres jeux · Secrets' },
   admin_initial: { label: 'Administrateur initial', help: 'Trace de l\'administrateur d\'origine du site.', sensitive: true },
+  // Absente de hg_settings_perm : seul l'administrateur l'écrit, le Staff « reglages » lit les durées par hg_entretien_reglages (migration 192).
+  entretien: { label: 'Entretien du site', help: 'Durées de purge du journal des tâches et des journaux de coups, alertes de quotas suspendues, dernier passage de la purge.', managed: '#mairie/entretien', managedLabel: 'La Mairie · Entretien', sensitive: true },
 };
 
 /*
@@ -38,6 +40,7 @@ export const DEDIE = {
   profile_fields: { where: 'Membres › Champs du profil', route: '#place/champs' },
   echanges: { where: 'La Salle des ventes › Échanges', route: '#ventes/echanges' },
   saisons: { where: 'La Fête foraine › Calendrier de l’Avent, Saison des Worlds, Anniversaire du gang', route: '#fete/avent' },
+  entretien: { where: 'La Mairie › Entretien', route: '#mairie/entretien' },
 };
 
 /** Toutes les clés décrites : base + lot 1 (identité et textes, formulaire dédié). */

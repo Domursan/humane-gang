@@ -55,3 +55,4 @@ supabase/migrations/188_framed_tirage.sql
 supabase/migrations/189_purge_nocturne.sql
 supabase/migrations/190_arcade_plafond.sql
 supabase/migrations/191_gains_membres_seuls.sql
+supabase/migrations/192_entretien_admin.sql

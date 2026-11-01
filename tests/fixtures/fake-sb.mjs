@@ -1479,6 +1479,49 @@ export function createClient(_url, _key, opts = {}) {
         return { data: { ok: true, closed: n, path }, error: null };
       }
       if (fn === 'hg_conv_hidden') return { data: (DB.hg_messages || []).filter((m) => m.conversation_id === args.p_conv && m.hidden_at).map((m) => m.id), error: null };
+      // Page Entretien (migration 192). Scénario S.entretien : { quotas, taches, reglages, apercu, ignore_until } remplacent les valeurs
+      // de départ ; erreurs : { <fonction>: message } ; attente : { <fonction>: ms }. Mêmes droits qu'en base.
+      if (fn.startsWith('hg_entretien_')) {
+        const en = (S.entretien ||= {});
+        if (en.attente?.[fn]) await new Promise((ok) => setTimeout(ok, en.attente[fn]));
+        if (en.erreurs?.[fn]) return { data: null, error: { message: en.erreurs[fn] } };
+        const lecture = ['hg_entretien_quotas', 'hg_entretien_taches', 'hg_entretien_reglages'].includes(fn);
+        if (!canP('reglages') || (!lecture && !myPermsNow().is_admin)) return { data: null, error: { message: 'droit insuffisant' } };
+        const bornes = { journal_jours: { defaut: 3, min: 1, max: 30 }, coups_jours: { defaut: 30, min: 14, max: 365 } };
+        en.reglages ||= { journal_jours: 3, coups_jours: 30, bornes, dernier: null, derniere_nuit: null };
+        en.apercu ||= { job_run_details: 31363, hg_plat_coups: 0, hg_uno_coups: 0, hg_duel_coups: 0, hg_ndc_coups: 0 };
+        const { journal_jours: jj, coups_jours: cj } = en.reglages;
+        const reponse = (tables) => ({ journal_jours: jj, coups_jours: cj, plafond: 50000, tables });
+        if (fn === 'hg_entretien_quotas') {
+          const q = en.quotas || { base_octets: 99100000, buckets: [{ bucket_id: 'hg-nj', fichiers: 542, octets: 169700000 }, { bucket_id: 'hg-photos', fichiers: 276, octets: 36800000 }, { bucket_id: 'hg-avatars', fichiers: 12, octets: 278746 }] };
+          return { data: { releve_at: new Date(now).toISOString(), ignore_until: en.ignore_until || null, ...q }, error: null };
+        }
+        if (fn === 'hg_entretien_taches') {
+          const liste = en.taches || [{ jobname: 'hg-housekeeping', schedule: '37 3 * * *', active: true, status: null, start_time: null, end_time: null, executions: 0, erreurs: 0 },
+            { jobname: 'hg-cron-5min', schedule: '*/5 * * * *', active: true, status: 'succeeded', start_time: iso(-0.002), end_time: iso(-0.002), executions: 864, erreurs: 0 }];
+          return { data: { jours: jj, releve_at: new Date(now).toISOString(), taches: liste }, error: null };
+        }
+        if (fn === 'hg_entretien_reglages') return { data: en.reglages, error: null };
+        if (fn === 'hg_entretien_regler') {
+          for (const [cle, v] of [['journal_jours', args.p_journal_jours], ['coups_jours', args.p_coups_jours]]) {
+            const b = bornes[cle];
+            if (!Number.isInteger(v) || v < b.min || v > b.max) return { data: null, error: { message: `${cle === 'coups_jours' ? 'Journaux de coups' : 'Journal des tâches'} : entre ${b.min} et ${b.max} jours.` } };
+          }
+          Object.assign(en.reglages, { journal_jours: args.p_journal_jours, coups_jours: args.p_coups_jours });
+          return { data: en.reglages, error: null };
+        }
+        if (fn === 'hg_entretien_ignorer') {
+          en.ignore_until = args.p_days ? new Date(Date.now() + args.p_days * 864e5).toISOString() : null;
+          return { data: en.ignore_until, error: null };
+        }
+        if (fn === 'hg_entretien_apercu') return { data: reponse({ ...en.apercu }), error: null };
+        if (fn === 'hg_entretien_purger') {
+          const tables = Object.fromEntries(Object.entries(en.apercu).map(([k, n]) => [k, Math.min(n, 50000)]));
+          en.apercu = Object.fromEntries(Object.entries(en.apercu).map(([k, n]) => [k, n - tables[k]]));
+          en.reglages.dernier = { at: new Date(now).toISOString(), mode: 'main', lignes: Object.values(tables).reduce((s, n) => s + n, 0) };
+          return { data: reponse(tables), error: null };
+        }
+      }
       if (fn === 'hg_eco_health') {
         if (!canP('cartes')) return { data: null, error: { message: 'Réservé à l\'admin et au Staff « cartes »' } };
         const ig = S.ecoIgnore || null;

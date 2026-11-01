@@ -1,7 +1,8 @@
 # Plan du dépôt — Humane Gang
 
 Où est quoi dans le dépôt, à quoi sert chaque dossier, et où ranger un nouveau fichier.
-Version : état du dépôt au 28 octobre 2026 (dernière migration : 166).
+Version : <!-- plan:derniere -->état du dépôt au 1er novembre 2026 (dernière migration : 192)<!-- /plan:derniere -->.
+Migrations numérotées de <!-- plan:plage -->001 à 192<!-- /plan:plage --> (quelques numéros manquent ou sont en double : voir `supabase/migrations/README.md`).
 
 Pour les pages du site (adresses, rôles, accès), voir [PLAN-DU-SITE.md](PLAN-DU-SITE.md). Le README décrit le fonctionnement du site ; ce document décrit seulement l'arborescence.
 
@@ -47,7 +48,7 @@ human-gang/
 │       └── vendor/        Bibliothèques servies localement : supabase-js, qrcode-generator (voir son README.md)
 │
 ├── supabase/              Base de données et fonctions serveur (Supabase)
-│   ├── migrations/        Migrations SQL numérotées (001… à 166) : historique du schéma ; README.md : état et doublons
+│   ├── migrations/        Migrations SQL numérotées : historique du schéma ; README.md : état et doublons
 │   ├── appliquer.txt      Liste des migrations à appliquer (une par ligne)
 │   ├── appliquees.txt     Journal : ce qui a été appliqué, et le résultat (ok ou erreur)
 │   ├── schema/            Schéma reconstitué (schema_reel_2026-10-21b.sql, daté du 21/10) + README.md (comment le régénérer)
@@ -83,7 +84,8 @@ human-gang/
 │
 ├── outils/                Scripts et données utilisés par les workflows ou à la main (non publiés)
 │   ├── build/             construire.mjs : construit _site/ à partir de site/ (JS et CSS regroupés, PRECACHE réécrit) ; package.json (esbuild)
-│   ├── appliquer-sql.mjs  Applique les migrations listées dans supabase/appliquer.txt (workflow appliquer-sql)
+│   ├── appliquer-sql.mjs  Applique les migrations listées dans supabase/appliquer.txt (workflow appliquer-sql) ; maintenance à la demande (-- hg:maintenance)
+│   ├── plan-depot.mjs     Met à jour les parties factuelles de ce document (entre marqueurs <!-- plan:… -->) ; appelé par appliquer-sql
 │   ├── images/            importer.mjs + a-importer.json (images à importer), rapport.json, maquettes/
 │   └── nj/                Générateurs et réserves de mots pour les jeux nj-* (mots croisés, silhouettes, réserves JSON)
 │
@@ -128,6 +130,8 @@ Un espace = un dossier = une fonctionnalité du site. Chaque espace a sa page (o
 | `importer-lots.yml` | Importe les lots d'images des jeux (`outils/images/lots/`) : affiches Framed et photos GeoGuessr vers le stockage et la base, compte rendu dans `outils/images/rapport-lots.json`. | Lancement manuel seulement |
 | `sauvegarde.yml` | Exporte `public`, `auth` et `storage`, chiffre avec `gpg` et dépose un artefact de 30 jours : voir `docs/SAUVEGARDE.md`. Secrets `SUPABASE_DB_URL` et `HG_BACKUP_PASSPHRASE`. | Chaque nuit, ou à la main |
 | `importer-images.yml` | Importe dans le dépôt les images de `outils/images/a-importer.json` (captures Steam, images Wikipédia, adresses), les convertit en .webp et les ajoute par un commit. | Envoi sur `main` qui modifie `a-importer.json` ou `importer.mjs`, ou lancement manuel |
+| `rapatrier-cartes.yml` | Rapatrie dans le site les images de cartes stockées ailleurs (`outils/images/rapatrier-cartes.mjs`) : télécharge et convertit en .webp, ajoute par un commit, attend la mise en ligne, puis met à jour les adresses en base. | Envoi sur `main` qui modifie `rapatrier-cartes.mjs`, ou lancement manuel |
+| `sonde.yml` | Sonde de santé externe : teste le site et le point de santé de Supabase (public, sans donnée), conclut après 2 échecs à 60 secondes d'écart et prévient le salon Staff une fois à la panne et une fois au retour (secret `DISCORD_CI_WEBHOOK`). | Toutes les 15 minutes, ou lancement manuel |
 
 ## Où ranger un nouveau fichier ?
 
