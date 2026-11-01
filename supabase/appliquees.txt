@@ -52,3 +52,4 @@
 2026-11-01T20:51:21.725Z ok supabase/migrations/193_echanges_expiration_alerte.sql
 2026-11-01T20:51:22.487Z ok supabase/migrations/194_modeles_reponse.sql
 2026-11-01T20:51:23.227Z ok supabase/migrations/195_centre_notifications.sql
+2026-11-01T21:59:20.626Z ok supabase/migrations/196_give_panier.sql
