@@ -49,3 +49,6 @@
 2026-11-01T12:39:00.471Z ok supabase/migrations/190_arcade_plafond.sql
 2026-11-01T12:39:01.265Z ok supabase/migrations/191_gains_membres_seuls.sql
 2026-11-01T15:54:03.303Z ok supabase/migrations/192_entretien_admin.sql
+2026-11-01T20:51:21.725Z ok supabase/migrations/193_echanges_expiration_alerte.sql
+2026-11-01T20:51:22.487Z ok supabase/migrations/194_modeles_reponse.sql
+2026-11-01T20:51:23.227Z ok supabase/migrations/195_centre_notifications.sql
