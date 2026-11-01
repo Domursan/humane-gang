@@ -48,3 +48,4 @@
 2026-11-01T12:38:59.749Z ok supabase/migrations/189_purge_nocturne.sql
 2026-11-01T12:39:00.471Z ok supabase/migrations/190_arcade_plafond.sql
 2026-11-01T12:39:01.265Z ok supabase/migrations/191_gains_membres_seuls.sql
+2026-11-01T15:54:03.303Z ok supabase/migrations/192_entretien_admin.sql
