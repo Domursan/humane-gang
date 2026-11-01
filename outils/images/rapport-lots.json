@@ -1,0 +1,52 @@
+{
+  "espace": {
+    "total": 293888314,
+    "base": 99096243,
+    "buckets": [
+      {
+        "bucket_id": "hg-nj",
+        "fichiers": 542,
+        "octets": 169747288
+      },
+      {
+        "bucket_id": "hg-bot-media",
+        "fichiers": 16,
+        "octets": 60720029
+      },
+      {
+        "bucket_id": "hg-photos",
+        "fichiers": 276,
+        "octets": 36848600
+      },
+      {
+        "bucket_id": "hg-jeux",
+        "fichiers": 420,
+        "octets": 14822788
+      },
+      {
+        "bucket_id": "hg-assets",
+        "fichiers": 35,
+        "octets": 11219279
+      },
+      {
+        "bucket_id": "hg-avatars",
+        "fichiers": 12,
+        "octets": 278746
+      },
+      {
+        "bucket_id": "hg-support-files",
+        "fichiers": 3,
+        "octets": 132220
+      },
+      {
+        "bucket_id": "hg-proofs",
+        "fichiers": 1,
+        "octets": 119364
+      }
+    ],
+    "prevu": 0,
+    "plafond": 734003200,
+    "marge": 440114886
+  },
+  "date": "2026-11-01T12:35:02.948Z"
+}
