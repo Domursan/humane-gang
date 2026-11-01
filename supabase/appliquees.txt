@@ -42,3 +42,6 @@
 2026-10-31T20:13:54.765Z ok supabase/migrations/183_jeux_programme.sql
 2026-10-31T23:06:13.469Z ok supabase/migrations/184_jeux_programme_jour.sql
 2026-10-31T23:06:14.200Z ok supabase/migrations/185_duel_coups_manques.sql
+2026-11-01T04:10:55.526Z ok supabase/migrations/186_adrep_sudoku.sql
+2026-11-01T04:10:57.021Z ok supabase/migrations/187_geo_credit_photo.sql
+2026-11-01T04:10:57.738Z ok supabase/migrations/188_framed_tirage.sql
