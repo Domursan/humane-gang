@@ -17,6 +17,12 @@
   --bj-rouge: #E0909A;
 }
 body.plat-blackjack { --plat-teinte: #123A24; --plat-or: #E2C77E; }
+/* Mode clair : le tapis reste vert foncé, on y remet le texte clair du mode sombre (plateaux.css pose du texte sombre sur toute la table) */
+html[data-mode="clair"] .bj-tapis {
+  --bj-texte: #F2EFEA; --bj-muet: #D7EBDD; --bj-or: #E2C77E; --bj-or-vif: #E2C77E; --bj-vert: #8FC39F; --bj-rouge: #E0909A;
+  --bj-texte-doux: initial; --bj-bord: #2A2A2F; --bj-bord-fort: #3A3A40;
+  color: var(--bj-texte);
+}
 
 /* ---------- Coque ---------- */
 .bj-table, .bf-bloc { color: var(--bj-texte); font-family: Inter, system-ui, sans-serif; font-size: 16px; line-height: 1.5; min-width: 0; max-width: 100%; }

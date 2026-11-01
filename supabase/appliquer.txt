@@ -52,3 +52,6 @@ supabase/migrations/185_duel_coups_manques.sql
 supabase/migrations/186_adrep_sudoku.sql
 supabase/migrations/187_geo_credit_photo.sql
 supabase/migrations/188_framed_tirage.sql
+supabase/migrations/189_purge_nocturne.sql
+supabase/migrations/190_arcade_plafond.sql
+supabase/migrations/191_gains_membres_seuls.sql

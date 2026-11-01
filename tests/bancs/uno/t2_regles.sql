@@ -75,6 +75,9 @@ begin
   perform t_ok((select tour from hg_uno_parties where id = v_id) in (u1, u2), 'le tour reste à un joueur présent');
 
   -- Robot : tours manqués -> le jeu avance seul jusqu'à la fin
+  -- Migration 191 : le paiement exige une manche finie et 3 minutes de jeu, conditions posées ici.
+  update hg_uno_parties set started_at = now() - interval '10 minutes' where id = v_id;
+  perform hg_uno__log(v_id, u1, 'manche', 'Manche du banc.');
   for i in 1..12 loop
     exit when (select statut from hg_uno_parties where id = v_id) <> 'en_cours';
     update hg_uno_parties set tour_fin = now() - interval '1 second' where id = v_id;

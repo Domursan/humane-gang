@@ -21,16 +21,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # Sans identifiants dans .git/config : le code de sharp, qui tourne à l'étape Importer, ne peut pas pousser sur main.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      # Versions et empreintes figées par outils/images/package-lock.json, aucun script d'installation.
       - name: Installer sharp
-        run: npm i --no-save --no-package-lock sharp@0.33.5
+        run: npm ci --ignore-scripts --prefix outils/images
       - name: Importer
         run: node outils/images/importer.mjs
       - name: Ajouter au dépôt
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git config user.name Domursan
           git config user.email domursan1@gmail.com
           git add outils/images

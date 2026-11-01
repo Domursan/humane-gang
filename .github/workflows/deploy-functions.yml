@@ -8,6 +8,7 @@
 # Le jeton n'est jamais écrit dans le dépôt ni dans les journaux.
 #
 # verify_jwt de chaque fonction : voir supabase/functions/DEPLOY.md (repris ci-dessous).
+# Nouvelle fonction : l'ajouter à la liste « options », à « toutes » et à la fonction jwt() de l'étape Déployer, sinon le job refuse.
 name: Déployer une fonction
 
 on:
@@ -35,31 +36,44 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      PROJECT_REF: zqbdzokyhgavgmqgiwuw
     steps:
       - uses: actions/checkout@v4
-      - uses: supabase/setup-cli@v1
         with:
-          version: latest
-      - name: Vérifier le jeton
+          persist-credentials: false
+      # Épinglée par commit : v1.7.3, même branche v1 qu'avant (la v3 installe Bun et des paquets npm à chaque lancement).
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb
+        with:
+          version: 2.122.0
+      - name: Déployer
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: zqbdzokyhgavgmqgiwuw
+          EVENEMENT: ${{ github.event_name }}
+          FONCTION: ${{ inputs.fonction }}
         run: |
           if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
             echo "::error::Le secret SUPABASE_ACCESS_TOKEN manque (Settings › Secrets and variables › Actions)."
             exit 1
           fi
-      - name: Déployer
-        run: |
           # Fonctions appelées par les membres connectés : jeton vérifié par Supabase. Les autres (cron, webhooks, Discord) : non.
-          jwt() { case "$1" in hg-notify|hg-album|hg-archive) echo "";; *) echo "--no-verify-jwt";; esac; }
-          if [ "${{ github.event_name }}" = "push" ]; then
-            liste=$(grep -v '^#' supabase/functions/a-deployer.txt | tr -s ' \n' ' ')
-          elif [ "${{ inputs.fonction }}" = "toutes" ]; then
+          # Un nom inconnu est refusé : il ne doit jamais partir sans vérification du jeton par simple oubli dans cette liste.
+          jwt() {
+            case "$1" in
+              hg-notify|hg-album|hg-archive) echo "";;
+              hg-support|hg-birthdays|hg-cron|hg-push|hg-discord|hg-calendar|hg-nj-images) echo "--no-verify-jwt";;
+              *) echo "::error::Fonction inconnue : $1 (à ajouter à jwt() dans deploy-functions.yml, selon supabase/functions/DEPLOY.md)." >&2; return 1;;
+            esac
+          }
+          if [ "$EVENEMENT" = "push" ]; then
+            # a-deployer.txt peut avoir des fins de ligne Windows.
+            liste=$(grep -v '^#' supabase/functions/a-deployer.txt | tr -s ' \r\n' ' ')
+          elif [ "$FONCTION" = "toutes" ]; then
             liste="hg-notify hg-support hg-birthdays hg-cron hg-album hg-archive hg-push hg-discord hg-calendar hg-nj-images"
           else
-            liste="${{ inputs.fonction }}"
+            liste="$FONCTION"
           fi
+          # Toute la liste est contrôlée avant le premier déploiement.
+          for f in $liste; do jwt "$f" > /dev/null || exit 1; done
           for f in $liste; do
             echo "::group::$f"
             supabase functions deploy "$f" --project-ref "$PROJECT_REF" $(jwt "$f") --use-api

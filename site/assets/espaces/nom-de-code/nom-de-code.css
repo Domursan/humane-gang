@@ -23,6 +23,8 @@ body.ndc-page {
   background-image: radial-gradient(ellipse 1100px 520px at 50% 0, #241A22 0, var(--bg) 70%);
   background-repeat: no-repeat;
 }
+/* Mode clair : le halo sombre du haut de page est ramené à une teinte légère, pour que l'en-tête (liens sombres) reste lisible */
+html[data-mode="clair"] body.ndc-page { background-image: radial-gradient(ellipse 1100px 520px at 50% 0, color-mix(in srgb, #241A22 10%, var(--bg)) 0, var(--bg) 70%); }
 .ndc-app { padding-bottom: 48px; }
 .ndc-app .card { background: color-mix(in srgb, var(--surface) 90%, transparent); }
 .ndc-chargement { padding: 48px 0; color: var(--muted); text-align: center; }
@@ -38,7 +40,7 @@ body.ndc-page {
 .ndc-eq { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-weight: 700; font-size: 12px;
   text-transform: uppercase; letter-spacing: .5px; font-family: 'Oswald', sans-serif; }
 .ndc-eq.is-jaune { background: var(--ndc-jaune); color: #2A1C00; }
-.ndc-eq.is-rose { background: var(--ndc-rose); color: #FFFFFF; }
+.ndc-eq.is-rose { background: #C93D80; color: #FFFFFF; }   /* rose un peu plus profond que --ndc-rose : texte blanc à 4,5:1 */
 /* Avatar rond (photo, sinon initiales sur la couleur du membre) */
 .ndc-av { flex: none; display: inline-grid; place-items: center; border-radius: 50%; overflow: hidden; background: var(--ndc-av, #6B6B73);
   color: #121212; font-weight: 800; font-size: 13px; }

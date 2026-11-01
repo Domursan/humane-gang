@@ -5,7 +5,7 @@
  * (sélecteur) ; au départ, c'est celui de l'adresse (/pages/jeux/jeux.html#arcade-<jeu>, ctx.sub), sinon le jeu du jour (game_of_day).
  * Le serveur fixe le jeu de chaque tableau (hg_arcade_board(p_game)) et de chaque partie (hg_arcade_start(p_game)) ;
  * la partie est fermée par le serveur (hg_arcade_finish : durée et score vérifiés). Une seule partie par jour est
- * récompensée, tous jeux confondus. Record personnel (navigateur) par jeu et meilleurs scores du gang de la semaine (5 lignes).
+ * récompensée, tous jeux confondus ; Paillettes et Raclette paient en plus chaque prise (300 par jour, migration 190). Record personnel (navigateur) par jeu et meilleurs scores du gang de la semaine (5 lignes).
  * Un changement de jeu ou d'adresse pendant une partie l'interrompt (sans score). Les écrans de la borne (départ, compte, pause,
  * fin) sont dessinés par le moteur : la page lui donne le record (option record) et l'accès au sélecteur (option onAutres).
  * Maquette : idees-design/project/J18.dc.html.
@@ -117,7 +117,7 @@ export async function mount(panel, ctx) {
             <svg width="34" height="34" viewBox="0 0 16 16" aria-hidden="true" shape-rendering="crispEdges">${j.icone(j.couleurs)}</svg>
             <span class="arc-tire-nom">${esc(j.nom)}</span></button>`).join('')}
         </div>
-        <p class="small muted">Les mini-jeux sont jouables chaque jour. Une seule partie par jour est récompensée, tous jeux confondus.</p>
+        <p class="small muted">Les mini-jeux sont jouables chaque jour. Une seule partie par jour est récompensée, tous jeux confondus. Paillettes et Raclette paient en plus 1 ${paillSym()} par prise, jusqu’à 300 ${paillSym()} par jour.</p>
       </section>
       <div class="arc-partie" id="arc-partie" aria-busy="true"></div>
     </div>`;

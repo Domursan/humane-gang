@@ -6,6 +6,10 @@
 .qt-wall > .ct-empty { column-span: all; }
 .qt-note { break-inside: avoid; margin: 0 0 12px; padding: 14px; border-radius: 14px; background: var(--qc); color: #121212;
   transform: rotate(var(--qt, 0deg)); display: flex; flex-direction: column; gap: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, .25); }
+/* Mode clair : --sand, --slate, --sage… y sont des teintes foncées (texte), le texte noir n'y atteint que 2,4 à 2,9:1.
+   On éclaircit la couleur du post-it vers le blanc (texte #121212 : 7:1 au moins) et on retire l'atténuation du texte. */
+html[data-mode="clair"] .qt-note { background: color-mix(in srgb, var(--qc) 45%, #FFFFFF); }
+html[data-mode="clair"] :is(.qt-meta, .qt-rx-none) { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .qt-note { transform: none; } }
 .qt-text { margin: 0; font-family: var(--font-display); font-size: 16px; line-height: 1.2; overflow-wrap: anywhere; }
 @media (min-width: 900px) { .qt-text { font-size: 19px; } }

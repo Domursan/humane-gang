@@ -187,6 +187,9 @@ body.lg-spectateur .lg-pl-bandeau { border-color: #8A1A20; }
   -webkit-mask-image: linear-gradient(225deg, #000 0, transparent 50%); mask-image: linear-gradient(225deg, #000 0, transparent 50%); }
 .lg-pl[data-theme] .lg-pl-role { border-color: rgba(var(--th-rgb), .45); }
 .lg-pl-devise { margin: 10px 0 0; font-style: italic; color: var(--th-a, var(--lg-pl-accent)); }
+/* Mode clair : la table est posée sur le décor sombre puis sur le fond clair de la page ; le rôle sous le prénom (« Toi », « Villageois »)
+   prend son propre fond sombre, lisible sur les deux */
+html[data-mode="clair"] .lg-siege-sous { padding: 1px 8px; border-radius: 999px; background: rgba(12, 10, 8, .78); color: #E9E4DA; text-shadow: none; }
 .lg-pl-table { position: relative; }
 .lg-pl-table-corps { position: relative; z-index: 1; }
 .lg-pl-embleme { position: absolute; z-index: 0; left: 50%; top: 50%; width: 78%; max-width: 520px; aspect-ratio: 1;

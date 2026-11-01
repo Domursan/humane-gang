@@ -84,7 +84,7 @@ export function creer(root, ctx) {
 
         <div class="ndc-fin-cote">
           <section class="card ndc-fin-panneau ndc-fin-gain" aria-labelledby="ndc-fin-gain-titre" ${invite ? 'hidden' : ''}>
-            <h2 id="ndc-fin-gain-titre" class="ndc-fin-h2">Tu gagnes</h2>
+            <h2 id="ndc-fin-gain-titre" class="ndc-fin-h2">Tes gains</h2>
             <div data-zone="gain"></div>
           </section>
           <section class="card ndc-fin-panneau" aria-labelledby="ndc-fin-hist-titre">

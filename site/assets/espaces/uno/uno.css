@@ -16,6 +16,8 @@ body.uno-page {
   background-image: radial-gradient(ellipse 1100px 520px at 50% 0, #1C1A2A 0, var(--bg) 70%);
   background-repeat: no-repeat;
 }
+/* Mode clair : le halo sombre du haut de page est ramené à une teinte légère, pour que l'en-tête (liens sombres) reste lisible */
+html[data-mode="clair"] body.uno-page { background-image: radial-gradient(ellipse 1100px 520px at 50% 0, color-mix(in srgb, #1C1A2A 10%, var(--bg)) 0, var(--bg) 70%); }
 .uno-app { padding-bottom: 48px; }
 .uno-app .card { background: color-mix(in srgb, var(--surface) 90%, transparent); }
 .uno-chargement { padding: 48px 0; color: var(--muted); text-align: center; }

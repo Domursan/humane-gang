@@ -1,6 +1,7 @@
 # Applique sur la base Supabase les fichiers SQL listés dans supabase/appliquer.txt (un chemin par ligne, relatif au dépôt).
 # Se lance quand ce fichier change sur main. Chaque fichier n'est appliqué qu'une fois : le résultat (ok ou erreur) est noté
 # dans supabase/appliquees.txt, ajouté au dépôt par un commit au nom de Domursan.
+# Une migration en erreur met le job en échec : le résultat est noté quand même, puis le salon Staff est prévenu.
 # Utilise le secret GitHub SUPABASE_ACCESS_TOKEN (API de gestion Supabase, requête SQL en tant que propriétaire de la base).
 name: Appliquer du SQL
 
@@ -21,17 +22,18 @@ jobs:
   appliquer:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      PROJECT_REF: zqbdzokyhgavgmqgiwuw
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - name: Appliquer
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: zqbdzokyhgavgmqgiwuw
         run: node outils/appliquer-sql.mjs
       - name: Noter le résultat
+        if: always()
         run: |
           git config user.name Domursan
           git config user.email domursan1@gmail.com
@@ -39,3 +41,15 @@ jobs:
           if git diff --cached --quiet; then echo "Rien à noter."; exit 0; fi
           git commit -m "SQL appliqué [skip ci]"
           for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break; sleep 5; done
+      # Le détail de l'erreur est dans supabase/appliquees.txt et dans le rapport du job : même webhook que ci.yml, sans ce secret l'étape ne fait rien.
+      - name: Prévenir le salon Staff
+        if: failure()
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_CI_WEBHOOK }}
+          RAPPORT: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then echo "Secret DISCORD_CI_WEBHOOK absent : pas d'alerte."; exit 0; fi
+          jq -n --arg u "$RAPPORT" \
+            '{username: "Humane Gang CI", allowed_mentions: {parse: []}, embeds: [{title: "Migration SQL en échec", description: "Détail dans supabase/appliquees.txt.", url: $u, color: 16658692}]}' \
+            | curl -fsS -o /dev/null -X POST -H 'Content-Type: application/json' --data-binary @- "$WEBHOOK" \
+            && echo "Alerte envoyée." || echo "Alerte non envoyée (webhook injoignable)."

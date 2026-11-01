@@ -5,7 +5,7 @@
 // Pas de limite de temps : une partie se termine quand le joueur perd ses trois vies (Paillettes, Raclette) ou au premier accrochage (Domu-mobile).
 // Écrans communs dessinés dans le canevas (dataset.ecran) : départ, compte 3-2-1 (pas de compte sans mouvement ni avec « Effets » coupés),
 // pause (reprendre et quitter au clic), fin ; boucle hors partie arrêtée quand la borne n'est plus visible.
-// Faux Supabase : fixtures/fake-sb.mjs (scénario arcadeGame, arcadeRewarded, arcadeBadScore).
+// Faux Supabase : fixtures/fake-sb.mjs (scénario arcadeGame, arcadeRewarded, arcadeBadScore, arcadePrises).
 const { check, finish, openPage, hscroll, log, sleep, chromium } = require('../../lib/harness.cjs');
 
 /** Écran affiché par la borne. */
@@ -59,9 +59,10 @@ async function balaye(p, pas = 3000) {
   await p.ctx.close();
 
   /* ---------- Partie complète (horloge simulée), pause, gain une fois ---------- */
-  p = await openPage(browser, { page: 'jeux', hash: '#arcade', width: 1280, scenario: { arcadeGame: 'paillettes' } });
+  p = await openPage(browser, { page: 'jeux', hash: '#arcade', width: 1280, scenario: { arcadeGame: 'paillettes', arcadePrises: 1 } });
   await p.waitForSelector('#arc-jouer', { timeout: 5000 });
   await p.clock.install();
+  check((await p.textContent('.arc-tirage')).includes('1 ✦ par prise, jusqu’à 300 ✦ par jour'), 'règle : Paillettes et Raclette, 1 ✦ par prise, 300 ✦ par jour');
   check((await ecran(p)) === 'depart', 'écrans : départ avant la partie');
   check(await p.$eval('.arc-hud', (h) => getComputedStyle(h).visibility === 'hidden'), 'écrans : le HUD s’efface sur l’écran de départ');
   await p.click('#arc-jouer');
@@ -107,12 +108,13 @@ async function balaye(p, pas = 3000) {
   const fin = calls.find((c) => c[1] === 'hg_arcade_finish');
   check(!!fin && fin[2].p_run === 'run-1' && fin[2].p_score === sc, `serveur : hg_arcade_finish(run-1, ${sc})`);
   check(sc >= 1 && (await p.textContent('#arc-msg')).includes('+5 ✦'), `fin : score ${sc} et gain +5 ✦ affichés`);
+  check((await p.textContent('#arc-msg')).includes('+1 ✦ pour tes prises'), 'fin : les prises payées sont affichées');
   check((await p.locator('#arc-gain').innerText()).includes('reçue aujourd’hui'), 'récompense : « reçue aujourd’hui » après le gain');
   check((await p.textContent('#arc-jouer')).trim() === 'Rejouer', 'bouton : « Rejouer » après la partie');
   check(Number(await p.textContent('#arc-record')) === sc, 'record : mis à jour');
   check((await p.locator('#arc-top .is-me').count()) === 1, 'scores : ma ligne apparaît au tableau');
   const sc2 = await partie(p);
-  check(!(await p.textContent('#arc-msg')).includes('✦'), `2e partie (${sc2}) : pas de second gain`);
+  check(!(await p.textContent('#arc-msg')).includes('✦'), `2e partie (${sc2}) : pas de second gain, plafond des prises atteint`);
   // Quitter depuis l'écran de pause : fin normale, le score de ce moment part au serveur
   await p.click('#arc-jouer');
   await p.clock.runFor(3500);

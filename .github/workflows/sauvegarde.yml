@@ -1,0 +1,117 @@
+# Sauvegarde chiffrée de la base Supabase, chaque nuit à 3 h 11 UTC et avec le bouton « Run workflow ».
+# Mode d'emploi (secrets, téléchargement, déchiffrement, restauration) : docs/SAUVEGARDE.md.
+#
+# Le dépôt est public, donc les artefacts sont téléchargeables par tous : seul le fichier chiffré y entre. pg_dump écrit dans un
+# tube nommé que gpg lit directement : rien n'est jamais écrit en clair sur le disque du runner, et aucun contenu ne va aux journaux.
+# Pas de checkout : ce job n'a besoin d'aucun fichier du dépôt.
+name: Sauvegarde de la base
+
+on:
+  schedule:
+    - cron: '11 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sauvegarde
+  cancel-in-progress: false
+
+env:
+  # Doit être égal ou supérieur à la version du serveur (17.11 en novembre 2026) : sinon pg_dump refuse, et l'alerte part.
+  PG_MAJEUR: '17'
+
+jobs:
+  sauvegarder:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Dépôt officiel PostgreSQL : ubuntu-latest n'a que la version 16.
+      - name: Client PostgreSQL
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsS -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "postgresql-client-$PG_MAJEUR"
+          "/usr/lib/postgresql/$PG_MAJEUR/bin/pg_dump" --version
+      - name: Exporter et chiffrer
+        id: export
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          HG_BACKUP_PASSPHRASE: ${{ secrets.HG_BACKUP_PASSPHRASE }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          umask 077
+          for s in SUPABASE_DB_URL HG_BACKUP_PASSPHRASE; do
+            if [ -z "${!s:-}" ]; then
+              echo "::error::Le secret $s manque (Settings › Secrets and variables › Actions) : voir docs/SAUVEGARDE.md."
+              exit 1
+            fi
+          done
+          bin="/usr/lib/postgresql/$PG_MAJEUR/bin"
+          dossier="$RUNNER_TEMP/sauvegarde"
+          mkdir -p "$dossier"
+          jour=$(date -u +%F)
+
+          # La phrase de passe passe par l'entrée standard de gpg, jamais par la ligne de commande.
+          gpg_phrase() { printf '%s' "$HG_BACKUP_PASSPHRASE" | gpg --batch --quiet --pinentry-mode loopback --no-symkey-cache --passphrase-fd 0 "$@"; }
+
+          # exporter <fichier.gpg> <options de pg_dump…> : le format custom est déjà compressé. Le « wait » remonte l'échec de pg_dump,
+          # qu'un tube simple cacherait : gpg chiffrerait sans broncher un export tronqué.
+          exporter() {
+            local sortie="$dossier/$1" tube="$dossier/tube" pid
+            shift
+            mkfifo "$tube"
+            "$bin/pg_dump" --format=custom --dbname="$SUPABASE_DB_URL" "$@" > "$tube" &
+            pid=$!
+            gpg_phrase --symmetric --cipher-algo AES256 --compress-algo none --output "$sortie" "$tube"
+            wait "$pid"
+            rm -f "$tube"
+          }
+
+          # relire <fichier.gpg> <ligne attendue> : déchiffre tout (gpg contrôle l'intégrité) et cherche une table dans le sommaire,
+          # sans rien écrire. pg_restore s'arrête au sommaire : cat lit la suite pour que gpg aille au bout.
+          relire() {
+            local n
+            n=$(gpg_phrase --decrypt "$dossier/$1" | { "$bin/pg_restore" --list | grep -c "TABLE DATA $2 "; cat > /dev/null; })
+            if [ "$n" -lt 1 ]; then echo "::error::$1 : table $2 absente du sommaire."; exit 1; fi
+          }
+
+          # public : structure et données, droits compris (les revoke protègent la base). Pas de schéma cron ni vault.
+          exporter "public-$jour.dump.gpg" --schema=public
+          # auth et storage : données seules, la structure appartient à Supabase. Leurs tables de version existent déjà sur un projet neuf.
+          exporter "auth-storage-$jour.dump.gpg" --data-only --schema=auth --schema=storage \
+            --exclude-table=auth.schema_migrations --exclude-table=storage.migrations
+
+          relire "public-$jour.dump.gpg" 'public hg_profiles'
+          relire "auth-storage-$jour.dump.gpg" 'auth users'
+
+          echo "jour=$jour" >> "$GITHUB_OUTPUT"
+          {
+            echo '### Sauvegarde chiffrée'
+            echo
+            ls -l --block-size=K "$dossier" | awk 'NR > 1 { print "- " $9 " : " $5 }'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Déposer l'artefact chiffré
+        uses: actions/upload-artifact@v4
+        with:
+          name: sauvegarde-${{ steps.export.outputs.jour }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/sauvegarde/*.dump.gpg
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Prévenir le salon Staff
+        if: failure() || cancelled()
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_CI_WEBHOOK }}
+          RAPPORT: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then echo "Secret DISCORD_CI_WEBHOOK absent : pas d'alerte."; exit 0; fi
+          jq -n --arg u "$RAPPORT" \
+            '{username: "Humane Gang CI", allowed_mentions: {parse: []}, embeds: [{title: "Sauvegarde de la base en échec", description: "Pas de nouvelle sauvegarde, voir le rapport.", url: $u, color: 16658692}]}' \
+            | curl -fsS -o /dev/null -X POST -H 'Content-Type: application/json' --data-binary @- "$WEBHOOK" \
+            && echo "Alerte envoyée." || echo "Alerte non envoyée (webhook injoignable)."

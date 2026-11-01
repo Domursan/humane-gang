@@ -23,21 +23,30 @@ jobs:
   rapatrier:
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      PROJECT_REF: zqbdzokyhgavgmqgiwuw
     steps:
+      # Sans identifiants dans .git/config : le code de sharp, qui tourne à l'étape Télécharger, ne peut pas pousser sur main.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      # Versions et empreintes figées par outils/images/package-lock.json, aucun script d'installation.
       - name: Installer sharp
-        run: npm i --no-save --no-package-lock sharp@0.33.5
+        run: npm ci --ignore-scripts --prefix outils/images
       - name: Télécharger et convertir
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: zqbdzokyhgavgmqgiwuw
         run: node outils/images/rapatrier-cartes.mjs telecharger
       - name: Ajouter au dépôt
         id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # Le jeton ne reste dans .git/config que le temps de cette étape : d'autres étapes suivent.
+          trap 'git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"' EXIT
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git config user.name Domursan
           git config user.email domursan1@gmail.com
           git add site/assets/cartes outils/images/rapatriement.json
@@ -63,4 +72,7 @@ jobs:
           echo "Images pas encore en ligne après 20 min" && exit 1
       - name: Basculer les adresses en base
         if: steps.commit.outputs.rien != '1'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: zqbdzokyhgavgmqgiwuw
         run: node outils/images/rapatrier-cartes.mjs basculer

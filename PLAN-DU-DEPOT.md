@@ -76,6 +76,7 @@ human-gang/
 │   ├── BOT.md             Installation et fonctionnement du bot Discord
 │   ├── LOUP-GAROU.md      Règles et fonctionnement du Loup-Garou
 │   ├── PUBLICATION.md     Ce qui est publié par GitHub Pages et ce qui ne l'est pas
+│   ├── SAUVEGARDE.md      Sauvegarde chiffrée de la base : secrets, téléchargement, restauration
 │   ├── SECURITE.md        Audit de sécurité (constats, décisions à prendre)
 │   ├── SPEC.md            Spécification d'origine (document historique)
 │   └── captures/qa/       Captures de recette, par chantier (p2-communication, p2-comptes, p2-pilotage)
@@ -125,6 +126,7 @@ Un espace = un dossier = une fonctionnalité du site. Chaque espace a sa page (o
 | `appliquer-sql.yml` | Applique sur la base les migrations de `supabase/appliquer.txt` qui ne sont pas encore dans `supabase/appliquees.txt` (script `outils/appliquer-sql.mjs`), puis note le résultat. Utilise le secret `SUPABASE_ACCESS_TOKEN`. | Envoi sur `main` qui modifie `supabase/appliquer.txt`, ou lancement manuel |
 | `deploy-functions.yml` | Déploie les fonctions edge listées dans `supabase/functions/a-deployer.txt`. Utilise le secret `SUPABASE_ACCESS_TOKEN`. | Envoi sur `main` qui modifie `supabase/functions/a-deployer.txt`, ou lancement manuel (choix de la fonction) |
 | `importer-lots.yml` | Importe les lots d'images des jeux (`outils/images/lots/`) : affiches Framed et photos GeoGuessr vers le stockage et la base, compte rendu dans `outils/images/rapport-lots.json`. | Lancement manuel seulement |
+| `sauvegarde.yml` | Exporte `public`, `auth` et `storage`, chiffre avec `gpg` et dépose un artefact de 30 jours : voir `docs/SAUVEGARDE.md`. Secrets `SUPABASE_DB_URL` et `HG_BACKUP_PASSPHRASE`. | Chaque nuit, ou à la main |
 | `importer-images.yml` | Importe dans le dépôt les images de `outils/images/a-importer.json` (captures Steam, images Wikipédia, adresses), les convertit en .webp et les ajoute par un commit. | Envoi sur `main` qui modifie `a-importer.json` ou `importer.mjs`, ou lancement manuel |
 
 ## Où ranger un nouveau fichier ?

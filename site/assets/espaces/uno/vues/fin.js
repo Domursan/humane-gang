@@ -192,7 +192,7 @@ export function creer(root, ctx) {
     const html = `
       <section class="card uno-fin-recompense" aria-labelledby="uno-fin-gain-titre">
         <div class="uno-fin-recompense-texte">
-          <h2 id="uno-fin-gain-titre">Tu gagnes</h2>
+          <h2 id="uno-fin-gain-titre">Tes gains</h2>
           <p>${texte}</p>
         </div>
         ${pailles > 0 ? `<span class="uno-fin-pailles" aria-label="${esc(pailles)} Paillettes" data-gain="${esc(pailles)}">+${gainMontre ? esc(pailles) : 0}</span>` : ''}

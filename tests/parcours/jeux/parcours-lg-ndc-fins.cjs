@@ -310,6 +310,7 @@ async function nomDeCode(browser) {
   await p.waitForSelector('.ndc-fin-cartes', { timeout: 6000 }).catch(() => {});
   await sleep(1100);
   check((await nb(p, '.fxd-ban, .ndc-fx-banniere, .ndc-fx-flash, .fxd-confettis')) === 0, 'Partie déjà finie : aucun effet à l\'ouverture');
+  check(await texte(p, '#ndc-fin-gain-titre') === 'Tes gains', 'Fin : le titre du bloc ne promet aucun gain');
   await p.ctx.close();
 
   p = await finLiveN(browser, finN('jaune', 'assassin'));

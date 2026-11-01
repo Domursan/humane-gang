@@ -125,12 +125,15 @@
 }
 .badge-medal img { width: 100%; height: 100%; object-fit: cover; }
 .badge-initials { font-size: 22px; line-height: 1; }
+.badge.is-got .badge-initials { color: color-mix(in srgb, var(--tint) 70%, var(--text)); }   /* teinte du badge tirée vers le texte : 4,5:1 sur le fond teinté */
 .badge-name { font-weight: 700; font-size: 15px; }
 .badge-desc { font-size: 14px; color: var(--muted); }
 .badge-state { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--sage-text); margin-top: auto; }
 .badge-state svg { width: 12px; height: 12px; }
 .badge.is-locked { background: transparent; border-style: dashed; }
-.badge.is-locked .badge-medal { filter: grayscale(1); opacity: .35; border-color: var(--border-strong); color: var(--muted); background: var(--surface); }
+/* Badge verrouillé : seule l'image est atténuée ; les initiales restent en --muted (contraste 4,5:1 sur --surface) */
+.badge.is-locked .badge-medal { filter: grayscale(1); border-color: var(--border-strong); color: var(--muted); background: var(--surface); }
+.badge.is-locked .badge-medal img { opacity: .35; }
 .badge.is-locked .badge-name { color: var(--muted); }
 .badge.is-locked .badge-state { color: var(--muted); }
 

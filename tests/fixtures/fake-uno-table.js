@@ -2,7 +2,7 @@
 // openPage({ init: 'fake-uno-table.js' }), accroché au faux client fake-sb.mjs par window.__FAKE_RPC.
 // Mêmes formes que hg_uno_etat (migrations 121 et 171). Les règles ne sont PAS rejouées (elles sont testées côté SQL,
 // tests/bancs/uno) : une action écrit juste l'état et les lignes de journal que le serveur écrirait.
-// Scénario (window.__SCN) : main ([['r','7'], …], défaut : six cartes) ; fin : true pour une partie déjà terminée (je gagne).
+// Scénario (window.__SCN) : main ([['r','7'], …], défaut : six cartes) ; fin : true pour une partie déjà terminée (je gagne) ; sansGain : true, aucune Paillette (partie sans 2 membres).
 // Expose window.__UNO : etat(), relire(), modifier(fn), ligne(uid, type, texte, age), BRUNO, CHLOE, ME, refus, latence,
 // muet ('refuse' : hg_uno_jouer ne répond jamais ; 'accepte' : la pose est prise, mais la réponse se perd).
 // window.__SONS compte les sons créés (oscillateurs et bruits).
@@ -68,7 +68,7 @@
     [gagnant, ...E.joueurs.map((j) => j.user_id).filter((id) => id !== gagnant)].forEach((id, i) => {
       const j = joueur(id); j.rang = i + 1; j.gagne = i === 0; j.main_points = i * 10;
     });
-    joueur(ME).paillettes = gagnant === ME ? 210 : 50;
+    joueur(ME).paillettes = S.sansGain ? 0 : gagnant === ME ? 210 : 50;
   }
 
   if (S.fin) { E.main.length = 0; joueur(ME).nb_cartes = 0; finir(ME); }

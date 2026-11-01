@@ -246,7 +246,15 @@ const serveur = (p, fn) => p.evaluate(`(() => { const u = window.__UNO; (${fn})(
   await p.waitForSelector('.uno-podium', { timeout: 8000 });
   check(await p.locator('.uno-fx-tampon').isVisible(), 'ouverture directe : le tampon est déjà là');
   check((await p.locator('.uno-fin-pailles').innerText()) === '+210', 'ouverture directe : le gain est déjà là');
+  check((await p.locator('#uno-fin-gain-titre').innerText()) === 'Tes gains', 'ouverture directe : titre « Tes gains »');
   check((await p.evaluate(() => window.__SONS)) === 0, 'ouverture directe : aucun son, la mise en scène ne rejoue pas');
+  await p.close();
+
+  // ----- Partie gagnée sans 2 membres (migration 191) : jouable jusqu'au bout, aucun gain promis -----
+  p = await ouvrir(browser, { scenario: { fin: true, sansGain: true } });
+  await p.waitForSelector('.uno-podium', { timeout: 8000 });
+  check((await p.locator('.uno-fin-recompense').innerText()).includes('Aucune Paillette cette fois') && (await p.locator('.uno-fin-pailles').count()) === 0, 'sans gain : « Aucune Paillette cette fois », pas de compteur');
+  check(!(await p.locator('.uno-fin-recompense').innerText()).includes('Tu gagnes'), 'sans gain : le titre ne promet rien');
   await p.close();
 
   // ----- Mouvement réduit : pas d'animation, état juste, sons conservés -----

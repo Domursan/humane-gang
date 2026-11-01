@@ -1280,7 +1280,7 @@ export function createClient(_url, _key, opts = {}) {
         return { data: null, error: null };
       }
       // ---- Paquet xJ4 (migration 086) : arcade du jour (J18), saisons (J16), soirées complètes (J19) ----
-      // Scénario : arcadeGame ('paillettes' | 'raclette' | 'domu'), arcadeRewarded, arcadeBadScore ; saison (remplace le classement) ;
+      // Scénario : arcadeGame ('paillettes' | 'raclette' | 'domu'), arcadeRewarded, arcadeBadScore, arcadePrises (plafond de prises du jour, migration 190) ; saison (remplace le classement) ;
       // night (soirée en cours ou à venir, null = aucune), nightNotStaff. Les appels restent dans window.__LOG.
       // Arcade du panel (migration 103) : tableau de la semaine et effacement d'un score (droit « reglages »).
       // Scénario : arcadeBoardFail (lecture refusée), arcadeClearFail (effacement refusé). Les effacements sont notés dans window.__ARCB.
@@ -1326,7 +1326,9 @@ export function createClient(_url, _key, opts = {}) {
           const reward = !X.rewarded && sc >= 1 ? 5 : 0;
           if (reward) X.rewarded = true;
           if (nb) X.best = sc;
-          return { data: { ok: true, score: sc, game, reward, new_best: nb && sc > 0, best: X.best, top: top() }, error: null };
+          const prises = S.arcadePrises ? Math.min(sc, S.arcadePrises - (X.prises || 0)) : 0;
+          X.prises = (X.prises || 0) + prises;
+          return { data: { ok: true, score: sc, game, reward, prises, new_best: nb && sc > 0, best: X.best, top: top() }, error: null };
         }
         const cats = [['quiz', 'Questions du gang', 5, 50], ['jeux', 'Jeux du jour', 5, 35], ['quetes', 'Quêtes de la semaine', 10, 40], ['captures', 'Captures et drops', 5, 20], ['cartes', 'Cartes nouvelles', 2, 20], ['defis', 'Défis du gang', 15, 15]]
           .map(([cat, label, pts, cap]) => ({ cat, label, pts, cap }));
