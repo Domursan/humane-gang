@@ -1,6 +1,6 @@
 // ===== Accueil : le QG du Humane Gang (/pages/compte/accueil.html) =====
 // Page d'accueil. Visiteur : présentation et connexion. Membre : tuiles (Secret Santa, IRL, Historique),
-// fil d'activité, anniversaires du mois, défi du gang, bandeaux (récap, événement en cours) et boîte à idées.
+// fil d'activité, anniversaires à venir (30 jours), défi du gang, bandeaux (récap, événement en cours) et boîte à idées.
 // Chaque tuile et chaque bloc se charge séparément : une erreur n'empêche pas les autres.
 // Dépendances : core.js (sb, initPage, canAccess, textes réglables), icons.js, dyn-events.js (événement en cours, chargé à la demande),
 // accueil-ce-jour.js (tuile « Ce jour-là »).
@@ -9,6 +9,7 @@
 import { sb, initPage, esc, $, fmtDate, fmtDateTime, avatarHtml, errMsg, toast, logoAttrs, canAccess, pageLabel, applyTheme, getSiteTheme } from '../../commun/core.js';
 import { viewAsActive } from '../../commun/core/view-as.js';
 import { svg } from '../../commun/icons.js';
+import { prochainsAnniversaires } from './anniversaires-liste.js';
 import { tourState } from '../../commun/core/tour-etat.js'; // Q1 : visite guidée au premier passage (tour.js ne se charge que si une visite est due)
 import { SITE_DEFAULTS, siteIdentite } from '../../commun/core/site-defaults.js'; // textes d'origine (repli des textes réglables)
 const D = SITE_DEFAULTS.textes;
@@ -80,10 +81,8 @@ function ago(d) {
 }
 /** Date « AAAA-MM-JJ » lue en heure locale (évite le décalage d'un jour que donnerait new Date(texte)). */
 const parseDay = (s) => { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, m - 1, d); };
-/** Noms des mois en français, pour les titres et les dates. */
-const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
-/** « de » + nom du mois, élidé devant une voyelle : « d'octobre », « d'avril », « d'août », mais « de juin ». */
-const deMois = (mois) => (/^[aeéiouâèêôû]/i.test(mois) ? `d'${mois}` : `de ${mois}`);
+/** Mois abrégés pour la date d'un anniversaire (« 3 nov. »). */
+const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
 
 /* ---------- « Intro vue » dans le profil (indicateur affiché dans l'admin ; l'intro se rejoue une fois par jour) ---------- */
 /**
@@ -218,7 +217,7 @@ function renderMemberShell() {
         <ul class="feed" id="feed" aria-live="polite"><li class="skeleton-row"></li><li class="skeleton-row"></li><li class="skeleton-row"></li></ul>
       </div>
       <div class="card home-bdays">
-        <h2 class="card-title">${ICON.cake} Anniversaires ${deMois(MONTHS[new Date().getMonth()])}</h2>
+        <h2 class="card-title">${ICON.cake} Anniversaires à venir</h2>
         <ul class="bdays" id="bdays"><li class="skeleton-row"></li></ul>
       </div>
     </section>
@@ -627,29 +626,24 @@ async function loadFeed() {
   } catch (e) { ul.innerHTML = `<li>${failBox(e)}</li>`; }
 }
 
-/* ---------- Anniversaires du mois ---------- */
+/* ---------- Anniversaires à venir ---------- */
 /**
- * Anniversaires du mois en cours, triés par jour. Celui du jour est mis en évidence, les jours passés sont estompés.
- * Sans anniversaire, un message invite à partager le sien.
+ * Anniversaires des 30 prochains jours (glissants, passage d'année compris), du plus proche au plus lointain, sans plafond.
+ * Celui du jour est mis en évidence. Sans anniversaire, un message invite à partager le sien. Calcul : anniversaires-liste.js.
  */
 async function loadBirthdays() {
   const ul = $('#bdays');
   try {
-    const all = await members();
-    const now = new Date(), month = now.getMonth() + 1, today = now.getDate();
-    const list = all
-      .filter((m) => m.birthday_dm && Number(m.birthday_dm.split('.')[1]) === month)
-      .map((m) => ({ ...m, day: Number(m.birthday_dm.split('.')[0]) }))
-      .sort((a, b) => a.day - b.day || a.pseudo.localeCompare(b.pseudo, 'fr'));
+    const list = prochainsAnniversaires(await members(), new Date());
     if (!list.length) {
-      ul.innerHTML = `<li class="empty">Pas d'anniversaire partagé ce mois-ci.<br><a href="/pages/compte/compte.html">Partager le tien</a> (jour et mois seulement)</li>`;
+      ul.innerHTML = `<li class="empty">Pas d'anniversaire dans les 30 prochains jours.<br><a href="/pages/compte/compte.html">Partager le tien</a> (jour et mois seulement)</li>`;
       return;
     }
     ul.innerHTML = list.map((m) => `
-      <li class="bday${m.day === today ? ' is-today' : ''}${m.day < today ? ' is-past' : ''}">
+      <li class="bday${m.dans === 0 ? ' is-today' : ''}">
         ${avatarHtml(m, 36)}
         <span class="bday-name">${memberLink(m)}</span>
-        ${m.day === today ? '<span class="pill pill-current">Aujourd\'hui</span>' : `<span class="bday-date">${m.day} ${MONTHS[month - 1]}</span>`}
+        ${m.dans === 0 ? '<span class="pill pill-current">Aujourd\'hui</span>' : `<span class="bday-date">${m.quand.getDate()} ${MOIS_COURTS[m.quand.getMonth()]}</span>`}
       </li>`).join('');
   } catch (e) { ul.innerHTML = `<li>${failBox(e)}</li>`; }
 }

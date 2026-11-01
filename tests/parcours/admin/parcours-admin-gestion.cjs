@@ -109,21 +109,21 @@ async function ouvrir(p) {
   check(!p.errs.length, 'Booster : aucune erreur JS');
   await p.ctx.close();
 
-  // 3. Carte : recherche « paleto », 3 exemplaires brillants, un membre.
+  // 3. Carte : recherche « fontaine », 3 exemplaires brillants, un membre.
   p = await openPage(browser, { page: 'admin', fixture: 'fake-sb-cartes.mjs', width: 1280, height: 900 });
   await ouvrir(p);
   await p.click('[data-gest-kind="carte"]');
   check(await p.isVisible('#gest-cardbox'), 'Cartes : le choix de carte apparaît');
   await p.waitForSelector('#gest-cardbox [data-vp-card="C2"]', { timeout: 5000 });
-  await p.fill('#gest-cp-q', 'paleto');
+  await p.fill('#gest-cp-q', 'fontaine');
   const options = await p.$$eval('#gest-cardbox [data-vp-card]', (o) => o.map((x) => x.dataset.vpCard));
-  check(options.length === 1 && options[0] === 'C2', 'recherche « paleto » : une seule carte proposée (visuels)');
+  check(options.length === 1 && options[0] === 'C2', 'recherche « fontaine » : une seule carte proposée (visuels)');
   await p.click('#gest-cardbox [data-vp-card="C2"]');
   check(await p.isVisible('#gest-visual .hgc'), 'Carte : aperçu du visuel dans le récapitulatif');
   await p.fill('#gest-amount', '3');
   await p.click('label:has(input[name="shiny"])');
   await p.check(`input[name="gest-who"][value="${BRUNO}"]`);
-  check(/1 membre recevra 3 exemplaires de « Le Paleto » \(brillante\)/.test(await recap(p)), 'récapitulatif carte : nom et brillance');
+  check(/1 membre recevra 3 exemplaires de « La Fontaine » \(brillante\)/.test(await recap(p)), 'récapitulatif carte : nom et brillance');
   await p.click('#gest-go');
   await p.waitForSelector('dialog.hg-dialog[open] button[value="ok"]', { timeout: 5000 });
   await confirmOk(p);
@@ -180,12 +180,12 @@ async function ouvrir(p) {
 
   // 7. Résumé : une alerte expliquée (concentration des gains) avec son lien, et une enchère ouverte.
   p = await openPage(browser, { page: 'admin', fixture: 'fake-sb-cartes.mjs', width: 1280, height: 900,
-    scenario: { gestionEncheres: [{ id: 'A1', card_id: 'C2', card_name: 'Le Paleto', status: 'ouverte', starts_at: new Date(Date.now() - 36e5).toISOString(), ends_at: new Date(Date.now() + 36e6).toISOString(), min_bid: 500, step: 50, bids: 0, price: null }] } });
+    scenario: { gestionEncheres: [{ id: 'A1', card_id: 'C2', card_name: 'La Fontaine', status: 'ouverte', starts_at: new Date(Date.now() - 36e5).toISOString(), ends_at: new Date(Date.now() + 36e6).toISOString(), min_bid: 500, step: 50, bids: 0, price: null }] } });
   await ouvrir(p);
   const eco = await p.textContent('#gest-eco');
   check(/48.?250|48.250/.test(eco), 'Résumé : Paillettes en circulation (48 250)');
   check(eco.includes('+2 % sur 7 jours'), 'Résumé : variation « +2 % sur 7 jours » (hg_eco_health)');
-  check(eco.includes('Enchères en cours') && eco.includes('Le Paleto'), 'Résumé : enchère ouverte et sa carte');
+  check(eco.includes('Enchères en cours') && eco.includes('La Fontaine'), 'Résumé : enchère ouverte et sa carte');
   check(eco.includes('Un membre a gagné 6 fois la médiane'), 'Résumé : alerte de concentration expliquée');
   check(!!(await p.$('#gest-eco a[href="#fabrique/limites"]')) && !!(await p.$('#gest-eco a[href="#fabrique/stats"]')), 'Résumé : liens vers Économie › Limites et Suivi › Statistiques');
   check(!eco.includes('4 semaines'), 'Résumé : pas de tendance sur 4 semaines (donnée absente)');
@@ -222,7 +222,7 @@ async function ouvrir(p) {
   await ouvrir(p);
   const j2 = await p.textContent('#gest-journal');
   check((await p.$$eval('#gest-journal .acd-item', (x) => x.length)) === 1, 'carte donnée seule : une ligne (l\'ajustement est exclu)');
-  check(j2.includes('Alice') && j2.includes('2 exemplaires de « Le Paleto » (brillante)'), 'carte donnée : destinataire, nombre, carte et brillante');
+  check(j2.includes('Alice') && j2.includes('2 exemplaires de « La Fontaine » (brillante)'), 'carte donnée : destinataire, nombre, carte et brillante');
   check(!j2.includes('Ajustement'), 'carte donnée : pas de ligne d\'une autre action');
   await p.ctx.close();
 

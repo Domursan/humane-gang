@@ -5,16 +5,25 @@
  * garde ses propres appels de jeu. Les écrans n'appellent jamais sb directement.
  * Mode invité : un visiteur sans compte joue avec un jeton secret gardé dans son navigateur ;
  *   tous ses appels passent par la fonction serveur <préfixe>_invite (pas de temps réel : relecture régulière).
- * Dépendances : core.js (sb, errMsg).
+ * Pastille de connexion : chaque suivi de partie alimente salon-etat.js (statuts du canal, relectures, réseau).
+ * Canal temps réel : le client le rebranche seul après CHANNEL_ERROR ou TIMED_OUT, jamais après CLOSED, et un canal ne s'abonne
+ *   qu'une fois. Un canal fermé, ou tombé depuis DELAI_CANAL, est donc retiré à la relecture suivante et un neuf ouvert, avec un recul.
+ * Dépendances : core.js (sb, errMsg), salon-etat.js (indicateurConnexion).
  * Exporte : creerSalon, erreurTexte.
  */
 import { sb, errMsg } from './core.js';
+import { indicateurConnexion } from './salon-etat.js';
+
+const CONNEXION_PERDUE = 'Connexion perdue. Réessaie dans un instant.';
+const DELAI_CANAL = 20000;     // canal non branché depuis ce temps : le client n'y arrive pas seul, on le retire (ms)
+const RECUL_CANAL = 5000;      // attente avant d'ouvrir un canal neuf, doublée à chaque échec (ms)
+const RECUL_MAX = 60000;       // plafond de cette attente (ms)
 
 /** Message d'erreur lisible (les fonctions du jeu renvoient déjà des phrases en français). */
 export function erreurTexte(e) {
   const m = e?.message || String(e || '');
   if (/permission denied|42501/i.test(m)) return 'Accès réservé.';
-  if (/Failed to fetch|NetworkError|network/i.test(m)) return 'Connexion perdue. Réessaie dans un instant.';
+  if (/Failed to fetch|NetworkError|network|Load failed/i.test(m)) return CONNEXION_PERDUE;   // Load failed : Safari
   return m || errMsg(e) || 'Erreur inconnue.';
 }
 
@@ -140,8 +149,12 @@ export function creerSalon({
     let abonne = false;           // canal temps réel branché (SUBSCRIBED)
     let derniereLecture = 0;      // instant (Date.now) de la dernière relecture lancée
     let attente = null;           // regroupe les signaux temps réel rapprochés en une seule relecture
+    let chute = null;             // instant depuis lequel le canal n'est pas branché (0 : fermé pour de bon)
+    let pasAvant = 0;             // pas de canal neuf avant cet instant
+    let recul = RECUL_CANAL;      // prochaine attente avant un canal neuf
+    const connexion = indicateurConnexion();
 
-    let suivante = null;          // relecture demandée pendant une autre : promesse résolue quand elle est faite
+    let suivante = null;         // relecture demandée pendant une autre : promesse résolue quand elle est faite
     const rafraichir = async () => {
       if (!actif) return;
       // Une lecture lancée avant la demande peut être périmée : on attend la relecture qui suit.
@@ -157,6 +170,7 @@ export function creerSalon({
         try {
           const e = await commun.etat(code);
           if (!actif) return;
+          connexion.lecture(true);
           const m = maintenant(e);
           if (m) decalage = new Date(m).getTime() - Date.now();
           const change = changement(dernier, e);
@@ -164,6 +178,7 @@ export function creerSalon({
           if (change) onEtat?.(e);
           abonner(e);
         } catch (err) {
+          connexion.lecture(erreurTexte(err) !== CONNEXION_PERDUE);   // le serveur a répondu, même par un refus : le réseau va bien
           onErreur?.(err);
         } finally {
           enCours = null;
@@ -180,9 +195,19 @@ export function creerSalon({
       attente = setTimeout(() => { attente = null; rafraichir(); }, 120);
     };
 
+    /** Retire le canal mort : une relecture en ouvrira un neuf une fois le recul passé. */
+    const retirerCanal = () => {
+      try { Promise.resolve(sb.removeChannel(canalTr)).catch(() => {}); } catch { /* sans effet */ }
+      canalTr = null;
+      pasAvant = Date.now() + recul;
+      recul = Math.min(recul * 2, RECUL_MAX);
+    };
+
     const abonner = (e) => {
       const id = e?.partie?.id;
-      if (!id || canalTr || invite) return;   // invité : pas de temps réel, la relecture suffit
+      if (!id || invite) return;   // invité : pas de temps réel, la relecture suffit
+      if (canalTr && !abonne && Date.now() - chute >= DELAI_CANAL) retirerCanal();
+      if (canalTr || Date.now() < pasAvant) return;
       try {
         let c = sb.channel(`${canal}:${id}`)
           .on('postgres_changes', { event: '*', schema: 'public', table: `${prefixe}_parties`, filter: `id=eq.${id}` }, signal);
@@ -191,12 +216,19 @@ export function creerSalon({
         }
         c = c.on('postgres_changes', { event: 'INSERT', schema: 'public', table: `${prefixe}_messages`, filter: `partie=eq.${id}` },
           (p) => onMessage?.(transformerMessage(p.new, dernier)));
-        canalTr = c.subscribe((statut) => {
+        const ce = c;
+        canalTr = ce;
+        chute = Date.now();
+        ce.subscribe((statut) => {
+          if (ce !== canalTr) return;   // canal retiré : son CLOSED ne dit rien du canal neuf
           const avant = abonne;
           abonne = statut === 'SUBSCRIBED';
+          if (abonne) { chute = null; recul = RECUL_CANAL; } else if (statut === 'CLOSED') chute = 0; else chute ??= Date.now();
+          connexion.canal(statut);
           if (abonne && !avant) rafraichir();   // rien manqué pendant le branchement
         });
       } catch (err) {
+        canalTr = null;
         console.warn(`${etiquette} temps réel indisponible`, err);
       }
     };
@@ -232,18 +264,26 @@ export function creerSalon({
     // Relecture de secours : rapide sans temps réel (invité, canal coupé), espacée quand le canal est branché.
     const relecture = setInterval(() => {
       if (!actif || document.hidden) return;
-      if (abonne && Date.now() - derniereLecture < (secours.abonne ?? 15000)) return;
+      if (abonne && !connexion.lectureRatee() && Date.now() - derniereLecture < (secours.abonne ?? 15000)) return;
       rafraichir();
     }, delai);
-    const visible = () => { if (!document.hidden) rafraichir(); };
+    const visible = () => { connexion.visibilite(); if (!document.hidden) rafraichir(); };
     document.addEventListener('visibilitychange', visible);
+    // Invité : la pastille suit seulement l'échec des relectures.
+    const enLigne = () => { if (!invite) connexion.reseau(true); };
+    const horsLigne = () => { if (!invite) connexion.reseau(false); };
+    window.addEventListener('online', enLigne);
+    window.addEventListener('offline', horsLigne);
 
     rafraichir();
     return {
       arreter() {
         actif = false;
+        connexion.arreter();
         clearInterval(minuteur); clearInterval(relecture); clearTimeout(attente); clearInterval(msgInvite);
         document.removeEventListener('visibilitychange', visible);
+        window.removeEventListener('online', enLigne);
+        window.removeEventListener('offline', horsLigne);
         if (canalTr) { try { sb.removeChannel(canalTr); } catch { /* sans effet */ } }
       },
       rafraichir,

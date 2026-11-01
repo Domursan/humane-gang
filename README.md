@@ -38,7 +38,7 @@ Un bot Discord prévient les membres (MP et annonces) : tirage, sorties, anniver
   - Les règles d'accès sont dans la base (RLS) : le navigateur n'a que la clé publique.
   - Les règles métier sensibles (tirage, ouverture de boosters, échanges, badges, Arène…) sont des fonctions SQL `hg_*`.
 - **Fonctions edge** (Deno, sur Supabase) : le bot Discord et les tâches programmées (`supabase/functions/`).
-- **Tâches programmées** (pg_cron) : badges, récompenses de présence du jeu de cartes et défis du gang (toutes les heures), anniversaires (8 h, heure suisse), rappels et tâches de fond toutes les 5 minutes.
+- **Tâches programmées** (pg_cron) : badges, récompenses de présence du jeu de cartes, défis du gang, expiration des offres d’échange et alertes du tableau (toutes les heures), anniversaires (8 h, heure suisse), rappels et tâches de fond toutes les 5 minutes.
 - **Application installable** : `manifest.webmanifest` et le service worker `sw.js` (cache hors ligne, notifications push).
 
 ---
@@ -108,7 +108,7 @@ L'accueil du panel est le **plateau** (`#plateau`) : une carte par lieu permis �
 | Lieu (adresse) | Sous-sections principales |
 | --- | --- |
 | **La Place du gang** (`#place`) | Membres (comptes, rôles, champs du profil, vie sociale), Relances, Entraide, Accès aux pages, Badges |
-| **La Poste** (`#poste`) | Assistance, Boîte à idées, Messagerie, Fil d'activité, Bot Discord, Commandes slash |
+| **La Poste** (`#poste`) | Assistance, Modèles de réponse, Boîte à idées, Messagerie, Fil d'activité, Bot Discord, Commandes slash |
 | **La Salle des ventes** (`#ventes`) | Enchères, Échanges entre membres |
 | **Le Camp IRL** (`#camp`) | Membres IRL, Sorties IRL, Souvenirs et photos, Secret Santa |
 | **La Fabrique de cartes** (`#fabrique`) | Gestion globale, Arène (`#fabrique/arene`), Catalogue, Joueurs, Statistiques, Économie, Quêtes, Défis, Drops, Atelier |

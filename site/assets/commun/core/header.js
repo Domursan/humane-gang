@@ -200,6 +200,23 @@ function movePill(header, el = navCourant(header)) {
   el.classList.add('is-pill');
 }
 
+/**
+ * Replace la pastille quand la barre bouge sans événement de souris : barre Staff qui arrive à gauche et décale la page,
+ * compteur « à faire » qui élargit une entrée, police chargée après coup. Sans cela, la pastille posée avant reste de travers :
+ * elle déborde sur « IRL » et le texte de l'entrée sort de la pastille. À rappeler quand la barre est redessinée.
+ * @param {HTMLElement} header En-tête.
+ */
+function suivrePastille(header) {
+  if (typeof ResizeObserver !== 'function') return;
+  header._pastilleObs?.disconnect();
+  const nav = header.querySelector('.nav');
+  if (!nav) return;
+  const ro = new ResizeObserver(() => movePill(header, header.querySelector('.nav-top.is-pill') || undefined));
+  header._pastilleObs = ro;
+  ro.observe(nav);
+  nav.querySelectorAll('.nav-top').forEach((t) => ro.observe(t));
+}
+
 /* ---------- Menus déroulants ---------- */
 
 /** Ferme tous les menus déroulants (et sous-menus) de l'en-tête, sauf `keep`. */
@@ -443,6 +460,7 @@ export function updateNav(profile = getCachedProfile()) {
   if (!nav) return;
   nav.innerHTML = navHtml(profile);
   requestAnimationFrame(() => movePill(header));
+  suivrePastille(header);
   const toggle = header.querySelector('.nav-toggle');
   if (toggle) {
     toggle.hidden = !nav.querySelector('.nav-top');
@@ -537,6 +555,7 @@ export function renderHeader(profile, { nav = true } = {}) {
   bindWindow();
   header.querySelector('.nav-search-pill')?.addEventListener('click', ouvreRecherche);
   requestAnimationFrame(() => movePill(header));
+  suivrePastille(header);
   // Échap : ferme le menu en arc, sinon le menu replié, et rend le focus au bouton qui les a ouverts
   header.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;

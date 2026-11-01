@@ -225,14 +225,14 @@ const pressed = (p, sel) => p.getAttribute(sel, 'aria-pressed');
   check(await pressed(p, `${GRILLE} button[data-id="${premiere}"]`) === 'true', 'la carte choisie reste sélectionnée après le lot');
   check(await p.evaluate(() => document.getElementById('trd-grid-want').scrollTop) === defilAvant, 'défilement de la grille inchangé par le lot');
 
-  // Recherche sans accents sur la colonne longue : « CHATEAU » trouve « Château Marius » (34 exemplaires, pas de lots)
-  // La carte choisie reste dessinée même si elle ne correspond pas : elle compte alors en plus des 34 « Château Marius »
+  // Recherche sans accents sur la colonne longue : « CAFE » trouve « Café du Marché » (34 exemplaires, pas de lots)
+  // La carte choisie reste dessinée même si elle ne correspond pas : elle compte alors en plus des 34 « Café du Marché »
   const nomChoisie = await p.evaluate((id) => document.querySelector(`#trd-grid-want button[data-id="${id}"]`)?.textContent || '', premiere);
-  const choisieCorrespond = nomChoisie.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().includes('chateau');
+  const choisieCorrespond = nomChoisie.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().includes('cafe');
   const attendu = 34 + (choisieCorrespond ? 0 : 1);
-  await p.fill('#trd-q-want', 'CHATEAU');
+  await p.fill('#trd-q-want', 'CAFE');
   await sleep(120);
-  check(await txt(p, '#trd-fres-want') === `${attendu} sur 408 affichées`, `recherche « CHATEAU » sans accent : ${attendu} résultats (34 « Château Marius »)`);
+  check(await txt(p, '#trd-fres-want') === `${attendu} sur 408 affichées`, `recherche « CAFE » sans accent : ${attendu} résultats (34 « Café du Marché »)`);
   check(await pressed(p, `${GRILLE} button[data-id="${premiere}"]`) === 'true', 'filtre : la carte choisie reste dans la liste et sélectionnée');
   check(await p.$$eval(`${GRILLE} button[data-side][data-id]`, (x) => x.length) <= 35, 'filtre : seuls les exemplaires correspondants (et la sélection) sont dessinés');
   await p.fill('#trd-q-want', '');

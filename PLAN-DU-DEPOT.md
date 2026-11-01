@@ -1,8 +1,8 @@
 # Plan du dépôt — Humane Gang
 
 Où est quoi dans le dépôt, à quoi sert chaque dossier, et où ranger un nouveau fichier.
-Version : <!-- plan:derniere -->état du dépôt au 1er novembre 2026 (dernière migration : 192)<!-- /plan:derniere -->.
-Migrations numérotées de <!-- plan:plage -->001 à 192<!-- /plan:plage --> (quelques numéros manquent ou sont en double : voir `supabase/migrations/README.md`).
+Version : <!-- plan:derniere -->état du dépôt au 1er novembre 2026 (dernière migration : 195)<!-- /plan:derniere -->.
+Migrations numérotées de <!-- plan:plage -->001 à 195<!-- /plan:plage --> (quelques numéros manquent ou sont en double : voir `supabase/migrations/README.md`).
 
 Pour les pages du site (adresses, rôles, accès), voir [PLAN-DU-SITE.md](PLAN-DU-SITE.md). Le README décrit le fonctionnement du site ; ce document décrit seulement l'arborescence.
 
@@ -29,7 +29,7 @@ human-gang/
 │   ├── pages/             Une page = un fichier HTML, rangé par catégorie
 │   │   ├── admin/        admin.html (panel d'administration)
 │   │   ├── cartes/       cartes.html (jeu de cartes), collection-a4.html (planche imprimable)
-│   │   ├── compte/       compte, membre, accueil, messages
+│   │   ├── compte/       compte, membre, accueil, messages, notifications
 │   │   ├── infos/        aide, assistance, legal, rejoindre
 │   │   ├── irl/          irl, calendrier, cine, citations, evenements, historique, playlist, recap, secret-santa
 │   │   └── jeux/         jeux (page des onglets), quiz, duels, uno, loup-garou, nom-de-code,
@@ -107,7 +107,7 @@ Un espace = un dossier = une fonctionnalité du site. Chaque espace a sa page (o
 | `admin/` | Panel d'administration : coquille, navigation, une section par fichier | `admin.js`, `shell.js`, `router.js`, `state.js`, `perms.js`, `admin-*.js` et `admin-*.css` ; sous-dossiers `cartes/`, `comptes/`, `reglages/`, `sorties/`, `souvenirs/`, `ui/` (composants partagés : liste, tiroir, fil, dates) |
 | `arcade/` | Mini-jeux de la page 404 et de l'Arcade (Paillettes, Raclette, Domu-mobile, Snake, Tetris…), easter eggs | `jeu404.js`, `jeu-paillettes.js`, `jeu-raclette.js`, `jeu-domu.js`, `core.js`, `api.js`, `eggs.css` |
 | `cartes/` | Jeu de cartes à collectionner : ouverture, boutiques, inventaire, échanges, classement, Arène, drops, collection imprimable | `cartes.js`, `cartes.css`, `cartes-*.js`, `booster-*.js`, `card-drops.js`, `collection-a4.js` |
-| `compte/` | Mon compte, carte de membre, amitié, profil gaming, badges, préférences de notification | `compte.js`, `membre.js`, `social.js`, `friendship.js`, `profil-gaming.js`, `notif-prefs.js`, `badge-levels.js` |
+| `compte/` | Mon compte, carte de membre, amitié, profil gaming, badges, préférences de notification | `compte.js`, `membre.js`, `social.js`, `friendship.js`, `profil-gaming.js`, `notif-prefs.js`, `notifications.js`, `badge-levels.js` |
 | `duels/` | Duels à deux : bataille, dames, échecs, morpion, Puissance 4, Othello, Mastermind, pierre-feuille-ciseaux, Qui est-ce ? | `duels.js`, `api.js`, `vues/` (un écran par fichier), un `.css` par jeu |
 | `infos/` | Aide et tutos, assistance, mentions légales, page d'invitation | `aide.js`, `assistance.js`, `legal.js`, `rejoindre.js`, `support-files.js`, `tutos/` |
 | `irl/` | Sorties IRL, calendrier et export ICS, ciné-club, citations, événements, historique, playlist, récap, Secret Santa | `irl.js`, `calendrier.js`, `ics.js`, `cine.js`, `citations.js`, `evenements.js`, `historique.js`, `playlist.js`, `recap.js`, `secret-santa.js`, `ss-*.js` |

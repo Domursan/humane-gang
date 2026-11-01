@@ -36,7 +36,7 @@ export const REASON_LABEL = {
 // Valeurs de repli = valeurs actuelles en base (hg_settings.cards, lues le 22/10/2026 ; migration 053 les reprend côté SQL).
 // Utilisées seulement si hg_settings.cards est vide, et pour « Rétablir les valeurs par défaut ».
 export const CFG_DEFAULT = {
-  starting_paillettes: 1000, booster_price: 100, booster_size: 5, free_booster_hours: 24, shiny_rate: 3, pity_epique: 20, max_open_trades: 50,
+  starting_paillettes: 1000, booster_price: 100, booster_size: 5, free_booster_hours: 24, shiny_rate: 3, pity_epique: 20, max_open_trades: 50, trade_expiry_days: 7,
   rates: { commune: 60, peu_commune: 25, rare: 10, epique: 4, legendaire: 0.88, mythique: 0.1, identite: 0.02 },
   recycle: { commune: 5, peu_commune: 10, rare: 25, epique: 60, legendaire: 150, mythique: 400, identite: 1000, shiny_multiplier: 3 },
   craft: { commune: 100, peu_commune: 150, rare: 200, epique: 750, legendaire: 2000, shiny_multiplier: 6 },
@@ -108,7 +108,10 @@ export const ECON = [
   { g: 'Générations des membres', hint: 'Arrivés avant cette date (date d’arrivée, sinon création du compte) : « OG » ; après : « 2e gen ». Habillage seulement, même rareté.', fields: [
     { k: 'generations.og_before', l: 'OG si arrivé avant le', date: true, optional: true, help: 'Vide = 1er septembre 2023.' },
   ] },
-  { g: 'Échanges', fields: [{ k: 'max_open_trades', l: 'Offres en cours maximum par personne', int: true, min: 1, help: 'Nombre d\'offres d\'échange qu\'un membre peut avoir ouvertes en même temps.' }] },
+  { g: 'Échanges', fields: [
+    { k: 'max_open_trades', l: 'Offres en cours maximum par personne', int: true, min: 1, help: 'Nombre d\'offres d\'échange qu\'un membre peut avoir ouvertes en même temps.' },
+    { k: 'trade_expiry_days', l: 'Délai d’expiration des offres', u: 'jours', int: true, min: 1, max: 60, help: 'Une offre sans réponse se ferme après ce délai. Un préavis part 24 h avant.' },
+  ] },
   // Plafonds de Paillettes (cards.plafonds) : chaque groupe reprend un thème du site. Vide = valeur par défaut (affichée en gris).
   { g: 'Jeux quotidiens', hint: 'Paillettes données une fois par jour et par jeu, dans la limite de ce plafond. Vide = valeur par défaut.', fields: [
     PLAF('framed_gain', 'Framed : partie gagnée', paillSym(), 200), PLAF('framed_consolation', 'Framed : partie perdue', paillSym(), 200),

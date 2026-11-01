@@ -33,6 +33,7 @@ function notifSummaryHtml(n, p) {
     if (!discord) canaux.push('Discord');
     if (canaux.length) off.push(`${label} (${canaux.join(', ')})`);
   }
+  if (prefs['carte_proposee.site'] === false) off.push('Carte de sa liste proposée (site)');
   const quiet = n?.quiet_start != null ? ` · heures calmes ${String(n.quiet_start).padStart(2, '0')}:00 – ${String(n.quiet_end).padStart(2, '0')}:00` : '';
   const txt = !p.bot_optin ? 'Le bot ne peut pas lui écrire (tous les MP coupés).' : off.length ? `Catégories coupées : ${off.join(' · ')}.` : 'Aucune catégorie coupée.';
   return `<div class="acc-notif" role="note"><p class="label">Notifications (lecture seule)</p><p class="small">${esc(txt + quiet)}</p></div>`;

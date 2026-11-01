@@ -103,7 +103,6 @@
 .bday:last-child { border-bottom: 0; }
 .bday-name { flex: 1; min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
 .bday-date { color: var(--muted); font-size: 14px; white-space: nowrap; }
-.bday.is-past { opacity: .55; }
 .bdays .empty, .feed .empty { font-size: 14px; }
 
 /* ---------- Boîte à idées ---------- */

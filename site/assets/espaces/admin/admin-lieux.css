@@ -182,3 +182,8 @@ html[data-mode="clair"] .lieu-tile:hover { background: var(--surface-2); }
 }
 html[data-fx="off"] :is(.plateau-cell, .plateau-act, .lieu-tile) { transition: none; }
 html[data-fx="off"] :is(.plateau-cell, .plateau-act, .lieu-tile):is(:hover, :active) { transform: none !important; }
+
+/* Tuiles d'une page de lieu : lignes de même nombre à une tuile près, étirées sur la largeur (lieux.js, equilibrerTuiles).
+   --k = nombre de tuiles de la ligne ; la base retire 0,5 px pour qu'un arrondi ne fasse jamais passer la dernière à la ligne. */
+.lieu-tiles--eq { display: flex; flex-wrap: wrap; }
+.lieu-tiles--eq > .lieu-tile { box-sizing: border-box; min-width: 0; flex: 1 1 calc((100% - (var(--k, 1) - 1) * 12px) / var(--k, 1) - .5px); }

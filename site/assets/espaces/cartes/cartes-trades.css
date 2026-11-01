@@ -24,6 +24,10 @@
 .trd-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .trd-who h2, .trd-who h3, .trd-offer-head h3 { margin: 0; font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
 .trd-date { margin: 2px 0 0; font-size: 14px; color: var(--muted); }
+/* Échéance d'une offre : phrase sous la date, pastille de préavis à côté de « En attente » */
+.trd-exp { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.trd-offer .pill-exp { border: 2px solid #000; background: #FCA301; color: #000; font-weight: 700; box-shadow: 2px 2px 0 #000; }
+.trd-offer-etat { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 .trd-sides { display: grid; gap: 16px; }
 .trd-side { min-width: 0; }
 .trd-side-title { margin: 0 0 8px; font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }

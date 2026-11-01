@@ -27,6 +27,7 @@ const taches = [
   { jobname: 'hg-cron-5min', schedule: '*/5 * * * *', active: true, status: 'running', start_time: new Date().toISOString(), end_time: null, executions: 864, erreurs: 0 },
   { jobname: 'hg-birthdays-daily', schedule: '5 6,7 * * *', active: true, status: 'succeeded', start_time: new Date(Date.now() - 3 * 36e5).toISOString(), end_time: new Date(Date.now() - 3 * 36e5 + 30).toISOString(), executions: 6, erreurs: 0 },
   { jobname: 'hg-housekeeping', schedule: '37 3 * * *', active: true, status: null, start_time: null, end_time: null, executions: 0, erreurs: 0 },
+  { jobname: 'hg-echanges-hourly', schedule: '13 * * * *', active: true, status: 'succeeded', start_time: new Date(Date.now() - 2 * 36e5).toISOString(), end_time: new Date(Date.now() - 2 * 36e5 + 30).toISOString(), executions: 24, erreurs: 0 },
   { jobname: 'hg-<img src=x onerror=window.__xss=1>', schedule: '<b>x</b>', active: true, status: 'succeeded', start_time: new Date().toISOString(), end_time: new Date().toISOString(), executions: 1, erreurs: 0 },
 ];
 
@@ -53,10 +54,11 @@ const taches = [
     check(lignes[0] === 'hg-cards-hourly' && lignes[1] === 'hg-lg-tick', '(a) tri : échec, tâche coupée, puis le reste');
     check(/Chaque jour, 8 h 05 en Suisse/.test(page) && /Chaque nuit, 3 h 37 UTC/.test(page) && /Toutes les 5 min/.test(page) && /Chaque heure, à hh:23/.test(page), '(a) planning en français');
     check(/Pour les deux tâches marquées « puis fonction edge »/.test(page), '(a) limite du tableau : nombre réel de tâches marquées');
+    check(/Échanges : expirations et alertes/.test(page), '(a) tâche des échanges : libellé en clair');
     await p.click('[data-ent-filtre="surveiller"]');
     check(await p.locator('.crn-tbl tbody tr').count() === 3, '(a) filtre « À surveiller » : échec, coupée, jamais lancée');
     await p.click('[data-ent-filtre="ok"]');
-    check(await p.locator('.crn-tbl tbody tr').count() === 2, '(a) filtre « Réussies »');
+    check(await p.locator('.crn-tbl tbody tr').count() === 3, '(a) filtre « Réussies »');
     await p.click('[data-ent-filtre="toutes"]');
     check(!(await p.evaluate(() => window.__xss)) && await p.locator('.crn-tbl img, .crn-tbl td b').count() === 0, '(f) nom et planning de tâche échappés');
     check(p.errs.length === 0, '(a) aucune erreur JS' + (p.errs.length ? ' (' + p.errs.slice(0, 3).join(' | ') + ')' : ''));
@@ -136,6 +138,7 @@ const taches = [
     check(await p.$eval('dialog.pg-dialog', (d) => d.open && d.matches(':modal')), '(d) fenêtre modale');
     const fen = await textes(p, 'dialog.pg-dialog');
     check(fen.includes(`31${NBSP}363`) && /plus de 3 jours/.test(fen) && /plus de 30 jours/.test(fen) && /Jamais purgé : le Loup-Garou/.test(fen) && /Plafond : 50.000 lignes par table et par passage\./.test(fen), '(d) aperçu détaillé');
+    check(/Notifications du site\s*plus de 90 jours/.test(fen), '(d) aperçu : ligne des notifications du site, 90 jours');
     check((await textes(p, 'dialog.pg-dialog button[value="ok"]')) === `Purger 31${NBSP}363 lignes`, '(d) bouton chiffré');
     await p.keyboard.press('Escape');
     await sleep(200);

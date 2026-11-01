@@ -75,6 +75,11 @@ const DB = {
   // Assistance en fil (migration 032) : réponses publiques et notes internes. S.replies : données de départ facultatives.
   // Les demandes portent updated_at / taken_by / taken_at / read_at quand le scénario les fournit (absents = demande neuve, non lue).
   hg_support_replies: S.replies || [],
+  // Modèles de réponse (migration 194) : S.modelesReponse, sinon les deux premiers modèles de départ.
+  hg_modeles_reponse: S.modelesReponse || [
+    { id: 1, titre: 'Mot de passe oublié', categorie: 'Connexion', texte: 'Salut {prenom}, tu peux choisir un nouveau mot de passe depuis la page de connexion.' },
+    { id: 2, titre: 'Bug bien reçu', categorie: 'Bug', texte: 'Merci {prenom}, on a bien reçu ton signalement.' },
+  ],
   // Journal admin (Pilotage > Journal) : entrées d'exemple ; scénario S.adminLog / S.accessLog pour en fournir d'autres.
   hg_admin_log: S.adminLog || [
     { id: 1, admin_id: ME, action: 'carte_donnee', target_user: U(2), target_ref: 'Série Printemps #12', details: { carte: 'Renard', quantite: 1 }, created_at: iso(-30) },
@@ -272,6 +277,7 @@ class Q {
         if (this.t === 'hg_invite_links') Object.assign(r, { id: 'L' + (++seq + 10), token: 'new' + String(seq).padStart(21, '0'), active: true, codes_generated: 0, created_at: new Date().toISOString() });
         if (r.id === undefined && ['hg_moments', 'hg_photos', 'hg_events', 'hg_support_replies'].includes(this.t)) r.id = uid(); // comme la base (gen_random_uuid)
         if (this.t === 'hg_support_replies' && r.created_at === undefined) r.created_at = new Date().toISOString();
+        if (this.t === 'hg_modeles_reponse' && r.id === undefined) r.id = Math.max(0, ...tab.map((x) => x.id)) + 1; // identité en base
         if (this.t === 'hg_moments' && r.created_at === undefined) r.created_at = new Date().toISOString();
         tab.unshift(r);
       }

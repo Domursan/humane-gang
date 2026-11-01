@@ -2908,6 +2908,9 @@ function cleanHash() {
   if (PEER_RE.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
 }
 
+/** Onglet demandé par l'adresse : #echanges/tableau (lien des alertes de la liste de souhaits) ouvre les Échanges, puis leur Tableau. */
+const ongletAdresse = () => (location.hash === '#echanges/tableau' ? 'echanges' : location.hash.slice(1));
+
 /** Suit l'adresse : #collection/<id> ouvre la collection du membre, #<onglet> ouvre cet onglet, sinon la vue revient aux onglets. */
 function routeFromHash() {
   // QR d'un code cadeau (idée C9) : /pages/cartes/cartes.html#code=HG-XXXX-XXXX ouvre la fenêtre déjà remplie, puis l'adresse est nettoyée.
@@ -2921,10 +2924,11 @@ function routeFromHash() {
   const m = PEER_RE.exec(location.hash);
   if (m) { openPeer(m[1].toLowerCase()); return; }
   // Lien direct vers un onglet (/pages/cartes/cartes.html#boutique, #collection…) : on quitte la collection d'un membre s'il y en a une, puis l'onglet s'affiche
-  const onglet = location.hash.slice(1);
+  const onglet = ongletAdresse();
   if (TABS.some(([id]) => id === onglet)) {
     if (S.peer) leavePeer();
     if (S.tab !== onglet) setTab(onglet);
+    if (location.hash === '#echanges/tableau') S.tradeApi?.onglet('tableau');
     return;
   }
   leavePeer();
@@ -3481,7 +3485,7 @@ async function boot() {
     if (ask?.from?.isConnected) ask.from.focus({ preventScroll: true });
   });
   window.addEventListener('resize', () => fitAll(app));
-  const fromHash = location.hash.slice(1);
+  const fromHash = ongletAdresse();
   if (TABS.some(([id]) => id === fromHash)) { S.tab = fromHash; showTab(); } // lien direct vers un onglet : /pages/cartes/cartes.html#boutique
   try {
     await Promise.all([loadStatic(), loadGenerations(), loadTagLabels()]); // générations (C8) et libellés des jeux (C7) : jamais d'erreur

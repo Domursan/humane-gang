@@ -112,7 +112,7 @@ const scrollY = (p) => p.evaluate(() => Math.round(window.scrollY));
   await p.click('#cz-dialog .cz-nav[data-cz=next]');
   await sleep(100);
   check((await nomOuvert(p)).endsWith('2 / 13'), 'suivant : carte 2 / 13');
-  check((await p.textContent('#cz-info .cz-title')) === 'Le Paleto', 'suivant : nom de la carte suivante');
+  check((await p.textContent('#cz-info .cz-title')) === 'La Fontaine', 'suivant : nom de la carte suivante');
   await p.keyboard.press('ArrowRight');
   await sleep(80);
   check((await nomOuvert(p)).endsWith('3 / 13'), 'flèche droite : carte 3 / 13');

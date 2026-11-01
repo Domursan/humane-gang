@@ -10,7 +10,7 @@
 const { ROOT, check, finish, openPage, adminSection, hscroll, log, sleep, chromium } = require('../../lib/harness.cjs');
 
 const ME = '11111111-1111-4111-8111-111111111111';
-const CARD = 'C2'; // « Le Paleto », commune, brillante possible
+const CARD = 'C2'; // « La Fontaine », commune, brillante possible
 /** Date ISO décalée de ms millisecondes. */
 const iso = (ms) => new Date(Date.now() + ms).toISOString();
 /** Drop de test : une carte à attraper, valable une heure ; les champs de over remplacent les valeurs par défaut. */
@@ -41,8 +41,8 @@ const flyingBox = (p) => p.$eval('.cd-item.is-flying', (el) => { const r = el.ge
   // Quantité hors bornes : le formulaire refuse, aucun appel
   await p.click('[data-action="drop-new"]');
   await p.waitForSelector('dialog.ui-drawer[open] [data-vp-card="C2"]', { timeout: 5000 });
-  await p.fill('#drop-q', 'Paleto');
-  check(await p.locator('dialog.ui-drawer[open] [data-vp-card]').count() === 1, 'admin : recherche « Paleto » réduit les visuels à 1 carte');
+  await p.fill('#drop-q', 'Fontaine');
+  check(await p.locator('dialog.ui-drawer[open] [data-vp-card]').count() === 1, 'admin : recherche « Fontaine » réduit les visuels à 1 carte');
   await p.click('dialog.ui-drawer[open] [data-vp-card="C2"]');
   await p.fill('#drop-qty', '60');
   await p.click('dialog.ui-drawer[open] [data-drawer-submit]');
@@ -61,7 +61,7 @@ const flyingBox = (p) => p.$eval('.cd-item.is-flying', (el) => { const r = el.ge
   const annonces = await p.evaluate(() => (window.__LOG || []).filter((e) => e[0] === 'fn' && e[1] === 'hg-notify' && e[2]?.event === 'card_drop').map((e) => e[2]));
   check(annonces.length === 1 && /^d0000000-/.test(annonces[0]?.drop_id || ''), 'admin : annonce Discord demandée (hg-notify card_drop avec l\'identifiant du drop)');
   check((await p.textContent('#drop-list')).includes('En cours'), 'admin : le drop apparaît comme en cours');
-  check((await p.textContent('#drop-list')).includes('Le Paleto'), 'admin : nom de la carte dans la liste');
+  check((await p.textContent('#drop-list')).includes('La Fontaine'), 'admin : nom de la carte dans la liste');
   check((await p.textContent('#drop-list')).includes('0 / 3'), 'admin : 0 / 3 attrapés au lancement');
 
   // Arrêter : confirmation, puis RPC et statut Terminé
@@ -93,12 +93,12 @@ const flyingBox = (p) => p.$eval('.cd-item.is-flying', (el) => { const r = el.ge
   check(!!claimBtn, 'membre : la carte du drop vole sur la page');
   if (claimBtn) {
     const label = await claimBtn.getAttribute('aria-label');
-    check(label.includes('Le Paleto'), 'membre : la carte est nommée (bouton accessible)');
+    check(label.includes('La Fontaine'), 'membre : la carte est nommée (bouton accessible)');
     check((await p.textContent('.cd-hint')).includes('Dernier exemplaire'), 'membre : « Dernier exemplaire ! » affiché');
     await freeze(p);
     await p.click('.cd-item.is-flying [data-cd-claim]'); // clic réel pendant le trajet (animation figée)
     await p.waitForSelector('.cd-reveal', { timeout: 5000 }).catch(() => {});
-    check((await p.textContent('.cd-reveal-t')).includes('Tu as attrapé « Le Paleto » !'), 'membre : révélation de la carte gagnée');
+    check((await p.textContent('.cd-reveal-t')).includes('Tu as attrapé « La Fontaine » !'), 'membre : révélation de la carte gagnée');
     const claims = await rpcCalls(p, 'hg_drop_claim');
     check(claims.length === 1 && claims[0]?.p_drop === 'dr-1', 'membre : un seul appel hg_drop_claim pour le bon drop');
     check(await p.$('.cd-item [data-cd-claim]') === null, 'membre : plus de carte à attraper après le gain');

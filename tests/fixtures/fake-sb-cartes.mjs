@@ -67,7 +67,7 @@ const DB = {
   hg_pages: [['accueil','Accueil','membres',false],['secret-santa','Secret Santa','membres',true],['irl','IRL','membres',true],['historique','Historique','membres',true],['messages','Messages','membres',true],['evenements','Événements','membres',false],['membre',"Carte d'identité & annuaire",'membres',false],['recap','Récap annuel','membres',false],['cartes','Cartes à collectionner','admin',true]].map(([slug,label,mode,in_nav],sort)=>({slug,label,mode,in_nav,sort})),
   hg_page_access: S.access || [],
   hg_ideas: [], hg_support: [], hg_activity: [], hg_messages: [], hg_events: [], hg_event_rsvps: [], hg_photos: [], hg_profile_info: [],
-  hg_card_trades: S.trades || [], hg_card_trade_items: [], // S.trades : offres d'échange (pastille « Échanges », parcours-compteurs.cjs)
+  hg_card_trades: S.trades || [], hg_card_trade_items: S.tradeItems || [], // S.trades, S.tradeItems : offres d'échange (parcours-compteurs.cjs, parcours-echanges-expiration.cjs)
   // Drops de cartes (card-drops.js, admin-cards/drops.js) : scénario S.drops / S.dropClaims (dates ISO)
   // Drops de cartes : ce que la page reçoit (scénario S.drops et S.dropClaims).
   hg_card_drops: S.drops || [], hg_card_drop_claims: S.dropClaims || [],
@@ -95,7 +95,7 @@ window.__DB = DB; window.__LOG = [];
   // Familles des douze cartes de la première série (membre, moment, lieu, objet, évènement), même ordre que R.
   const F = ['membre','moment','lieu','objet','evenement','membre','lieu','objet','moment','membre','membre','objet'];
   // Cartes de la première série, construites à partir de R et F.
-  const cards = R.map((r, i) => ({ id: 'C' + (i + 1), set_id: 'SET1', number: i + 1, name: ['Ethan','Le Paleto','Château Marius','Pompe à essence','Soirée pizza','Alice','Grapeseed','Cocktail','Braquage raté','Bruno','Carte identité Chloé','Tracteur'][i], family: F[i], rarity: r,
+  const cards = R.map((r, i) => ({ id: 'C' + (i + 1), set_id: 'SET1', number: i + 1, name: ['Ethan','La Fontaine','Café du Marché','Pompe à essence','Soirée pizza','Alice','Grapeseed','Cocktail','Braquage raté','Bruno','Carte identité Chloé','Tracteur'][i], family: F[i], rarity: r,
     image_url: null, flavor: 'Un souvenir qui fait sourire le gang.', member_id: null, can_shiny: i !== 0, tradeable: true, craftable: r !== 'identite', max_copies: r === 'identite' ? 3 : null, active: true }));
   // Une carte de la série « Saison 2 » (identifiant C13).
   cards.push({ id: 'C13', set_id: 'SET2', number: 1, name: 'Saison deux', family: 'moment', rarity: 'rare', image_url: null, flavor: null, can_shiny: true, tradeable: true, craftable: true, max_copies: null, active: true });
@@ -692,7 +692,7 @@ if (S.c2) {
       output: DB.hg_cards.find((c) => c.id === 'J9'),
       inputs: [{ card: 'J3', qty: 1, name: 'La base du gang', rarity: 'rare' }, { tag: 'minecraft', qty: 2, label: 'Minecraft', cards: ['J1', 'J2', 'J3', 'J4'] }] },
     { id: 'R2', name: 'L’Empereur de Serge', description: null, output_shiny: false, paillettes: 0, starts_at: null, ends_at: iso(30), max_total: 5, once_per_user: true, used_total: 1, done: false,
-      output: DB.hg_cards.find((c) => c.id === 'C9'), inputs: [{ card: 'C10', qty: 1, name: 'Bruno', rarity: 'mythique' }, { card: 'C2', qty: 2, name: 'Le Paleto', rarity: 'commune' }] },
+      output: DB.hg_cards.find((c) => c.id === 'C9'), inputs: [{ card: 'C10', qty: 1, name: 'Bruno', rarity: 'mythique' }, { card: 'C2', qty: 2, name: 'La Fontaine', rarity: 'commune' }] },
   ];
   C2.auction = { id: 'A1', status: 'ouverte', starts_at: iso(-1), ends_at: new Date(Date.now() + 3 * 3600e3 + 12 * 60e3).toISOString(), hard_end_at: iso(1), min_bid: 500, step: 50,
     card: { id: 'CU1', name: 'Le gobelet du RDV n° 1', rarity: 'unique', family: 'unique', image_url: null, flavor: 'Le tout premier, fait par Carzy.', number: 7, max_copies: 1 },
@@ -1010,7 +1010,7 @@ export function createClient() {
       if (fn === 'hg_card_leaderboard') return { data: [{ user_id: ME, pseudo: 'Ethan', avatar_url: null, uniques: 5, copies: 11, shinies: 3, identites: 1, series: 0, score: 120 }, { user_id: U(2), pseudo: 'Alice', avatar_url: null, uniques: 3, copies: 4, shinies: 0, identites: 0, series: 1, score: 40 }], error: null };
       // Offre d'échange (cartes-trades.js) : l'offre est créée et son id renvoyé, comme la RPC réelle (uuid).
       if (fn === 'hg_trade_propose') { if (S.tradeFail) return { data: null, error: { message: 'Trop d\'offres en cours' } }; const id = '7e57c0de-0000-4000-8000-000000000001';
-        DB.hg_card_trades.unshift({ id, from_user: ME, to_user: args.p_to, status: 'proposee', from_paillettes: args.p_give_p, to_paillettes: args.p_want_p, message: args.p_message, parent_id: args.p_parent, created_at: new Date().toISOString(), resolved_at: null });
+        DB.hg_card_trades.unshift({ id, from_user: ME, to_user: args.p_to, status: 'proposee', from_paillettes: args.p_give_p, to_paillettes: args.p_want_p, message: args.p_message, parent_id: args.p_parent, expire_le: iso(7), created_at: new Date().toISOString(), resolved_at: null });
         return { data: id, error: null }; }
       // Drops (migration 043) : même logique que la base (fenêtre de temps, un gain par membre, plafond d'exemplaires).
       // Drops actifs que le membre n'a pas encore attrapés, avec le nombre d'exemplaires restants.

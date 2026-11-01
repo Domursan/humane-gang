@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css; font-src 'self' data:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://zqbdzokyhgavgmqgiwuw.supabase.co wss://zqbdzokyhgavgmqgiwuw.supabase.co https://nominatim.openstreetmap.org; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <script src="/assets/commun/theme-boot.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notifications · Humane Gang</title>
+  <link rel="canonical" href="https://humane-gang.com/pages/compte/notifications.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Humane Gang">
+  <meta property="og:locale" content="fr_FR">
+  <meta property="og:title" content="Notifications · Humane Gang">
+  <meta property="og:description" content="Historique de tes notifications du Humane Gang : filtres, recherche et suppression.">
+  <meta property="og:url" content="https://humane-gang.com/pages/compte/notifications.html">
+  <meta property="og:image" content="https://humane-gang.com/assets/images/marque/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Logo du Humane Gang">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Notifications · Humane Gang">
+  <meta name="twitter:description" content="Historique de tes notifications du Humane Gang : filtres, recherche et suppression.">
+  <meta name="twitter:image" content="https://humane-gang.com/assets/images/marque/og-image.png">
+  <meta name="robots" content="noindex">
+  <meta name="description" content="Historique de tes notifications du Humane Gang : filtres, recherche et suppression.">
+  <link rel="icon" type="image/png" href="/assets/images/marque/favicon-64.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/assets/images/marque/apple-touch-icon.png">
+  <meta name="theme-color" content="#0b0a10">
+  <link rel="preconnect" href="https://zqbdzokyhgavgmqgiwuw.supabase.co">
+  <link rel="modulepreload" href="/assets/vendor/supabase-js-2.45.4.mjs">
+  <link rel="stylesheet" href="/assets/commun/base.css">
+  <link rel="stylesheet" href="/assets/commun/themes-decor.css">
+  <link rel="stylesheet" href="/assets/commun/notifs.css" data-css="notifs">
+</head>
+<body>
+  <main class="container" id="app">
+    <div class="ntf">
+      <header class="ntf-tete">
+        <p class="eyebrow">Mon compte</p>
+        <h1 class="page-title" id="ntf-titre" tabindex="-1">Notifications</h1>
+      </header>
+      <div class="ntf-outils" id="ntf-outils">
+        <div class="ntf-ligne1">
+          <div class="field ntf-recherche">
+            <label class="visually-hidden" for="ntf-q">Rechercher dans mes notifications</label>
+            <input id="ntf-q" type="search" placeholder="Rechercher un titre ou un texte…" autocomplete="off" maxlength="100">
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="ntf-lire" hidden>Tout marquer comme lu</button>
+        </div>
+        <div class="ntf-filtres" id="ntf-filtres" role="group" aria-label="Filtrer par catégorie">
+          <button type="button" class="ntf-filtre" aria-pressed="true">Toutes</button>
+        </div>
+      </div>
+      <div class="ntf-corps" id="ntf-corps">
+        <!-- Squelette à la hauteur de la liste : pas de saut quand elle arrive -->
+        <div class="ntf-groupe" aria-busy="true">
+          <p class="visually-hidden">Chargement de tes notifications…</p>
+          <ul class="notif-liste">
+            <li><span class="ntf-sk"></span></li>
+            <li><span class="ntf-sk"></span></li>
+            <li><span class="ntf-sk"></span></li>
+            <li><span class="ntf-sk"></span></li>
+            <li><span class="ntf-sk"></span></li>
+          </ul>
+        </div>
+      </div>
+      <p class="visually-hidden" id="ntf-statut" role="status"></p>
+      <footer class="ntf-pied">
+        <p class="small muted">Tes notifications sont gardées 90 jours, puis supprimées automatiquement.</p>
+        <button type="button" class="btn btn-ghost btn-sm" id="ntf-suppr-lues" hidden>Supprimer les notifications lues</button>
+      </footer>
+    </div>
+  </main>
+  <script type="module" src="/assets/commun/site-boot.js"></script>
+  <script type="module" src="/assets/espaces/compte/notifications.js"></script>
+</body>
+</html>

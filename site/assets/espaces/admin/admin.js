@@ -52,6 +52,7 @@ import { initQuick } from './quick.js';
 const OPTIONAL = [
   { sub: 'secrets', url: './admin-eggs.js', fn: 'mountEggsSection' },   // Autres jeux › Secrets (hg_settings.eggs)
   { sub: 'arcade', url: './admin-arcade.js', fn: 'mountArcadeSection' }, // Autres jeux › Arcade (pages 404, hg_arcade_admin_board)
+  { sub: 'modeles-reponse', url: './admin-modeles-reponse.js', fn: 'mountModelesReponseSection' }, // La Poste › Modèles de réponse (migration 194)
   { sub: 'fil', url: './admin-fil.js', fn: 'mountFilSection' },         // Pilotage › Assistance › Fil d'activité (hg_activity)
   { sub: 'champs', url: './admin-champs.js', fn: 'mountChampsSection' }, // Membres › Comptes › Champs du profil (profile_fields)
   { sub: 'geoguessr', url: './admin-jeux.js', fn: 'mountGeoSection' },         // Autres jeux › GeoGuessr (migration 083)
@@ -267,6 +268,7 @@ if (MOUNT.bataille) regSub('arene', { main: () => MOUNT.bataille($('#bataille-ro
 if (MOUNT.gestion) regSub('gestion', { main: () => MOUNT.gestion($('#gestion-root')) }); // Gestion globale (Give, résumé, derniers gives)
 // Pilotage › Assistance (demandes, idées, messagerie, fil)
 regSub('assistance', supportSub); // liste en colonne 2, détail et fiche rapide
+if (MOUNT['modeles-reponse']) regSub('modeles-reponse', { main: () => MOUNT['modeles-reponse']($('#modeles-reponse-root')) });
 regSub('idees', ideasSub);
 regSub('messagerie', {
   main: (el) => { el.dataset.fill = ''; mountMessagesSection($('#messages-root')); },

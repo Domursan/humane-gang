@@ -7,6 +7,7 @@
  * Tables / RPC : hg_notif_prefs (lecture de sa ligne), hg_set_notif_prefs (écriture, migration 095), hg_profiles (bot_optin).
  * Réglages par défaut = comportement d'avant : clé absente = autorisé ; « Sorties IRL » sur Discord reprend remind_irl
  * (rappels de sortie) et « Cartes · souhaits » sur Discord reprend notify_card_wish ; la RPC tient ces colonnes à jour.
+ * « Carte de ma liste proposée » (migration 193) ne part que sur le site : sa ligne a un seul interrupteur, sous « Cartes · souhaits ».
  * Exporte : NOTIF_ROWS, mountNotifPrefs.
  */
 import { sb, toast, errMsg, esc } from '../../commun/core.js';
@@ -57,10 +58,13 @@ function blockHtml(me, row) {
   const quietOn = row.quiet_start != null;
   const [qs, qe] = quietOn ? [row.quiet_start, row.quiet_end] : QUIET_DEFAULT;
   const sw = (key, label) => `<input class="pref-switch np-sw" type="checkbox" role="switch" data-key="${key}" aria-label="${esc(label)}"${current(prefs, me, key) ? ' checked' : ''}>`;
+  const ligneCarteProposee = `<div class="np-row" role="row">
+      <div class="np-cat" role="rowheader"><b>Cartes · carte de ma liste proposée</b><span>Un membre la met en échange. 3 alertes par jour au plus.</span></div>
+      <div class="np-cell np-site" role="cell"><span class="np-soon">Sur le site</span>${sw('carte_proposee.site', 'Carte de ma liste proposée : sur le site')}</div></div>`;
   const rows = NOTIF_ROWS.filter(([, , , , page]) => !page || (pageLabel(page) && canAccess(page))).map(([k, t, d, push]) => `<div class="np-row" role="row">
       <div class="np-cat" role="rowheader"><b>${esc(t)}</b><span>${esc(d)}</span></div>
       <div class="np-cell" role="cell">${push ? sw(`${k}.push`, `${t} : sur ce téléphone`) : '<span class="np-soon">Bientôt</span>'}</div>
-      <div class="np-cell np-discord" role="cell">${sw(`${k}.discord`, `${t} : sur Discord`)}</div></div>`).join('');
+      <div class="np-cell np-discord" role="cell">${sw(`${k}.discord`, `${t} : sur Discord`)}</div></div>${k === 'souhaits' ? ligneCarteProposee : ''}`).join('');
   return `<form class="card stack np-card" id="np-form" novalidate aria-labelledby="np-title">
       <h2 class="card-title" id="np-title">Mes notifications</h2>
       <label class="np-master switch-row">

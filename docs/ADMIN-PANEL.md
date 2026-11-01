@@ -20,7 +20,7 @@ de 12 colonnes. Chaque lieu a une couleur, une icône, une phrase d'accroche et 
 | Lieu (adresse) | Contenu |
 | --- | --- |
 | **La Place du gang** (`#place`) | Membres (Comptes, Rôles, Champs du profil, Vie sociale, Accueil des membres), Relances (À relancer, Invitations), Entraide (Parrainage, Compétences), Accès (Accès aux pages, Matrice membres × pages), Badges (Catalogue, Attribution, Critères automatiques) |
-| **La Poste** (`#poste`) | Demandes (Assistance, Boîte à idées), Échanges (Messagerie, Fil d'activité), Discord (Bot Discord, Commandes slash) |
+| **La Poste** (`#poste`) | Demandes (Assistance, Modèles de réponse, Boîte à idées), Échanges (Messagerie, Fil d'activité), Discord (Bot Discord, Commandes slash) |
 | **La Salle des ventes** (`#ventes`) | Enchères, Échanges entre membres |
 | **Le Camp IRL** (`#camp`) | Qui (Membres IRL), Vivre les sorties (Sorties IRL, Souvenirs et photos), Rendez-vous (Secret Santa) |
 | **La Fabrique de cartes** (`#fabrique`) | Agir (Gestion globale, Drops, Codes cadeaux), Arène, Catalogue (Séries, Cartes, Boosters), Suivi (Joueurs, Statistiques), Économie (Paillettes et dons, Tirage, Recyclage et fabrication, Limites), Animations (Quêtes, Défis du gang, Cagnotte et bulletin, Cartes Champions, Atelier) |
@@ -28,11 +28,14 @@ de 12 colonnes. Chaque lieu a une couleur, une icône, une phrase d'accroche et 
 | **La Mairie** (`#mairie`) | Organisation (Planning, Journal, Staff), Le site (Identité et mentions légales, Textes et intro, Menu et pied de page, Thème), Technique (État du site, Erreurs du site, Entretien, Archives, Clés avancées) |
 
 - **Pages de lieu** (`#<lieu>`) : un bandeau à la couleur du lieu, une zone « À faire maintenant » (registre `registerTodo`,
-  `admin/lieux.js`), puis les pages du lieu en tuiles groupées (icône, libellé, ligne d'aide, compteur « à traiter »).
+  `admin/lieux.js`), puis les pages du lieu en tuiles groupées (icône, libellé, ligne d'aide, compteur « à traiter »). Les tuiles d'un groupe se répartissent en lignes de même nombre à une tuile près,
+  étirées sur la largeur (6 colonnes au plus, tuile de 250 px au moins, gouttière de 12 px ; recalculé au redimensionnement).
 - **Pastilles** : chaque lieu affiche le nombre d'éléments « à traiter » ; un compteur à zéro est masqué.
 - **Disposition du plateau** (migration 111) : chaque personne peut déplacer et redimensionner les lieux
   (« Modifier la disposition », à partir de 900 px ; flèches au clavier). La disposition est enregistrée par
-  `hg_admin_plateau_set` ; `null` rétablit la disposition par défaut.
+  `hg_admin_plateau_set` ; `null` rétablit la disposition par défaut. Sans disposition enregistrée, les lieux absents selon
+  les droits ne laissent pas de trou : les cases restantes se resserrent (4 lieux en 2 + 2, 5 en 3 + 2, 6 en 3 + 3, la Mairie en
+  bande pleine en bas ; 7 lieux : inchangé) et la route suit. Une disposition enregistrée reste telle quelle.
 - **Téléphone** : une barre du bas (Plateau puis les lieux permis).
 
 ### Adresses, fil d'Ariane et palette
@@ -74,7 +77,7 @@ remplacé par `hg_has_perm('<clé>')` (migrations 026 et 027). `hg_is_staff()` s
 | `badges` | Place du gang › Badges | `hg_badges`, `hg_user_badges` |
 | `themes` | Fête foraine › Événements à thème, Avent, Worlds, Anniversaire du gang ; Mairie › Thème | `hg_themes`, `hg_theme_seen`, `hg_dyn_events`, `hg_dyn_captures` |
 | `messages` | Poste › Messagerie (lecture journalisée) | `hg_conversations`, `hg_conversation_members`, `hg_messages` |
-| `support` | Poste › Assistance, Boîte à idées | `hg_support`, `hg_support_replies`, `hg_ideas` |
+| `support` | Poste › Assistance, Modèles de réponse, Boîte à idées | `hg_support`, `hg_support_replies`, `hg_ideas`, `hg_modeles_reponse` |
 | `bot` | Poste › Bot Discord, Commandes slash | `hg_bot_log`, `hg_birthday_log` |
 | `reglages` | Mairie › Le site (sauf Erreurs et Archives), Mairie › Technique › Entretien (lecture), Poste › Fil d'activité, Place du gang › Champs du profil, Vie sociale, Accueil des membres ; Fête foraine › Arcade et Secrets | `hg_settings` (clés générales), `hg_pages`, `hg_activity` |
 | `journal` | Mairie › Journal (actions admin) | `hg_admin_log` |
@@ -140,6 +143,17 @@ Source : `site/assets/espaces/admin/admin-gestion.js`, section `cartes-gestion`,
 - **Résumé de l'économie** : santé de l'économie (`hg_eco_health`), statistiques des types de boosters (`hg_booster_type_stats`), enchères (`hg_auctions_admin`), seulement ce que la base renvoie ;
 - **Derniers gives**.
 
+### La Poste › Modèles de réponse (`#poste/modeles-reponse`)
+
+Sources : `site/assets/espaces/admin/admin-modeles-reponse.js` (liste, tiroir), `support-modeles.js` (menu « Modèles » de la zone de réponse de l'Assistance),
+migration `194_modeles_reponse.sql`, droit `support` pour lire et pour éditer. Table `hg_modeles_reponse` : titre (60 caractères), catégorie « Rangé dans » (30, facultative), texte (2 000).
+Toute écriture est journalisée par un déclencheur (`modele_reponse_cree`, `modele_reponse_modifie`, `modele_reponse_supprime`).
+
+- Le menu relit les modèles à chaque ouverture. Choisir un modèle insère son texte, réponse ou note interne, et n'envoie jamais rien.
+- Si la zone contient déjà du texte, il est gardé : le modèle s'ajoute à la suite, après une ligne vide, et un message le signale.
+- `{prenom}` devient le pseudo du membre (le site ne connaît pas de prénom ; le nom de la variable est conservé).
+- Pas de menu dans Messages : le menu n'existe que dans la zone de réponse de l'Assistance.
+
 ### La Fête foraine › Jeux › Arcade, pages 404 (`#fete/arcade`)
 
 Source : `site/assets/espaces/admin/admin-arcade.js`, droit `reglages`. Suit les trois mini-jeux des pages 404
@@ -158,6 +172,7 @@ migration `192_entretien_admin.sql`, droit `reglages`. Une page, trois cartes :
   Un échec dans une fonction edge appelée ensuite ne se voit pas ici.
 - **Purge de nuit** : durées dans `hg_settings.entretien` (journal des tâches 1 à 30 jours, 3 par défaut ; coups 14 à 365 jours, 30 par défaut). Une valeur absente ou hors bornes vaut la valeur par défaut, côté serveur.
   La nuit, l'aperçu et la purge manuelle passent par `hg_entretien__passage` : mêmes durées, filtres, tables et plafond (50 000 lignes par table et par passage).
+  Les notifications du site (`hg_site_notifs`) y sont purgées à 90 jours, lues ou non (migration 195). Cette durée est fixe, écrite dans `hg_entretien__passage` : elle est annoncée aux membres, sur le centre de notifications et dans la page légale.
 
 ### La Fabrique de cartes › Arène (`#fabrique/arene`, ancien `#bataille`)
 
@@ -226,6 +241,7 @@ Parcours du panel (`tests/parcours/admin/`) :
 | `parcours-admin-roles.cjs` | Rôles et accès par rôle |
 | `parcours-admin-p2-pilotage.cjs` | Staff, Journal |
 | `parcours-admin-p2-assistance.cjs` | Assistance et Boîte à idées : liste, détail, statut, recherche |
+| `parcours-admin-modeles-reponse.cjs` | Modèles de réponse : écran, tiroir, suppression, droits, menu au clavier de l'Assistance, `{prenom}`, téléphone |
 | `parcours-admin-p2-sorties.cjs`, `parcours-admin-sorties.cjs` | Sorties IRL : liste, création, modification, inscrits |
 | `parcours-admin-souvenirs.cjs` | Souvenirs et photos : création, modification, suppression, réactions |
 | `parcours-admin-complements.cjs` | Quêtes, défis, réglages du site, pages |

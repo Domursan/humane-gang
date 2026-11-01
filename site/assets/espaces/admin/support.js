@@ -21,6 +21,7 @@ import { createThread } from './ui/thread.js';
 import { renderDetailHeader } from './ui/detail-header.js';
 import { renderInfoPanel } from './ui/info-panel.js';
 import { reportOf, reportItem, reportCard } from './reports.js'; // A6 : signalements
+import { brancherModeles } from './support-modeles.js'; // idée 99 : menu « Modèles » de la zone de réponse
 
 /* ---------- Statuts et filtres ---------- */
 // Les trois états affichés (libellé et ton). L'état est calculé à partir de status et taken_by (stateOf).
@@ -246,30 +247,35 @@ function paintDetail() {
     actions,
   });
 
-  // Fil : gardé tant qu'on reste sur la même demande (le brouillon de réponse survit aux mises à jour)
-  // Clé du fil : la demande, et si elle a une conversation privée (la mention sous la zone de réponse change alors).
-  const threadKey = `${id}:${s.conversation_id ? 'conv' : ''}`;
-  if (!V.thread || V.threadFor !== threadKey) {
+  // Fil : gardé tant qu'on reste sur la même demande (brouillon, bascule Note interne, focus et envoi en cours survivent aux mises à jour)
+  // La conversation privée ne change que la mention sous la zone de réponse.
+  const hint = s.conversation_id
+    ? 'La discussion avec le membre se fait dans sa conversation privée (bouton « Ouvrir la conversation »). Les notes internes restent dans le panel.'
+    : 'Le membre voit tes réponses dans Assistance › Mes demandes. Les notes internes restent dans le panel.';
+  if (!V.thread || V.threadFor !== id) {
     V.thread?.destroy();
     V.threadEl = document.createElement('div');
     V.thread = createThread(V.threadEl, {
       label: 'Fil de la demande',
       me: S.meId,
       placeholder: `Répondre à ${m.pseudo}…`,
-      hint: s.conversation_id
-        ? 'La discussion avec le membre se fait dans sa conversation privée (bouton « Ouvrir la conversation »). Les notes internes restent dans le panel.'
-        : 'Le membre voit tes réponses dans Assistance › Mes demandes. Les notes internes restent dans le panel.',
+      hint,
       onSend: (text) => sendReply(id, text, false),
       onNote: (text) => sendReply(id, text, true),
       messages: [],
     });
-    V.threadFor = threadKey;
+    brancherModeles(V.threadEl, () => memberOf(find(id) || s).pseudo);
+    V.threadFor = id;
   }
+  V.thread.setHint(hint);
   V.thread.update(threadMessages(s, m));
   // A6 : demande « Signalement » : aperçu du contenu et décision (masquer, supprimer, ne rien faire) au-dessus du fil
   const rep = reportOf(id);
   const card = rep ? reportCard(rep, async () => { await loadSupport().catch((e) => console.warn('[panel]', e?.message || e)); renderSupport(); refreshCounts(); }) : null;
+  // Le fil est retiré puis remis : le focus (zone de réponse, menu Modèles) y reste malgré une mise à jour en direct.
+  const actif = V.threadEl.contains(document.activeElement) ? document.activeElement : null;
   host.replaceChildren(...[head, card, V.threadEl].filter(Boolean));
+  actif?.focus({ preventScroll: true });
 }
 
 /* ---------- Panneau d'infos : fiche rapide du membre ---------- */

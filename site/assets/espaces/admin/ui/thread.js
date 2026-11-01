@@ -1,5 +1,5 @@
 // ===== Humane Gang : fil de discussion d'une demande (zone principale) =====
-// createThread(el, { messages, me, onSend, onNote, placeholder?, hint?, label?, noteLabel? }) → { update(messages), destroy() }
+// createThread(el, { messages, me, onSend, onNote, placeholder?, hint?, label?, noteLabel? }) → { update(messages), setHint(texte), destroy() }
 //   messages : [{ id, type: 'message' | 'event', author { id, pseudo, color, avatar_url }, body, at, internal?, mine?, text? }]
 //              type 'event' : séparateur centré, ex. { type:'event', text:'Domu a pris en charge', at } → « Domu a pris en charge · 14:18 ».
 //              mine : force le côté admin (sinon, author.id === me).
@@ -23,7 +23,7 @@ let seq = 0;
 
 /**
  * Affiche le fil dans `el` et renvoie son API.
- * @returns {{update: (messages: object[]) => void, destroy: () => void}}
+ * @returns {{update: (messages: object[]) => void, setHint: (texte: string) => void, destroy: () => void}}
  */
 export function createThread(el, opts = {}) {
   const uid = `ui-thread-${++seq}`;
@@ -152,6 +152,11 @@ export function createThread(el, opts = {}) {
     update(messages) {
       state.messages = messages || [];
       paintLog();
+    },
+    /** Change la mention sous la zone de réponse, sans toucher au brouillon. */
+    setHint(texte) {
+      const hint = el.querySelector('.ui-hint');
+      if (hint) hint.textContent = texte;
     },
     /** Vide le fil de l'élément (le brouillon de réponse est perdu). */
     destroy() {

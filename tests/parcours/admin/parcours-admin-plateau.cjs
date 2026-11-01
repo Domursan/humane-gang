@@ -449,7 +449,27 @@ const settle = async (p) => { await sleep(350); return p.evaluate(() => location
       '(f) lecture de la disposition en erreur : disposition par défaut');
     const errG = g.errs.filter((x) => !/Failed to load|404|favicon/.test(x));
     check(errG.length === 0, `(f) lecture en erreur : aucune erreur JavaScript${errG.length ? ' : ' + errG.join(' | ') : ''}`);
+    // « Modifier » sans disposition lue : refusé, sinon Enregistrer écraserait la disposition enregistrée
+    await g.click('[data-plateau-edit]');
+    await sleep(300);
+    check(await g.$('.plateau-board--edit') === null && !(await g.isVisible('[data-plateau-save]')), '(f) lecture en erreur : pas de mode disposition, pas de bouton Enregistrer');
+    check(await g.evaluate(() => document.body.innerText.includes('Disposition enregistrée illisible')), '(f) lecture en erreur : message clair');
+    check((await appels(g)).length === 0, '(f) lecture en erreur : rien n’est envoyé');
     await g.ctx.close();
+
+    // La lecture revient : « Modifier » la relit, et part de la disposition enregistrée
+    const r = await openPage(browser, { now: HEURE, page: 'admin', width: 1280, height: 1150, scenario: { plateauGetFail: true },
+      init: pose({ place: { x: 0, y: 0, w: 6, h: 2 }, poste: { x: 6, y: 0, w: 6, h: 2 }, ventes: { x: 0, y: 2, w: 4, h: 2 }, camp: { x: 4, y: 2, w: 4, h: 2 }, fabrique: { x: 8, y: 2, w: 4, h: 2 }, fete: { x: 0, y: 4, w: 4, h: 2 }, mairie: { x: 0, y: 6, w: 12, h: 1 } }) });
+    await settle(r);
+    await r.evaluate(async () => {
+      const { sb } = await import('/assets/commun/core.js');
+      const rpc = sb.rpc.bind(sb);
+      sb.rpc = (fn, a) => (fn === 'hg_admin_plateau_get' ? Promise.resolve({ data: JSON.parse(localStorage.getItem('hg_fake_plateau')), error: null }) : rpc(fn, a));
+    });
+    await r.click('[data-plateau-edit]');
+    await sleep(300);
+    check(await r.$('.plateau-board--edit') !== null && (await pos(r, 'place')) === '1 / span 6 | 1 / span 2', '(f) lecture revenue : le mode disposition part de la disposition enregistrée');
+    await r.ctx.close();
   }
 
   {

@@ -79,6 +79,11 @@ const DB = {
   // Assistance en fil (migration 032) : réponses publiques et notes internes. S.replies : données de départ facultatives.
   // Les demandes portent updated_at / taken_by / taken_at / read_at quand le scénario les fournit (absents = demande neuve, non lue).
   hg_support_replies: S.replies || [],
+  // Modèles de réponse (migration 194) : S.modelesReponse, sinon les deux premiers modèles de départ.
+  hg_modeles_reponse: S.modelesReponse || [
+    { id: 1, titre: 'Mot de passe oublié', categorie: 'Connexion', texte: 'Salut {prenom}, tu peux choisir un nouveau mot de passe depuis la page de connexion.' },
+    { id: 2, titre: 'Bug bien reçu', categorie: 'Bug', texte: 'Merci {prenom}, on a bien reçu ton signalement.' },
+  ],
   // Pièces jointes de l'assistance (migration 078) : S.supportFiles, sinon aucune.
   hg_support_files: S.supportFiles || [],
   // Migration 093 (idées A6, A9) : signalements et journal des erreurs du navigateur (scénarios S.reports, S.clientErrors).
@@ -249,7 +254,7 @@ const CASCADE = {
   hg_pages: [['hg_page_access', 'page_slug', 'slug']],
 };
 // Fonctions SQL appelables sans session (rôle anon), comme en ligne.
-const ANON_OK = new Set(['hg_client_error', 'hg_support_public', 'hg_auth_user_gone', 'hg_card_rank', 'hg_card_roll', 'hg_cards_admin_audit_del', 'hg_claim_invite_link', 'hg_msg_push_trg', 'hg_msg_realtime_trg']);
+const ANON_OK = new Set(['hg_client_error', 'hg_support_public', 'hg_auth_user_gone', 'hg_card_rank', 'hg_card_roll', 'hg_cards_admin_audit_del', 'hg_claim_invite_link', 'hg_msg_push_trg', 'hg_msg_realtime_trg', 'hg_uno_invite']);
 // Compléments par paquet (S.extra = nom d'un fichier de tests/fixtures/) : le module reçoit la base et le scénario,
 // peut y ajouter ses tables et renvoie { rpc(fn, args) } (réponse ou undefined). Servi depuis le dépôt comme le site.
 const EXTRA = S.extra ? (await import(`${location.origin}${window.__HG_RACINE || ''}/tests/fixtures/${S.extra}`)).default({ DB, S, uidNow, ME, U }) : null;
@@ -301,6 +306,8 @@ class Q {
     const match = (r) => this.f.every((f) => f(r));
     // Journal des appels : chaque lecture et écriture est notée pour les vérifications des tests.
     window.__LOG.push([this.op, this.t, this.payload]);
+    // Scénario modelesReponseEchec : la lecture des modèles de réponse échoue (menu de l'Assistance, écran du panel).
+    if (this.t === 'hg_modeles_reponse' && this.op === 'select' && window.__SCN?.modelesReponseEchec) return { data: null, error: { message: 'Failed to fetch' } };
     // Upsert sur hg_page_access : une ligne par couple (page, utilisateur), remplacée si elle existe.
     if (this.op === 'upsert' && this.t === 'hg_page_access') {
       const rows = (Array.isArray(this.payload) ? this.payload : [this.payload]);
@@ -326,6 +333,7 @@ class Q {
         if (this.t === 'hg_invite_links') Object.assign(r, { id: 'L' + (++seq + 10), token: 'new' + String(seq).padStart(21, '0'), active: true, codes_generated: 0, created_at: new Date().toISOString() });
         if (r.id === undefined && ['hg_moments', 'hg_photos', 'hg_events', 'hg_support_replies'].includes(this.t)) r.id = uid(); // comme la base (gen_random_uuid)
         if (this.t === 'hg_support_replies' && r.created_at === undefined) r.created_at = new Date().toISOString();
+        if (this.t === 'hg_modeles_reponse' && r.id === undefined) r.id = Math.max(0, ...tab.map((x) => x.id)) + 1; // identité en base
         if (this.t === 'hg_moments' && r.created_at === undefined) r.created_at = new Date().toISOString();
         tab.unshift(r);
       }
@@ -1020,7 +1028,7 @@ export function createClient(_url, _key, opts = {}) {
       // Notifications par catégorie (idée Q6, migration 095) : liste blanche, heures 0 à 23, une ligne par membre.
       if (fn === 'hg_set_notif_prefs') {
         const uid = S.uid || ME;
-        const ok = /^(messages|sorties|echanges|souhaits|santa|anniversaires|quiz)\.(push|discord)$/;
+        const ok = /^((messages|sorties|echanges|souhaits|santa|anniversaires|quiz)\.(push|discord)|carte_proposee\.site)$/;
         const pr = args?.p_prefs || {};
         if (Object.entries(pr).some(([k, v]) => !ok.test(k) || typeof v !== 'boolean')) return { data: null, error: { message: 'Catégorie inconnue' } };
         const qs = args?.p_quiet_start ?? null, qe = args?.p_quiet_end ?? null;
@@ -1489,9 +1497,9 @@ export function createClient(_url, _key, opts = {}) {
         if (!canP('reglages') || (!lecture && !myPermsNow().is_admin)) return { data: null, error: { message: 'droit insuffisant' } };
         const bornes = { journal_jours: { defaut: 3, min: 1, max: 30 }, coups_jours: { defaut: 30, min: 14, max: 365 } };
         en.reglages ||= { journal_jours: 3, coups_jours: 30, bornes, dernier: null, derniere_nuit: null };
-        en.apercu ||= { job_run_details: 31363, hg_plat_coups: 0, hg_uno_coups: 0, hg_duel_coups: 0, hg_ndc_coups: 0 };
+        en.apercu ||= { job_run_details: 31363, hg_plat_coups: 0, hg_uno_coups: 0, hg_duel_coups: 0, hg_ndc_coups: 0, hg_site_notifs: 0 };
         const { journal_jours: jj, coups_jours: cj } = en.reglages;
-        const reponse = (tables) => ({ journal_jours: jj, coups_jours: cj, plafond: 50000, tables });
+        const reponse = (tables) => ({ journal_jours: jj, coups_jours: cj, notifs_jours: 90, plafond: 50000, tables });
         if (fn === 'hg_entretien_quotas') {
           const q = en.quotas || { base_octets: 99100000, buckets: [{ bucket_id: 'hg-nj', fichiers: 542, octets: 169700000 }, { bucket_id: 'hg-photos', fichiers: 276, octets: 36800000 }, { bucket_id: 'hg-avatars', fichiers: 12, octets: 278746 }] };
           return { data: { releve_at: new Date(now).toISOString(), ignore_until: en.ignore_until || null, ...q }, error: null };
@@ -1521,6 +1529,44 @@ export function createClient(_url, _key, opts = {}) {
           en.reglages.dernier = { at: new Date(now).toISOString(), mode: 'main', lignes: Object.values(tables).reduce((s, n) => s + n, 0) };
           return { data: reponse(tables), error: null };
         }
+      }
+      // Centre de notifications (migrations 153 et 195). Scénario S.notifs : lignes { id, cat, titre, texte, lien, created_at, lu } ; sans lui,
+      // trois lignes pour hg_notifs_page, et le panneau de l'en-tête reste vide. window.__NTF : { lignes, panne (fonction en erreur, au départ S.notifsPanne), attente (ms) }.
+      if (['hg_notifs_page', 'hg_notif_supprimer', 'hg_notifs_supprimer_lues'].includes(fn) || (S.notifs && ['hg_mes_notifs', 'hg_notifs_lues', 'hg_presence_ping'].includes(fn))) {
+        const N = (window.__NTF ||= { lignes: (S.notifs || [
+          { id: 3, cat: 'echanges', titre: 'Nouvelle offre de Lina', texte: 'Elle te propose 2 cartes contre 1 carte de ta collection.', lien: '/pages/cartes/cartes.html', created_at: iso(-0.01), lu: false },
+          { id: 2, cat: 'messages', titre: 'Nouveau message de Karim', texte: null, lien: null, created_at: iso(-3), lu: true },
+          { id: 1, cat: 'annonces', titre: 'Nouvelle saison de cartes', texte: 'Les boosters arrivent vendredi.', lien: null, created_at: iso(-12), lu: true },
+        ]).map((n) => ({ ...n })), panne: S.notifsPanne || null, attente: 0 });
+        if (N.attente) await new Promise((ok) => setTimeout(ok, N.attente));
+        if (N.panne === fn) return { data: null, error: { message: 'Connexion perdue' } };
+        const nonLues = () => N.lignes.filter((n) => !n.lu).length;
+        if (fn === 'hg_presence_ping') return { data: nonLues(), error: null };
+        const tri = () => [...N.lignes].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id);
+        if (fn === 'hg_mes_notifs') return { data: { non_lues: nonLues(), masque: false, liste: tri().slice(0, 30) }, error: null };
+        if (fn === 'hg_notifs_lues') {
+          const avant = nonLues();
+          for (const n of N.lignes) if (!args?.p_ids || args.p_ids.includes(n.id)) n.lu = true;
+          return { data: avant - nonLues(), error: null };
+        }
+        if (fn === 'hg_notif_supprimer') {
+          const avant = N.lignes.length;
+          N.lignes = N.lignes.filter((n) => n.id !== args?.p_id);
+          return { data: avant - N.lignes.length, error: null };
+        }
+        if (fn === 'hg_notifs_supprimer_lues') {
+          const avant = N.lignes.length;
+          N.lignes = N.lignes.filter((n) => !n.lu);
+          return { data: avant - N.lignes.length, error: null };
+        }
+        const q = String(args?.p_q || '').trim().slice(0, 100).toLowerCase();
+        const cherche = tri().filter((n) => !q || n.titre.toLowerCase().includes(q) || (n.texte || '').toLowerCase().includes(q));
+        const comptes = {};
+        for (const n of cherche) comptes[n.cat] = (comptes[n.cat] || 0) + 1;
+        const limite = Math.min(Math.max(args?.p_limite || 30, 1), 50);
+        const reste = cherche.filter((n) => (!args?.p_cat || n.cat === args.p_cat)
+          && (!args?.p_avant_at || n.created_at < args.p_avant_at || (n.created_at === args.p_avant_at && n.id < args.p_avant_id)));
+        return { data: { liste: reste.slice(0, limite), suite: reste.length > limite, comptes, total: cherche.length, tout: N.lignes.length, non_lues: nonLues(), lues: N.lignes.length - nonLues() }, error: null };
       }
       if (fn === 'hg_eco_health') {
         if (!canP('cartes')) return { data: null, error: { message: 'Réservé à l\'admin et au Staff « cartes »' } };

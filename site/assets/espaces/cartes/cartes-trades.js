@@ -1,7 +1,8 @@
 // ===== Cartes à collectionner — échanges entre membres =====
 // Chargé par cartes.js : import('./cartes-trades.js').then((m) => m.mountTrades(el, ctx)).
 // ctx = { me: profil courant (id, pseudo…), refresh: async () => {}, expose: (api) => {} } ; refresh recharge solde et collection côté page.
-// expose reçoit { offer({ to, want }) } : ouvre l'éditeur d'offre avec un membre (utilisé par la collection d'un membre, cartes.js).
+// expose reçoit { offer({ to, want }), onglet(id) } : ouvre l'éditeur d'offre avec un membre (utilisé par la collection d'un membre, cartes.js)
+// ou un onglet du panneau (#echanges/tableau, lien des alertes de la liste de souhaits).
 // Affichage des cartes : cartes-ui.js (cardHtml). Styles : cartes-trades.css (+ cartes-card.css).
 // Exporte : mountTrades(el, ctx), la seule fonction appelée par cartes.js. Toute la logique est dans cette fonction :
 // les données (S, E) sont partagées par les fonctions imbriquées et réinitialisées à chaque ouverture de la page.
@@ -25,11 +26,12 @@ const TABS = [
   { id: 'tableau', label: 'Tableau' }, // « Je cherche / Je donne » (idée C12, cartes-tableau.js)
 ];
 // Libellés des statuts d'une offre (colonne status de hg_card_trades).
-const STATUS_LABEL = { proposee: 'En attente', acceptee: 'Acceptée', refusee: 'Refusée', annulee: 'Annulée', remplacee: 'Remplacée' };
+const STATUS_LABEL = { proposee: 'En attente', acceptee: 'Acceptée', refusee: 'Refusée', annulee: 'Annulée', remplacee: 'Remplacée', expiree: 'Expirée' };
 const PAGE = 1000;   // pagination PostgREST (plafond par défaut de la base)
 const CHUNK = 100;   // identifiants par requête « in »
 // Colonnes lues sur les exemplaires (hg_card_copies) : pas de select('*') pour rester léger.
 const COPY_COLS = 'id, card_id, owner_id, shiny, serial, locked_trade, recycled_at';
+const JOUR_MS = 86400000;
 
 /* ---------- Petits outils (sans état) ---------- */
 /** Convertit une valeur en entier positif ou nul (0 si invalide). Sert aux Paillettes saisies. */
@@ -42,6 +44,32 @@ const cmp = (a, b) => String(a).localeCompare(String(b), 'fr');
 const unwrap = ({ data, error }) => { if (error) throw error; return data; };
 /** Pastille de statut (« En attente », « Cadeau »...). cls ajoute une variante de couleur. */
 const pill = (text, cls = '') => `<span class="pill ${cls}">${esc(text)}</span>`;
+
+/* Échéance d'une offre (colonne expire_le, migration 193), toujours à l'heure de Zurich comme le préavis écrit par la base. */
+const ZURICH = 'Europe/Zurich';
+/** Jour calendaire à Zurich, sous la forme AAAA-MM-JJ. */
+const jourZurich = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: ZURICH, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+/** Nombre de jours calendaires entre deux dates. */
+const ecartJours = (a, b) => Math.round((Date.parse(jourZurich(b)) - Date.parse(jourZurich(a))) / JOUR_MS);
+/** « 2 nov. » */
+const dateCourte = (d) => new Intl.DateTimeFormat('fr-FR', { timeZone: ZURICH, day: 'numeric', month: 'short' }).format(d);
+/** « 18 h 40 » */
+function heureCourte(d) {
+  const p = new Intl.DateTimeFormat('fr-FR', { timeZone: ZURICH, hour: 'numeric', minute: '2-digit', hourCycle: 'h23' }).formatToParts(d);
+  const v = (t) => p.find((x) => x.type === t).value;
+  return `${Number(v('hour'))} h ${v('minute')}`;
+}
+/**
+ * Échéance d'une offre en attente : la phrase affichée sous la date et, à moins de 24 h, la pastille de préavis.
+ * @param {object} t offre (hg_card_trades)
+ * @returns {{exp: string, pastille?: string}|null} null si l'offre n'a pas d'échéance
+ */
+function echeance(t) {
+  if (!t.expire_le) return null;
+  const fin = new Date(t.expire_le), now = new Date();
+  if (fin - now > JOUR_MS) return { exp: `Expire dans ${pluralCount(ecartJours(now, fin), 'jour', 'jours')}, le ${dateCourte(fin)}` };
+  return { pastille: ecartJours(now, fin) > 0 ? 'Expire demain' : 'Expire aujourd’hui', exp: `Se ferme le ${dateCourte(fin)} à ${heureCourte(fin)} sans réponse.` };
+}
 
 /**
  * Lit toutes les lignes d'une requête paginée (build() renvoie un nouveau constructeur à chaque page).
@@ -87,7 +115,7 @@ export async function mountTrades(el, ctx = {}) {
      E : état de l'éditeur d'offre (destinataire, cartes choisies, filtres, aperçu...). */
   const S = {
     me: null, members: new Map(), cards: new Map(), copies: new Map(), trades: [], items: new Map(),
-    wish: new Map(), balance: 0, tab: 'recues', pickWho: '', setNames: new Map(), setTotal: new Map(),
+    wish: new Map(), balance: 0, tab: location.hash === '#echanges/tableau' ? 'tableau' : 'recues', pickWho: '', setNames: new Map(), setTotal: new Map(),
     peers: new Set(), matchesP: null,
     sugg: [], suggAll: false, // bloc « Échanges possibles » : membres suggérés et affichage « Voir plus »
   };
@@ -227,11 +255,11 @@ export async function mountTrades(el, ctx = {}) {
       ${empty ? '<p class="trd-none">Rien</p>' : ''}
     </section>`;
   }
-  /** Carte d'une offre : en-tête (membre, date, statut), deux côtés, message facultatif et boutons d'action. */
-  function articleHtml({ who, date, badge, sides, message, actions = '' }) {
+  /** Carte d'une offre : en-tête (membre, date, échéance, statut), deux côtés, message facultatif et boutons d'action. */
+  function articleHtml({ who, date, exp = '', badge, sides, message, actions = '' }) {
     return `<article class="card trd-offer">
       <header class="trd-offer-head">
-        <div class="trd-who">${avatarHtml(who, 40)}<div><h3>${esc(who.pseudo)}</h3><p class="trd-date">${esc(fmtDateTime(date))}</p></div></div>
+        <div class="trd-who">${avatarHtml(who, 40)}<div><h3>${esc(who.pseudo)}</h3><p class="trd-date">${esc(fmtDateTime(date))}</p>${exp ? `<p class="trd-exp">${esc(exp)}</p>` : ''}</div></div>
         ${badge}
       </header>
       <div class="trd-sides">${sides.map(sideHtml).join('')}</div>
@@ -269,8 +297,11 @@ export async function mountTrades(el, ctx = {}) {
          <button class="btn btn-ghost" type="button" data-act="counter" data-id="${esc(t.id)}">Contre-proposer</button>
          <button class="btn btn-ghost" type="button" data-act="refuse" data-id="${esc(t.id)}">Refuser</button>`
       : `<button class="btn btn-ghost" type="button" data-act="cancel" data-id="${esc(t.id)}">Annuler l’offre</button>`;
+    const fin = echeance(t);
+    const attente = pill(STATUS_LABEL.proposee, 'pill-current');
     return articleHtml({
-      who, date: t.created_at, badge: pill(STATUS_LABEL.proposee, 'pill-current'),
+      who, date: t.created_at, exp: fin?.exp,
+      badge: fin?.pastille ? `<span class="trd-offer-etat">${pill(fin.pastille, 'pill-exp')}${attente}</span>` : attente,
       sides: [[l1, itemsOf(t, 'from'), t.from_paillettes], [l2, itemsOf(t, 'to'), t.to_paillettes]],
       message: t.message, actions,
     });
@@ -405,7 +436,7 @@ export async function mountTrades(el, ctx = {}) {
   }
 
   /**
-   * Une ligne de l'historique : cadeau, offre acceptée, refusée ou annulée. Les côtés sont présentés
+   * Une ligne de l'historique : cadeau, offre acceptée, refusée, annulée ou expirée. Les côtés sont présentés
    * du point de vue de « moi » (« Tu donnes » / « Tu reçois »).
    * @param {object} t offre terminée
    */
@@ -417,7 +448,7 @@ export async function mountTrades(el, ctx = {}) {
     /** Paillettes d'un côté de l'offre (« from » = émetteur, « to » = destinataire). */
     const pails =(side) => (side === 'from' ? t.from_paillettes : t.to_paillettes);
     const accepted = t.status === 'acceptee';
-    let badge, sides;
+    let badge, sides, exp = '';
     if (isGift(t)) {
       badge = pill('Cadeau', 'pill-ok');
       sides = [[mine === 'from' ? 'Tu offres' : 'Tu reçois', itemsOf(t, 'from'), 0]];
@@ -426,7 +457,11 @@ export async function mountTrades(el, ctx = {}) {
       badge = pill(STATUS_LABEL[t.status] || t.status, accepted ? 'pill-ok' : '');
       sides = [[lm, itemsOf(t, mine), pails(mine)], [lt, itemsOf(t, theirs), pails(theirs)]];
     }
-    return articleHtml({ who: memberOf(other), date: t.resolved_at || t.created_at, badge, sides, message: t.message });
+    if (t.status === 'expiree') { // seul celui qui a fait l'offre avait des cartes bloquées
+      const jours = Math.max(1, Math.round((new Date(t.expire_le || t.resolved_at) - new Date(t.created_at)) / JOUR_MS));
+      exp = `Sans réponse après ${pluralCount(jours, 'jour', 'jours')}.${mine === 'from' && idsOf(t, 'from').length ? ' Tes cartes sont de nouveau libres.' : ''}`;
+    }
+    return articleHtml({ who: memberOf(other), date: t.resolved_at || t.created_at, exp, badge, sides, message: t.message });
   }
   /** Onglet « Historique » : toutes les offres qui ne sont plus en attente, les plus récentes d'abord. */
   function viewHistorique() {
@@ -1091,6 +1126,6 @@ export async function mountTrades(el, ctx = {}) {
         <div class="btn-row trd-retry"><button class="btn btn-ghost" type="button" data-act="retry">Réessayer</button></div></div>`;
     }
   }
-  ctx.expose?.({ offer: (opts) => openEditor(opts) });
+  ctx.expose?.({ offer: (opts) => openEditor(opts), onglet: (id) => { S.tab = id; render(); } });
   await start();
 }

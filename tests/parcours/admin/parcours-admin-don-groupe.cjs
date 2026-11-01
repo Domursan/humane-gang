@@ -82,20 +82,20 @@ async function ouvrirDonGroupe(p) {
   check(!p.errs.length, 'tout le gang : aucune erreur JS' + (p.errs.length ? ' (' + p.errs.join(' | ') + ')' : ''));
   await p.ctx.close();
 
-  // 3. Une carte, 3 exemplaires brillants, recherche « paleto » : p_card = C2, p_shiny = true.
+  // 3. Une carte, 3 exemplaires brillants, recherche « fontaine » : p_card = C2, p_shiny = true.
   p = await openPage(browser, { page: 'admin', fixture: 'fake-sb-cartes.mjs', width: 1280, height: 900 });
   await ouvrirDonGroupe(p);
   await p.selectOption('#acd-bulk-kind', 'carte');
   check(await p.isVisible('#acd-bulk-cardbox'), 'carte : le choix de carte apparaît');
   await p.waitForSelector(`${drawer} [data-vp-card="C2"]`, { timeout: 5000 });
-  await p.fill('#acd-bulk-cp-q', 'paleto');
+  await p.fill('#acd-bulk-cp-q', 'fontaine');
   const options = await p.$$eval(`${drawer} [data-vp-card]`, (o) => o.map((x) => x.dataset.vpCard));
-  check(options.length === 1 && options[0] === 'C2', 'recherche « paleto » : une seule carte proposée (visuels)');
+  check(options.length === 1 && options[0] === 'C2', 'recherche « fontaine » : une seule carte proposée (visuels)');
   await p.click(`${drawer} [data-vp-card="C2"]`);
   await p.fill('#acd-bulk-amount', '3');
   await p.click(`${drawer} label:has(input[name="shiny"])`);
   await p.check(`${drawer} input[name="who"][value="${BRUNO}"]`);
-  check(/1 membre recevra 3 exemplaires de « Le Paleto » \(brillante\)/.test(await recap(p)), 'récapitulatif carte : nom et brillance');
+  check(/1 membre recevra 3 exemplaires de « La Fontaine » \(brillante\)/.test(await recap(p)), 'récapitulatif carte : nom et brillance');
   await submit(p);
   await confirmOk(p);
   await p.waitForSelector(drawer, { state: 'detached', timeout: 5000 }).catch(() => {});

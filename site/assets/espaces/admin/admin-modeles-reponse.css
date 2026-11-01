@@ -1,0 +1,22 @@
+/* Modèles de réponse (idée 99) : menu de la zone de réponse de l'Assistance et écran d'édition */
+
+/* Menu au-dessus de la zone de réponse */
+.ui-tpl { position: relative; }
+/* Trois outils au téléphone : Envoyer passe à la ligne, à droite, au lieu de sortir de la zone */
+.ui-box-tools:has(.ui-tpl) { flex-wrap: wrap; }
+.ui-box-tools:has(.ui-tpl) .ui-send { margin-left: auto; }
+.ui-tpl-btn svg { width: 14px; height: 14px; flex: none; }
+.ui-tpl-menu { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 20; width: min(340px, calc(100vw - 48px)); box-sizing: border-box; max-height: 340px; overflow-y: auto; overscroll-behavior: contain;
+  padding: 6px; display: flex; flex-direction: column; gap: 2px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, .45); }
+.ui-tpl-item { display: flex; flex-direction: column; gap: 2px; width: 100%; min-height: 44px; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--text); font: inherit; font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; }
+.ui-tpl-item small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.ui-tpl-item:hover, .ui-tpl-item.is-actif { background: var(--surface-2); }
+.ui-tpl-gerer { margin: 4px 0 0; padding: 8px 10px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted); }
+
+/* Écran admin : les lignes de admin-bot.css (chargée après cette feuille) prennent toute la largeur */
+.tpl-liste.bt-list { position: static; max-width: 720px; }
+.tpl-liste .bt-group { gap: 8px; }
+.tpl-liste .bt-item { width: 100%; border-color: var(--border); background: var(--surface); }
+.tpl-liste .bt-item-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tpl-liste .bt-item-go { font-size: 13px; color: var(--muted); }
+.tpl-page > * + * { margin-top: 20px; }

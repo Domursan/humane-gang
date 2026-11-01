@@ -101,6 +101,25 @@ const DEFAULT_LAYOUT = {
   camp: { x: 0, y: 2, w: 4, h: 2 }, fabrique: { x: 4, y: 2, w: 4, h: 2 }, fete: { x: 8, y: 2, w: 4, h: 2 },
   mairie: { x: 0, y: 4, w: COLS, h: 1 },
 };
+/**
+ * Disposition par défaut quand certains lieux sont absents (droits du compte) : les cases restantes se resserrent,
+ * 4 en 2 + 2, 5 en 3 + 2, 6 en 3 + 3 (largeur 12 / nombre par ligne), la Mairie en bande pleine en dessous.
+ * Les lieux absents sont rangés plus bas (resolveLayout) : ils ne sont pas affichés, mais la disposition reste complète.
+ * @param {string[]} ids Lieux affichés
+ */
+function compactLayout(ids) {
+  if (ids.length >= LIEUX.length) return copyLayout(DEFAULT_LAYOUT);
+  const hors = Object.keys(DEFAULT_LAYOUT).filter((id) => id !== 'mairie' && ids.includes(id));
+  const rangs = { 1: [1], 2: [2], 3: [3], 4: [2, 2], 5: [3, 2], 6: [3, 3] }[hors.length] || [];
+  const cells = {};
+  let i = 0, y = 0;
+  for (const k of rangs) {
+    for (let j = 0; j < k; j++) cells[hors[i++]] = { x: j * (COLS / k), y, w: COLS / k, h: 2 };
+    y += 2;
+  }
+  if (ids.includes('mairie')) cells.mairie = { x: 0, y, w: COLS, h: 1 };
+  return resolveLayout(cells);
+}
 /** Hauteur minimale : une case avec un bouton tient sur deux lignes ; la Mairie (sans bouton) peut n'en faire qu'une. */
 const minH = (id) => (id === 'mairie' ? 1 : 2);
 const LEAD_TEXT = 'Pastille = ce qui attend une action. Cliquer le nom d’un lieu pour l’ouvrir en entier.';
@@ -119,10 +138,11 @@ const describe = (id, c) => `${labelOf(id)} : colonne ${c.x + 1}, ligne ${c.y + 
 /**
  * Disposition complète (tous les lieux) à partir d'une disposition enregistrée, éventuellement incomplète.
  * Une case absente, invalide, trop petite ou qui chevauche une case déjà placée passe sous les autres.
+ * @param {string[]} [devant] Lieux placés en premier : en cas de chevauchement, ce sont les autres qui se déplacent.
  */
-function resolveLayout(cells) {
+function resolveLayout(cells, devant = []) {
   const out = {}, placed = [], rest = [];
-  for (const { id } of LIEUX) {
+  for (const id of [...devant, ...LIEUX.map((l) => l.id).filter((x) => !devant.includes(x))]) {
     const r = cells?.[id];
     const c = r && [r.x, r.y, r.w, r.h].every(Number.isInteger) ? { x: r.x, y: r.y, w: r.w, h: r.h } : null;
     if (c && c.h >= minH(id) && inFrame(c) && !placed.some((p) => clash(p, c))) { out[id] = c; placed.push(c); }
@@ -151,15 +171,18 @@ let ROOT = null;      // #plateau-root courant
 let EDIT = null;      // { draft } pendant le mode disposition, sinon null
 let DRAG = null;      // glissement ou redimensionnement en cours (souris, tactile, stylet)
 const WIDE = matchMedia('(min-width: 900px)');
-const shown = () => LAYOUT || copyLayout(DEFAULT_LAYOUT);
+let SAVED = false;     // la disposition vient d'un enregistrement (« Modifier la disposition »), pas de la disposition par défaut
+let SHOWN_IDS = LIEUX.map((l) => l.id); // lieux affichés sur le plateau (droits du compte)
+const shown = () => (SAVED && LAYOUT) || compactLayout(SHOWN_IDS);
 
-/** Lit la disposition une fois (puis la garde). En cas d'erreur : disposition par défaut, nouvelle tentative à la visite suivante. */
+/** Lit la disposition une fois (puis la garde). En cas d'erreur : disposition par défaut, et LAYOUT reste null (voir enterEdit). */
 function loadLayout() {
   if (LAYOUT) return Promise.resolve(LAYOUT);
   LOADING ||= sb.rpc('hg_admin_plateau_get')
     .then(({ data, error }) => {
       if (error) throw error;
       LAYOUT = layoutOf(data);
+      SAVED = !!(data && data.cells);
       return LAYOUT;
     })
     .catch((e) => { console.warn('[plateau] disposition non chargée :', e?.message || e); return copyLayout(DEFAULT_LAYOUT); })
@@ -228,7 +251,9 @@ export async function renderPlateau(root, lieux) {
   EDIT = null;
   DRAG = null;
   ROOT = root;
-  const layout = await loadLayout();
+  SHOWN_IDS = lieux.map((l) => l.id);
+  await loadLayout();
+  const layout = shown();
   root.innerHTML = `<div class="plateau-top">
       <p class="plateau-lead small muted">${esc(LEAD_TEXT)}</p>
       <div class="plateau-tools">
@@ -311,10 +336,17 @@ const focusEditButton = () => ROOT?.querySelector('[data-plateau-edit]')?.focus(
 /** Annonce pour lecteurs d'écran (région aria-live du plateau). */
 const say = (msg) => { const el = ROOT?.querySelector('[data-plateau-live]'); if (el) el.textContent = msg; };
 
-/** Entre dans le mode disposition (≥ 900 px) avec une copie de travail de la disposition. */
-function enterEdit() {
+/**
+ * Entre dans le mode disposition (≥ 900 px) avec une copie de travail de la disposition.
+ * Refusé tant que la disposition enregistrée n'a pas été lue : l'enregistrement l'écraserait par la disposition par défaut.
+ */
+async function enterEdit() {
   if (!WIDE.matches || !ROOT || EDIT) return;
-  const board = ROOT.querySelector('.plateau-board');
+  const root = ROOT;
+  if (!LAYOUT) await loadLayout();
+  if (root !== ROOT || !root.isConnected || EDIT) return;
+  if (!LAYOUT) { toast('Disposition enregistrée illisible pour le moment : réessaie dans un instant.', 'error'); return; }
+  const board = root.querySelector('.plateau-board');
   EDIT = { draft: copyLayout(shown()) };
   setEditUi(true);
   board.querySelectorAll('.plateau-cell').forEach((cell) => {
@@ -349,10 +381,10 @@ function leaveEdit() {
   say('');
 }
 
-/** Pourquoi la case c ne peut pas être posée pour le lieu id (null si elle est libre et dans le cadre). */
+/** Pourquoi la case c ne peut pas être posée pour le lieu id (null si elle est libre et dans le cadre). Seules les cases affichées gênent. */
 function problem(id, c) {
   if (!inFrame(c)) return 'dépasse le plateau';
-  const other = LIEUX.find((l) => l.id !== id && clash(EDIT.draft[l.id], c));
+  const other = LIEUX.find((l) => l.id !== id && SHOWN_IDS.includes(l.id) && clash(EDIT.draft[l.id], c));
   return other ? `chevauche « ${other.label} »` : null;
 }
 
@@ -467,13 +499,14 @@ function keyMove(board, e) {
   say(describe(id, cand));
 }
 
-/** Enregistre la disposition (les sept cases, pour ne pas effacer celles des lieux que ce compte ne voit pas). */
+/** Enregistre la disposition (les sept cases, pour ne pas effacer celles des lieux que ce compte ne voit pas ; celles que ses cases recouvrent passent dessous). */
 async function saveEdit() {
   setBusy(true);
   try {
-    const { data, error } = await sb.rpc('hg_admin_plateau_set', { p: { cells: copyLayout(EDIT.draft) } });
+    const { data, error } = await sb.rpc('hg_admin_plateau_set', { p: { cells: resolveLayout(EDIT.draft, SHOWN_IDS) } });
     if (error) throw error;
     LAYOUT = layoutOf(data);
+    SAVED = true;
     leaveEdit();
     toast('Disposition enregistrée', 'ok');
     focusEditButton();
@@ -490,6 +523,7 @@ async function resetLayout() {
     const { error } = await sb.rpc('hg_admin_plateau_set', { p: null });
     if (error) throw error;
     LAYOUT = copyLayout(DEFAULT_LAYOUT);
+    SAVED = false;
     leaveEdit();
     toast('Disposition par défaut rétablie', 'ok');
     focusEditButton();
@@ -532,6 +566,26 @@ function tileHtml(lieu, s, countOf) {
       <span class="nav-count lieu-tile-count" data-count="${esc(s.id)}"${n ? '' : ' hidden'}>${n || ''}</span>
     </a>`;
 }
+
+/**
+ * Répartit les tuiles d'un groupe en lignes de même nombre à une tuile près, étirées sur toute la largeur :
+ * autant de colonnes que la largeur en permet (6 au plus, tuile de 250 px au moins, gouttière de 12 px), puis des lignes
+ * égales (7 tuiles sur 4 colonnes : 4 + 3). Le CSS (.lieu-tiles--eq) lit --k, le nombre de tuiles de la ligne.
+ */
+function equilibrerTuiles(root) {
+  for (const box of root.querySelectorAll('.lieu-tiles')) {
+    const tuiles = [...box.children], n = tuiles.length;
+    const colonnes = Math.min(6, Math.max(1, Math.floor((box.clientWidth + 12) / 262)));
+    const lignes = Math.ceil(n / colonnes);
+    let t = 0;
+    for (let r = 0; r < lignes; r++) {
+      const k = Math.ceil((n - t) / (lignes - r));
+      for (let j = 0; j < k; j++) tuiles[t++].style.setProperty('--k', k);
+    }
+    box.classList.add('lieu-tiles--eq');
+  }
+}
+let tuilesObs = null; // observe la largeur de la page du lieu courant (une seule à la fois)
 
 /** Corps de la page d'un lieu : bandeau, « À faire maintenant » (rempli après), toutes les pages groupées. */
 function lieuHtml(lieu, countOf) {
@@ -577,6 +631,18 @@ function todoHtml(items) {
 export async function renderLieu(root, lieu, countOf) {
   root.innerHTML = lieuHtml(lieu, countOf);
   root.dataset.lieu = lieu.id;
+  tuilesObs?.disconnect();
+  tuilesObs = null;
+  equilibrerTuiles(root);
+  const pages = root.querySelector('.lieu-pages');
+  if (pages && typeof ResizeObserver === 'function') {
+    let largeur = pages.clientWidth;
+    tuilesObs = new ResizeObserver(() => {
+      if (!pages.isConnected) { tuilesObs?.disconnect(); return; }
+      if (pages.clientWidth !== largeur) { largeur = pages.clientWidth; equilibrerTuiles(root); } // la hauteur change avec les lignes : ignorée
+    });
+    tuilesObs.observe(pages);
+  }
   const box = root.querySelector('[data-lieu-todo]');
   const items = await todoItems(lieu.id);
   TODO_N.set(lieu.id, items.length);

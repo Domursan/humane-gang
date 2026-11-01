@@ -301,11 +301,11 @@ const focusTrigger = (p) => p.evaluate(() => { let b = document.getElementById('
   check(await p.isHidden('dialog.qk-dlg[open] .vp-shiny'), 'brillante : C1 (non brillante) → case masquée');
   await p.click('dialog.qk-dlg[open] [data-vp-card="C2"]');
   check(await p.isVisible('dialog.qk-dlg[open] .vp-shiny'), 'brillante : C2 (brillante possible) → case visible');
-  check((await p.textContent('dialog.qk-dlg[open] .vp-sum')).includes('Le Paleto'), 'choix : « Carte choisie : Le Paleto » sous la grille');
+  check((await p.textContent('dialog.qk-dlg[open] .vp-sum')).includes('La Fontaine'), 'choix : « Carte choisie : La Fontaine » sous la grille');
   check(await p.getAttribute('dialog.qk-dlg[open] [data-vp-card="C2"]', 'aria-pressed') === 'true', 'choix : la carte choisie est marquée (aria-pressed)');
   // Filtres : recherche, série, rareté
-  await p.fill('#qk-gc-q', 'paleto');
-  check((await p.locator('dialog.qk-dlg[open] [data-vp-card]').count()) === 1, 'filtre recherche « paleto » : une seule carte');
+  await p.fill('#qk-gc-q', 'fontaine');
+  check((await p.locator('dialog.qk-dlg[open] [data-vp-card]').count()) === 1, 'filtre recherche « fontaine » : une seule carte');
   await p.fill('#qk-gc-q', '');
   await p.selectOption('#qk-gc-set', 'SET2');
   check((await p.$$eval('dialog.qk-dlg[open] [data-vp-card]', (b) => b.map((x) => x.dataset.vpCard).join(','))) === 'C13', 'filtre série « Saison 2 » : C13 seule');

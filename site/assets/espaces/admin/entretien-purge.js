@@ -13,6 +13,7 @@ const TABLES = [
   ['hg_uno_coups', 'Coups : Uno', 'coups_jours'],
   ['hg_duel_coups', 'Coups : Duels', 'coups_jours'],
   ['hg_ndc_coups', 'Coups : Nom de code', 'coups_jours'],
+  ['hg_site_notifs', 'Notifications du site', 'notifs_jours'],
 ];
 const TEXTE = {
   charge: 'L’aperçu compte les lignes concernées.',
@@ -25,7 +26,7 @@ export const lignes = (n) => `${nf(n)} ${n > 1 ? 'lignes' : 'ligne'}`;
 
 /**
  * Lignes de l'aperçu et total du passage.
- * @param {{plafond: number, tables: Object<string, number>, journal_jours: number, coups_jours: number}} a Réponse de hg_entretien_apercu.
+ * @param {{plafond: number, tables: Object<string, number>, journal_jours: number, coups_jours: number, notifs_jours: number}} a Réponse de hg_entretien_apercu.
  */
 function calcul(a) {
   const liste = TABLES.filter(([cle]) => cle in (a.tables || {})).map(([cle, nom, duree]) => ({ nom, jours: a[duree], n: Number(a.tables[cle]) || 0 }));

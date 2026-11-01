@@ -10,13 +10,15 @@
  *      réglage « Masquer mon statut en ligne » (hg_presence_masquer). Sur téléphone (760 px et moins), le voyant n'est qu'un
  *      indicateur (aria-hidden, sans clic ni focus) : le statut et le panneau s'ouvrent depuis l'entrée « Statut » du menu
  *      en arc de la photo, et la photo porte alors le libellé du statut. Une nouvelle notification arrive en direct (canal
- *      privé Realtime « notif:<id> ») et s'affiche aussi en message temporaire.
+ *      privé Realtime « notif:<id> ») et s'affiche aussi en message temporaire. L'historique complet est sur
+ *      /pages/compte/notifications.html (espaces/compte/notifications.js), qui reprend notifHtml et marquerLues, appelle
+ *      rafraichirNotifs après ses suppressions et écoute l'événement « hg-notifs » du document (changement venu du panneau ou du direct).
  *   3. Pastilles de statut : tout élément [data-presence="<uuid>"] reçoit la classe is-online et un libellé « En ligne »
  *      ou « Hors ligne » (hg_en_ligne, par lots, rafraîchi toutes les 60 s et à chaque ajout dans la page).
  *      presenceDot(id) fabrique cette pastille ; avatarPresence(html, id) l'ajoute sur un avatar.
  * Page : toutes (init.js appelle startPresence(profil) pour un membre connecté).
  * Dépendances : supabase.js (sb), ui.js (toast), util.js (esc).
- * Exporte : startPresence, presenceDot, avatarPresence.
+ * Exporte : startPresence, presenceDot, avatarPresence, catNom, notifHtml, marquerLues, rafraichirNotifs.
  */
 import { sb } from './supabase.js';
 import { toast } from './ui.js';
@@ -29,6 +31,16 @@ const STATUTS_MS = 60000;
 /** Libellés des catégories (petite étiquette dans la liste). */
 const CATS = { messages: 'Message', sorties: 'Sortie', echanges: 'Échange', souhaits: 'Cartes', santa: 'Secret Santa',
   anniversaires: 'Anniversaire', jeux: 'Jeux', annonces: 'Annonce', info: 'Info' };
+
+/**
+ * Libellé d'une catégorie. Les catégories ne sont pas une liste fermée : une catégorie inconnue s'affiche sous son propre nom.
+ * @param {string} cat Catégorie de la notification.
+ * @returns {string}
+ */
+export function catNom(cat) {
+  const c = String(cat || '');
+  return CATS[c] || (c ? c[0].toUpperCase() + c.slice(1) : CATS.info);
+}
 
 /**
  * Feuille de style de la cloche et des pastilles (/assets/commun/notifs.css), ajoutée une fois.
@@ -144,6 +156,19 @@ async function charger() {
   return data;
 }
 
+/** Prévient la page ouverte qu'une notification a changé depuis le panneau ou le direct (centre de notifications). */
+const annoncer = () => document.dispatchEvent(new CustomEvent('hg-notifs'));
+
+/** Relit mes notifications, puis met à jour le badge et le panneau. Ne lève pas d'erreur. */
+export async function rafraichirNotifs() {
+  try {
+    await charger();
+    peindreVoyant();
+    const box = document.getElementById('notif-panel');
+    if (box && !box.hidden) box.innerHTML = panneauHtml();
+  } catch (e) { console.warn('[notifs]', e?.message || e); }
+}
+
 /**
  * Voyant de statut du membre, posé sur sa photo : vert plein = en ligne, rouge barré = statut masqué (les autres
  * membres le voient hors ligne). Son badge affiche le nombre de notifications non lues, quand il y en a.
@@ -173,24 +198,32 @@ function peindreVoyant() {
   }
 }
 
+/**
+ * Une notification : lien si elle en a un, simple bloc sinon. Sert au panneau et au centre de notifications.
+ * @param {{id: number, cat: string, titre: string, texte: ?string, lien: ?string, created_at: string, lu: boolean}} n Notification.
+ * @returns {string} HTML
+ */
+export function notifHtml(n) {
+  const corps = `<span class="notif-cat">${esc(catNom(n.cat))}</span>
+    <strong class="notif-titre">${esc(n.titre)}</strong>
+    ${n.texte ? `<span class="notif-texte">${esc(n.texte)}</span>` : ''}
+    <span class="notif-quand">${esc(depuis(n.created_at))}</span>`;
+  const cls = `notif-item${n.lu ? '' : ' is-new'}`;
+  const nonLu = n.lu ? '' : '<span class="visually-hidden">Non lue. </span>';
+  return n.lien
+    ? `<a class="${cls}" href="${esc(n.lien)}" data-notif="${esc(n.id)}">${nonLu}${corps}</a>`
+    : `<div class="${cls}" data-notif="${esc(n.id)}">${nonLu}${corps}</div>`;
+}
+
 /** Contenu du panneau (liste, actions, réglage du statut). */
 function panneauHtml() {
   const liste = P.liste === null ? '<p class="small muted notif-vide">Chargement…</p>'
     : !P.liste.length ? '<p class="small muted notif-vide">Aucune notification pour l’instant.</p>'
-    : `<ul class="notif-liste">${P.liste.map((n) => {
-      const corps = `<span class="notif-cat">${esc(CATS[n.cat] || CATS.info)}</span>
-        <strong class="notif-titre">${esc(n.titre)}</strong>
-        ${n.texte ? `<span class="notif-texte">${esc(n.texte)}</span>` : ''}
-        <span class="notif-quand">${esc(depuis(n.created_at))}</span>`;
-      const cls = `notif-item${n.lu ? '' : ' is-new'}`;
-      const nonLu = n.lu ? '' : '<span class="visually-hidden">Non lue. </span>';
-      return `<li>${n.lien
-        ? `<a class="${cls}" href="${esc(n.lien)}" data-notif="${esc(n.id)}">${nonLu}${corps}</a>`
-        : `<div class="${cls}" data-notif="${esc(n.id)}">${nonLu}${corps}</div>`}</li>`;
-    }).join('')}</ul>`;
+    : `<ul class="notif-liste">${P.liste.map((n) => `<li>${notifHtml(n)}</li>`).join('')}</ul>`;
   return `<div class="notif-head"><h2 class="notif-h" id="notif-h">Notifications</h2>
       <button type="button" class="btn btn-ghost btn-sm" data-notif-act="lire"${P.nonLues ? '' : ' disabled'}>Tout marquer comme lu</button></div>
     ${liste}
+    <a class="btn btn-ghost btn-sm notif-tout" href="/pages/compte/notifications.html">Voir tout l’historique</a>
     <label class="check notif-statut"><input type="checkbox" data-notif-act="masquer"${P.masque ? ' checked' : ''}>
       <span>Masquer mon statut « en ligne » aux autres membres</span></label>
     <p class="small muted notif-aide">Quand tu es sur le site, le bot ne t’envoie pas de message privé : la notification arrive ici.</p>`;
@@ -214,8 +247,12 @@ async function basculer(ouvrir = !P.ouvert) {
   box.querySelector('.notif-item, button, input')?.focus({ preventScroll: true });
 }
 
-/** Marque des notifications comme lues (toutes si ids est absent). */
-async function marquerLues(ids = null) {
+/**
+ * Marque des notifications non lues comme lues (toutes si ids est absent), puis met à jour le badge et le panneau.
+ * @param {?number[]} [ids] Identifiants.
+ * @returns {Promise<boolean>} Faux si la base a refusé (message déjà affiché).
+ */
+export async function marquerLues(ids = null) {
   try {
     const { error } = await sb.rpc('hg_notifs_lues', { p_ids: ids });
     if (error) throw error;
@@ -224,8 +261,10 @@ async function marquerLues(ids = null) {
     peindreVoyant();
     const box = document.getElementById('notif-panel');
     if (box && !box.hidden) box.innerHTML = panneauHtml();
+    return true;
   } catch (e) {
     toast(e?.message || String(e), 'error');
+    return false;
   }
 }
 
@@ -266,8 +305,8 @@ function monterVoyant() {
   });
   box.addEventListener('click', (ev) => {
     const lien = ev.target.closest('[data-notif]');
-    if (lien) { const n = (P.liste || []).find((x) => String(x.id) === lien.dataset.notif); if (n && !n.lu) marquerLues([Number(n.id)]); }
-    if (ev.target.closest('[data-notif-act="lire"]')) marquerLues();
+    if (lien) { const n = (P.liste || []).find((x) => String(x.id) === lien.dataset.notif); if (n && !n.lu) marquerLues([Number(n.id)]).then(annoncer); }
+    if (ev.target.closest('[data-notif-act="lire"]')) marquerLues().then(annoncer);
   });
   box.addEventListener('change', async (ev) => {
     const c = ev.target.closest('[data-notif-act="masquer"]');
@@ -318,6 +357,7 @@ function ecouter() {
           if (nouvelle) toast(`🔔 ${nouvelle.titre}`);
           const box = document.getElementById('notif-panel');
           if (box && !box.hidden) box.innerHTML = panneauHtml();
+          annoncer();
         } catch (e) { console.warn('[notifs] direct', e?.message || e); }
       });
     P.canal.subscribe();

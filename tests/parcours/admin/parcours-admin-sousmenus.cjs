@@ -31,7 +31,7 @@ const EXCEPTIONS = {
 const TREE = {
   place: [['Membres', ['comptes', 'roles', 'champs', 'social', 'accueil']], ['Relances', ['relance', 'invitations']],
     ['Entraide', ['parrainage', 'competences']], ['Accès', ['acces', 'acces-matrice']], ['Badges', ['badges', 'badges-attribution', 'badges-criteres']]],
-  poste: [['Demandes', ['assistance', 'idees']], ['Échanges', ['messagerie', 'fil']], ['Discord', ['bot', 'commandes']]],
+  poste: [['Demandes', ['assistance', 'modeles-reponse', 'idees']], ['Échanges', ['messagerie', 'fil']], ['Discord', ['bot', 'commandes']]],
   ventes: [['Enchères', ['encheres']], ['Entre membres', ['echanges']]],
   camp: [['Qui', ['membres-irl']], ['Vivre les sorties', ['sorties', 'souvenirs']], ['Rendez-vous', ['secret-santa']]],
   fabrique: [['Agir', ['gestion', 'drops', 'codes']], ['Arène', ['arene']], ['Catalogue', ['series', 'cartes', 'boosters']],

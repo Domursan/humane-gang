@@ -66,7 +66,7 @@ main { flex: 1; }
 img { max-width: 100%; display: block; }
 a { color: var(--sand); }
 @media (hover: hover) { a:hover { color: var(--amber); } }
-h1, h2, h3 { margin: 0; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
 .display { font-family: var(--font-display); font-weight: 400; letter-spacing: 0.2px; }
 :focus-visible { outline: 2px solid var(--sand); outline-offset: 2px; }
 
@@ -787,6 +787,17 @@ kbd { font-family: inherit; font-size: 12px; font-weight: 700; line-height: 1; m
   border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); font-size: 13px; color: var(--muted); }
 @media (max-width: 640px) { .kbd-cols { grid-template-columns: 1fr; } }
 
+/* ===== Jeux à salon : pastille de connexion commune aux tables (commun/salon-etat.js la pose dans <body>) ===== */
+.salon-etat { position: fixed; z-index: 60; left: calc(56px + 16px); bottom: 16px; display: inline-flex; align-items: center; gap: 8px; min-height: 36px;
+  box-sizing: border-box; max-width: calc(100vw - 24px); padding: 6px 12px; border: 2px solid #000; border-radius: 10px; box-shadow: 3px 3px 0 #000;
+  font-family: var(--font-pixel); font-size: 13px; line-height: 1.2; letter-spacing: .02em; pointer-events: none; }
+.salon-etat:empty { opacity: 0; }
+.salon-etat svg { width: 16px; height: 16px; flex: none; }
+.salon-etat[data-etat="coupure"] { background: #FCA301; color: #000; }
+.salon-etat[data-etat="reprise"] { background: var(--surface-2); color: var(--text); border-color: var(--border-strong); }
+.salon-etat[data-etat="retour"] { background: #2FD16B; color: #000; }
+@media (max-width: 760px) { .salon-etat { left: 50%; bottom: auto; top: calc(74px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); white-space: nowrap; } }
+
 /* ===== Réponses des jeux (admin) : bouton et fenêtre spéciale (core/admin-reponses.js) ===== */
 .adrep-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 999px; font: inherit; font-size: 13px; font-weight: 700;
   border: 1px dashed var(--amber, #D8A75E); background: rgba(216, 167, 94, .12); color: var(--amber, #D8A75E); cursor: pointer; }
@@ -801,7 +812,7 @@ kbd { font-family: inherit; font-size: 12px; font-weight: 700; line-height: 1; m
 .adrep-bandeau span { font: 12px 'Silkscreen', ui-monospace, monospace; letter-spacing: .14em; color: #111; background: #D8A75E; padding: 2px 10px; border-radius: 4px; }
 .adrep-corps { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px 20px 18px; }
 .adrep-tete { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-.adrep-tete h2 { margin: 0; font-size: 20px; text-wrap: balance; }
+.adrep-tete h2 { margin: 0; font-size: 20px; }
 .adrep-x { flex: none; width: 40px; height: 40px; border-radius: 999px; border: 1px solid var(--border, #2A2A2F); background: var(--surface-2, #1F1F23); color: inherit; font-size: 22px; line-height: 1; cursor: pointer; }
 .adrep-x:focus-visible { outline: 2px solid var(--amber, #D8A75E); outline-offset: 2px; }
 .adrep-sec { margin: 14px 0 0; }
@@ -866,8 +877,10 @@ html:not([data-mode="clair"]) body {
 .nav-top { position: relative; z-index: 1; border-width: 2px; border-radius: 12px; transition: color .2s ease; }
 .nav-top[aria-current="page"], .nav-top.is-current, .nav-group.is-open > .nav-top { background: transparent; border-color: transparent; font-weight: 700; }
 @media (hover: hover) { .nav-top:hover { background: transparent; } }
-.nav-top.is-pill { color: #08080B; }
+.nav-top.is-pill, .nav-group.is-open > .nav-top.is-pill { color: #08080B; } /* ouvert : plus fort que le sable de « .is-open », sinon texte jaune sur pastille jaune */
 .nav-top.is-pill .nav-chev, .nav-group.is-open > .nav-top.is-pill .nav-chev { color: #08080B; }
+/* Pastille « à faire » d'une entrée de la barre : dans la pastille glissante de même couleur, elle passe en sombre */
+.nav-top.is-pill > .cpt-badge { background: #08080B; color: #FFFFFF; }
 .nav-group.is-open > .nav-top:not(.is-pill) { color: var(--esp-ink); }
 .nav-badge, .nav-me-badge, .cpt-badge { font-family: var(--font-pixel); font-weight: 400; border-radius: 6px; }
 .nav-icon { border-width: 2px; border-radius: 12px; }

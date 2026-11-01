@@ -24,6 +24,7 @@ export const SECTION_PERM = {
   sutom: 'souvenirs', // Sutom du gang (J8)
   cagnotte: 'cartes', champions: 'cartes', // idées C13/C15 et C17 (migration 082)
   idees: 'support', assistance: 'support',
+  'modeles-reponse': 'support', // idée 99 (migration 194) : réponses types de l'Assistance
   messagerie: 'messages',
   journal: 'journal',
   bot: 'bot',
@@ -101,6 +102,7 @@ export const LIEUX = [
   { id: 'poste', label: 'La Poste', color: '#FCA301', icon: 'poste', tagline: 'Assistance et boîte à idées', subs: [
     ...under('Demandes', [
       { id: 'assistance', label: 'Assistance', section: 'assistance', help: 'Demandes des membres à traiter', icon: 'lifebuoy' },
+      { id: 'modeles-reponse', label: 'Modèles de réponse', section: 'modeles-reponse', help: 'Réponses types de l’Assistance', icon: 'modele' },
       { id: 'idees', label: 'Boîte à idées', section: 'idees', help: 'Propositions à relire ou trier', icon: 'bulb' },
     ]),
     ...under('Échanges', [

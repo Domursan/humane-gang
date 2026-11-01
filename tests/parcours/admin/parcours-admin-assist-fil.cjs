@@ -1,6 +1,7 @@
 // Parcours : Assistance en fil (migration 032) — panel admin et « Mes demandes » côté membre.
 // (a) admin 1440 px : non lu → lu à l'ouverture, prise en charge (séparateur, « En cours »), réponse publique,
 //     note interne (teinte à part), résoudre / rouvrir, compteurs de la liste et de la navigation, temps réel.
+//     La conversation privée arrive pendant la saisie : brouillon, Note interne et focus restent, même si un envoi échoue au même moment.
 // (b) membre 390 px : « Mes demandes » affiche le statut et la réponse publique, jamais la note interne ; retour à la liste.
 // (c) visiteur : pas de « Mes demandes », le formulaire reste en place.
 // Faux Supabase (fixtures/fake-sb.mjs, scénario S.support / S.replies). Lancer : node tests/parcours/admin/parcours-admin-assist-fil.cjs
@@ -165,6 +166,76 @@ const thread = (p) => p.locator('#support-root .ui-thread-log').textContent();
     await p.screenshot({ path: shot });
     console.log('    capture : ' + shot);
     check(!p.errs.length, '(a) aucune erreur JS' + (p.errs.length ? ' (' + p.errs.join(' | ') + ')' : ''));
+    await p.context().close();
+  }
+
+  /* (a bis) Conversation privée reliée pendant la saisie */
+  {
+    const p = await openPage(browser, { page: 'admin', width: 1440, height: 900, scenario: SCN });
+    await adminSection(p, 'poste/assistance/sup-1');
+    await p.waitForSelector('#support-root .ui-composer textarea');
+    await waitFor(p, () => window.__fakeRealtime.tables().includes('hg_support'));
+    const TA = '#support-root .ui-composer textarea';
+    // Redessin de la demande avec sa conversation, comme après un envoi ou une action ; la mise à jour en direct passe par le bandeau pendant une saisie.
+    const lier = (conv) => p.evaluate(async (c) => {
+      const [{ S }, { renderSupport }] = await Promise.all([import('/assets/espaces/admin/state.js'), import('/assets/espaces/admin/support.js')]);
+      window.__DB.hg_support.find((r) => r.id === 'sup-1').conversation_id = c;
+      S.support.find((r) => r.id === 'sup-1').conversation_id = c;
+      renderSupport();
+    }, conv);
+    const brancheEnvoi = () => p.evaluate(async () => {
+      const { sb } = await import('/assets/commun/core.js');
+      const from = sb.from.bind(sb);
+      sb.from = (t) => (t !== 'hg_support_replies' || !window.__echec ? from(t) : { insert: () => ({ select: () => ({ single: () => new Promise((ok) => {
+        window.__repondre = () => ok({ data: null, error: { message: 'Envoi refusé' } });
+      }) }) }) });
+    });
+
+    await p.fill(TA, 'Brouillon à garder');
+    await p.click('#support-root .ui-note-toggle');
+    await p.focus(TA);
+    await lier('conv-direct');
+    check((await p.textContent('#support-root .ui-composer .ui-hint')).includes('conversation privée'), '(a bis) conversation reliée : la mention change');
+    check(await p.inputValue(TA) === 'Brouillon à garder', '(a bis) conversation reliée : le brouillon reste');
+    check((await p.getAttribute('#support-root .ui-note-toggle', 'aria-pressed')) === 'true', '(a bis) conversation reliée : la bascule Note interne reste');
+    check(await p.evaluate(() => document.activeElement?.matches('#support-root .ui-composer textarea')), '(a bis) conversation reliée : le focus reste dans la zone de réponse');
+
+    // Mise à jour en direct pendant la saisie : bandeau, puis « Actualiser »
+    await lier(null);
+    await p.evaluate(() => {
+      window.__DB.hg_support.find((r) => r.id === 'sup-1').conversation_id = 'conv-direct';
+      window.__fakeRealtime.emit('hg_support', { eventType: 'UPDATE', new: { id: 'sup-1' } });
+    });
+    await p.waitForSelector('.live-banner button', { timeout: 4000 });
+    await p.click('.live-banner button');
+    await waitFor(p, () => document.querySelector('#support-root .ui-composer .ui-hint')?.textContent.includes('conversation privée'));
+    check((await p.textContent('#support-root .ui-composer .ui-hint')).includes('conversation privée'), '(a bis) « Actualiser » : la mention change');
+    check(await p.inputValue(TA) === 'Brouillon à garder' && (await p.getAttribute('#support-root .ui-note-toggle', 'aria-pressed')) === 'true', '(a bis) « Actualiser » : brouillon et Note interne restent');
+
+    // Retour sans conversation, puis « Prendre en charge » : le bouton vit dans l'en-tête, le brouillon reste
+    await lier(null);
+    await p.click('#support-root .ui-dhead-actions .ui-btn:has-text("Prendre en charge")');
+    await waitFor(p, () => window.__DB.hg_support.find((r) => r.id === 'sup-1')?.conversation_id === 'conv-sup-1');
+    await waitFor(p, () => document.querySelector('#support-root .ui-composer .ui-hint')?.textContent.includes('conversation privée'));
+    check(await p.inputValue(TA) === 'Brouillon à garder' && (await p.getAttribute('#support-root .ui-note-toggle', 'aria-pressed')) === 'true', '(a bis) « Prendre en charge » : brouillon et Note interne restent');
+
+    // Envoi en cours quand la conversation change, puis refusé : le texte reste, la zone redevient utilisable
+    await lier(null);
+    await brancheEnvoi();
+    await p.evaluate(() => { window.__echec = true; });
+    await p.click('#support-root .ui-composer .ui-send');
+    await waitFor(p, () => typeof window.__repondre === 'function');
+    await lier('conv-direct');
+    await p.evaluate(() => window.__repondre());
+    await waitFor(p, () => !document.querySelector('#support-root .ui-composer textarea')?.readOnly);
+    check(await p.inputValue(TA) === 'Brouillon à garder', '(a bis) envoi refusé pendant la mise à jour : le texte reste');
+    check(await p.evaluate(() => { const t = document.querySelector('#support-root .ui-composer textarea'); return !t.readOnly && document.activeElement === t; }), '(a bis) envoi refusé : la zone reste utilisable, avec le focus');
+    check(await p.evaluate(() => document.body.innerText.includes('Envoi refusé')), '(a bis) envoi refusé : message d\'erreur');
+    await p.evaluate(() => { window.__echec = false; });
+    await p.click('#support-root .ui-composer .ui-send');
+    await waitFor(p, () => window.__DB.hg_support_replies.some((r) => r.support_id === 'sup-1' && r.body === 'Brouillon à garder'));
+    check((await dbReplies(p, 'sup-1')).some((r) => r.body === 'Brouillon à garder' && r.internal === true), '(a bis) nouvel essai : la note part');
+    check(!p.errs.length, '(a bis) aucune erreur JS' + (p.errs.length ? ' (' + p.errs.join(' | ') + ')' : ''));
     await p.context().close();
   }
 

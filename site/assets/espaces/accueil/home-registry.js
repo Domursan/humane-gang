@@ -20,7 +20,7 @@ export const HOME_BLOCKS = [
   { id: 'quotidien', label: 'Quotidien des cartes', desc: 'passage du jour, booster gratuit', kind: 'full', page: 'cartes', own: true },
   { id: 'quiz', label: 'Questions du gang', desc: 'le quiz du gang', kind: 'full', page: 'quiz', own: true },
   { id: 'fil', label: 'Fil d’activité', desc: '10 dernières entrées', kind: 'row', sel: ['.home-feed'] },
-  { id: 'anniversaires', label: 'Anniversaires', desc: 'anniversaires du mois', kind: 'row', sel: ['.home-bdays'] },
+  { id: 'anniversaires', label: 'Anniversaires', desc: 'anniversaires des 30 prochains jours', kind: 'row', sel: ['.home-bdays'] },
   { id: 'idees', label: 'Boîte à idées', desc: 'une idée pour le gang', kind: 'full', sel: ['#idees'] },
 ];
 

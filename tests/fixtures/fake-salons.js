@@ -51,6 +51,7 @@
     hg_uno_mes_parties: () => ok([]),
     hg_uno_stats: () => ok({ parties: 0, victoires: 0 }),
     hg_uno_avancer: () => ok(null),
+    hg_uno_invite: (a) => ok(a.p_action === 'etat' ? unoEtat() : []),   // invité : même état, tous ses appels passent ici
   };
 
   /* ---------- Codenames (forme de hg_ndc_etat, migration 123) : 5 × 5 cartes, deux équipes jaune et rose ---------- */
