@@ -1,88 +1,65 @@
-// Parcours : donner une carte à un membre (/pages/admin/admin.html › Jeu de cartes › Joueurs). Après un don réussi, le site appelle
-// la fonction hg-notify avec { event: 'card_gift_admin', user_id, card_id, count, shiny } (MP au membre). Si la RPC
-// hg_cards_admin_give échoue, aucun appel hg-notify n'est fait et l'erreur reste dans le tiroir.
-// Faux Supabase : fixtures/fake-sb-cartes.mjs (scenario.giveFail = true fait échouer la RPC).
+// Parcours : le Give depuis la fiche d'un membre (/pages/admin/admin.html › Jeu de cartes › Joueurs). Le tiroir ouvre le panier
+// avec le membre déjà coché, envoie hg_cards_admin_give_panier après confirmation et n'envoie aucun MP Discord.
+// Une RPC refusée laisse le tiroir ouvert et l'erreur dans la confirmation.
+// Faux Supabase : fixtures/fake-sb-cartes.mjs (scenario.bulkFail = true fait échouer la RPC).
 // Lancer : node tests/parcours/admin/parcours-admin-don-carte.cjs
 const { ROOT, check, finish, openPage, adminSection, chromium } = require('../../lib/harness.cjs');
 
 const ALICE = '00000002-0000-4000-8000-000000000002';
-/** Tiroir de dialogue ouvert (dialog.ui-drawer[open]). */
-const drawer = (p) => p.locator('dialog.ui-drawer[open]');
-/** Clique sur le bouton de validation du tiroir ouvert. */
-const submitDrawer = (p) => p.click('dialog.ui-drawer[open] [data-drawer-submit]');
+const drawer = 'dialog.ui-drawer[open]';
 /** Appels de hg-notify faits depuis le panel admin (journal du faux client). */
 const notifyCalls = (p) => p.evaluate(() => (window.__LOG || []).filter((e) => e[0] === 'fn' && e[1] === 'hg-notify').map((e) => e[2]));
-/** Appels de la RPC hg_cards_admin_give (journal du faux client). */
-const giveCalls = (p) => p.evaluate(() => (window.__LOG || []).filter((e) => e[0] === 'rpc' && e[1] === 'hg_cards_admin_give').map((e) => e[2]));
-// Donne une carte au membre choisi ; announce / notify = état des deux cases (true par défaut).
-/** Donne 2 exemplaires de la première carte à Alice depuis le tiroir ouvert. announce et notify décochent l'annonce ou le MP (cochés par défaut). */
-async function donner(p, { announce = true, notify = true } = {}) {
-  await p.selectOption('#acd-give-card', { index: 1 });
-  await p.fill('#acd-give-count', '2');
-  if (!announce) await p.click('dialog.ui-drawer[open] label:has(input[name="announce"])');
-  if (!notify) await p.click('dialog.ui-drawer[open] label:has(input[name="notify"])');
-  await submitDrawer(p);
-  await p.waitForSelector('dialog.ui-drawer', { state: 'detached', timeout: 5000 }).catch(() => {});
-  await p.waitForTimeout(300);
-}
+/** Appels de la RPC hg_cards_admin_give_panier (journal du faux client). */
+const giveCalls = (p) => p.evaluate(() => (window.__LOG || []).filter((e) => e[0] === 'rpc' && e[1] === 'hg_cards_admin_give_panier').map((e) => e[2]));
 
-/** Ouvre la fiche d'Alice dans Jeu de cartes › Joueurs, puis le tiroir « Donner une carte ». */
+/** Ouvre la fiche d'Alice dans Jeu de cartes › Joueurs, puis le tiroir « Give ». */
 async function ouvrirDon(p) {
   await adminSection(p, 'fabrique/joueurs');
   await p.evaluate((id) => { location.hash = 'cartes/joueurs/' + id; }, ALICE);
   await p.waitForSelector('[data-act="give-open"]', { timeout: 8000 });
+  check((await p.textContent('[data-act="give-open"]')).includes('Give'), 'fiche : le bouton s\'appelle « Give »');
   await p.click('[data-act="give-open"]');
-  await p.waitForSelector('dialog.ui-drawer[open] #acd-give-card', { timeout: 5000 });
+  await p.waitForSelector(`${drawer} [data-vp-card="C2"]`, { timeout: 5000 });
 }
 
 (async () => {
   console.log('Racine testée : ' + ROOT);
   const browser = await chromium.launch();
 
-  // 1. Don réussi : hg-notify reçoit card_gift_admin avec le membre, la carte, 3 exemplaires et la brillance.
+  // 1. Don réussi : Alice est cochée, deux cartes et des Paillettes, une seule RPC, aucun MP.
   let p = await openPage(browser, { page: 'admin', fixture: 'fake-sb-cartes.mjs', width: 1280, height: 900 });
   await ouvrirDon(p);
-  await p.selectOption('#acd-give-card', { index: 1 });
-  await p.fill('#acd-give-count', '3');
-  await p.click('dialog.ui-drawer[open] label:has(input[name="shiny"])');
-  await submitDrawer(p);
+  check((await p.textContent('.ui-drawer-title')).trim() === 'Give', 'tiroir : titre « Give »');
+  check(await p.isChecked(`${drawer} input[name="acd-bulk-who"][value="${ALICE}"]`), 'tiroir : Alice déjà cochée');
+  await p.click(`${drawer} [data-vp-card="C2"]`);
+  await p.click(`${drawer} [data-vp-card="C3"]`);
+  check(await p.isVisible(`${drawer} [data-gv-vue="panier"]`), 'tiroir étroit : le panier est en étapes');
+  await p.click(`${drawer} [data-gv-vue="panier"]`);
+  await p.fill('#acd-bulk-paill', '50');
+  await p.click(`${drawer} [data-drawer-submit]`);
+  await p.waitForSelector('dialog.gv-confirm [data-gv-ok]', { timeout: 5000 });
+  check((await giveCalls(p)).length === 0, 'avant confirmation : aucune RPC');
+  await p.click('dialog.gv-confirm [data-gv-ok]');
   await p.waitForSelector('dialog.ui-drawer', { state: 'detached', timeout: 5000 }).catch(() => {});
-  await p.waitForFunction(() => (window.__LOG || []).some((e) => e[0] === 'fn' && e[1] === 'hg-notify'), null, { timeout: 5000 }).catch(() => {});
-  const calls = await notifyCalls(p);
-  check(calls.length === 1, 'don réussi : hg-notify appelée une seule fois');
-  check(calls[0]?.event === 'card_gift_admin', 'don réussi : événement card_gift_admin');
-  check(calls[0]?.user_id === ALICE, 'don réussi : destinataire = le membre choisi');
-  check(typeof calls[0]?.card_id === 'string' && calls[0].card_id !== '', 'don réussi : id de la carte transmis');
-  check(calls[0]?.count === 3 && calls[0]?.shiny === true, 'don réussi : 3 exemplaires, brillante');
+  const c = await giveCalls(p);
+  check(c.length === 1, 'don réussi : une seule RPC');
+  check(JSON.stringify(c[0]?.p_users) === JSON.stringify([ALICE]), 'don réussi : p_users = Alice');
+  check(c[0]?.p_paillettes === 50 && c[0]?.p_lignes.length === 2, 'don réussi : 50 Paillettes et deux lignes');
+  check((await notifyCalls(p)).length === 0, 'don réussi : aucun MP Discord');
   check(!p.errs.length, 'don réussi : aucune erreur JS' + (p.errs.length ? ' (' + p.errs.join(' | ') + ')' : ''));
-  check((await giveCalls(p))[0]?.p_announce === true, 'fil coché (défaut) : p_announce = true');
   await p.ctx.close();
 
-  // 1b. Case « fil d'actualité » décochée : p_announce = false, le MP part toujours.
-  p = await openPage(browser, { page: 'admin', fixture: 'fake-sb-cartes.mjs', width: 1280, height: 900 });
+  // 2. RPC refusée : l'erreur reste dans la confirmation ; « Retour » ramène au tiroir, toujours rempli.
+  p = await openPage(browser, { page: 'admin', fixture: 'fake-sb-cartes.mjs', width: 1280, height: 900, scenario: { bulkFail: true } });
   await ouvrirDon(p);
-  await donner(p, { announce: false });
-  check((await giveCalls(p))[0]?.p_announce === false, 'fil décoché : p_announce = false');
-  check((await notifyCalls(p)).length === 1, 'fil décoché, MP coché : hg-notify appelée');
-  await p.ctx.close();
-
-  // 1c. Case « MP Discord » décochée : aucun appel hg-notify, le don passe quand même.
-  p = await openPage(browser, { page: 'admin', fixture: 'fake-sb-cartes.mjs', width: 1280, height: 900 });
-  await ouvrirDon(p);
-  await donner(p, { notify: false });
-  check((await giveCalls(p)).length === 1, 'MP décoché : don envoyé à la RPC');
-  check((await notifyCalls(p)).length === 0, 'MP décoché : hg-notify non appelée');
-  await p.ctx.close();
-
-  // 2. RPC refusée : aucun MP (hg-notify non appelée), l'erreur reste affichée dans le tiroir.
-  p = await openPage(browser, { page: 'admin', fixture: 'fake-sb-cartes.mjs', width: 1280, height: 900, scenario: { giveFail: true } });
-  await ouvrirDon(p);
-  await p.selectOption('#acd-give-card', { index: 1 });
-  await submitDrawer(p);
-  await p.waitForSelector('dialog.ui-drawer[open] .form-error:not([hidden])', { timeout: 5000 }).catch(() => {});
-  check(!!(await p.$('dialog.ui-drawer[open] .form-error:not([hidden])')), 'RPC refusée : erreur affichée dans le tiroir');
+  await p.click(`${drawer} [data-vp-card="C2"]`);
+  await p.click(`${drawer} [data-drawer-submit]`);
+  await p.click('dialog.gv-confirm [data-gv-ok]');
+  await p.waitForSelector('dialog.gv-confirm .qk-err:not([hidden])', { timeout: 5000 });
+  check((await p.textContent('dialog.gv-confirm .qk-err')).includes('plus disponible'), 'RPC refusée : erreur affichée');
   check((await notifyCalls(p)).length === 0, 'RPC refusée : hg-notify non appelée');
-  check(await drawer(p).count() === 1, 'RPC refusée : le tiroir reste ouvert');
+  await p.click('dialog.gv-confirm .btn[data-gv-retour]');
+  check(await p.locator(drawer).count() === 1 && await p.locator(`${drawer} .gv-ls [data-gv-x]`).count() === 1, 'RPC refusée : le tiroir reste ouvert avec son panier');
   await p.ctx.close();
 
   await browser.close();

@@ -139,7 +139,7 @@ Source : `site/assets/espaces/admin/admin-roles.js`. Droit : `membres`.
 ### La Fabrique de cartes › Gestion globale (`#fabrique/gestion`)
 
 Source : `site/assets/espaces/admin/admin-gestion.js`, section `cartes-gestion`, droit `cartes`. Trois blocs :
-- **Give** : don groupé, avec la même confirmation et la même RPC que le tiroir d'Économie ;
+- **Give** : le panier (`give-panier.js`, RPC `hg_cards_admin_give_panier`, migration 196). Un seul don mélange Paillettes, cartes une à une, série entière, type entier et plusieurs sortes de boosters, pour un membre, plusieurs ou tout le gang, tout ou rien. Quantités libres, 100 000 exemplaires au plus par don ; une carte limitée peut dépasser son maximum, le panier et la confirmation l'annoncent. Le même panier sert dans la fenêtre Give du plateau, « Don groupé » (Économie) et le bouton Give de la fiche d'un membre. Pas de MP Discord ;
 - **Résumé de l'économie** : santé de l'économie (`hg_eco_health`), statistiques des types de boosters (`hg_booster_type_stats`), enchères (`hg_auctions_admin`), seulement ce que la base renvoie ;
 - **Derniers gives**.
 
@@ -247,6 +247,7 @@ Parcours du panel (`tests/parcours/admin/`) :
 | `parcours-admin-complements.cjs` | Quêtes, défis, réglages du site, pages |
 | `parcours-admin-arcade.cjs` | Arcade des pages 404 : classement, effacement d'un score |
 | `parcours-admin-gestion.cjs` | La Fabrique de cartes › Gestion globale |
+| `parcours-admin-give-panier.cjs` | Le give en panier : don mélangé, lots, brillance, dépassement, garde-fou, journal, 390 px |
 | `parcours-admin-quick.cjs` | Actions rapides du plateau : Give, Nouvelle enchère, Lancer un drop (petites fenêtres) |
 | `parcours-staff.cjs` | Section Staff (administrateur), Staff restreint, membre simple redirigé |
 

@@ -59,3 +59,4 @@ supabase/migrations/192_entretien_admin.sql
 supabase/migrations/193_echanges_expiration_alerte.sql
 supabase/migrations/194_modeles_reponse.sql
 supabase/migrations/195_centre_notifications.sql
+supabase/migrations/196_give_panier.sql

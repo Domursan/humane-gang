@@ -893,6 +893,12 @@ export function createClient() {
         return { data: { membres: ids.length, type: args.p_kind, montant: args.p_amount, annonce: args.p_announce, batch: 'lot-test',
           detail: ids.map((id) => ({ user_id: id, pseudo: DB.hg_profiles.find((p) => p.id === id)?.pseudo ?? '' })) }, error: null };
       }
+      // Give en panier (migration 196) : p_users null = tout le gang. scenario.bulkFail = la RPC refuse.
+      if (fn === 'hg_cards_admin_give_panier') {
+        if (S.bulkFail) return { data: null, error: { message: 'Une carte du panier n\'est plus disponible' } };
+        const ids = [...new Set(args.p_users ?? DB.hg_profiles.filter((p) => !p.is_ghost).map((p) => p.id))];
+        return { data: { membres: ids.length, paillettes: args.p_paillettes, exemplaires: 0, boosters: 0, annonce: args.p_announce, batch: 'lot-test', resume: [] }, error: null };
+      }
       // Gestion globale (admin-gestion.js) : santé de l'économie et statistiques des boosters (lecture seule).
       if (fn === 'hg_eco_health') return S.ecoFail ? { data: null, error: { message: 'Santé de l\'économie indisponible' } } : { data: GESTION_ECO, error: null };
       if (fn === 'hg_booster_type_stats') return S.boostersFail ? { data: null, error: { message: 'Statistiques indisponibles' } } : { data: GESTION_BOOSTERS, error: null };

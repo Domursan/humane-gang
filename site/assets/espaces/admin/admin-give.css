@@ -1,0 +1,81 @@
+/* Give en panier (assets/espaces/admin/give-panier.js) : catalogue à gauche, panier à droite ; en colonne étroite, trois étapes.
+   Tokens du site (base.css). La mise en page suit la largeur du bloc : page, fenêtre ou tiroir. */
+
+.gv-zone { container-type: inline-size; display: flex; flex-direction: column; gap: 14px; min-width: 0; --vp-c: #159946; --qk-c: #159946; }
+.gv { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); align-items: start; }
+.gv-g, .gv-d { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.gv-d { position: sticky; top: 12px; }
+.gv-vues { display: none; }
+.gv-t { margin: 0 0 8px; font-family: var(--font-pixel); font-weight: 400; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.gv-cat { margin-top: 12px; }
+.gv-cat[hidden] { display: none; }
+.gv-liste { max-height: 176px; }
+.gv-lot { width: 100%; min-height: 48px; white-space: normal; line-height: 1.25; }
+.gv-err { margin: 0; }
+
+/* Quantité déjà au panier, sur le catalogue */
+.vp-n {
+  position: absolute; top: -4px; right: -2px; z-index: 3; min-width: 28px; height: 28px; padding: 0 6px; box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 2px solid #000;
+  background: #159946; color: #0D0B0A; font-weight: 800; font-size: 13px; box-shadow: 2px 2px 0 #000;
+}
+.vp-tile, .vp-type { position: relative; }
+.vp-choix[hidden], .vp-sum[hidden] { display: none; }
+
+/* Panier */
+.gv-panier { border: 2px solid #159946; border-radius: 14px; background: var(--surface-2); box-shadow: 5px 5px 0 #000; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.gv-panier-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 44px; }
+.gv-panier-h h3 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 20px; }
+.gv-vider { min-height: 44px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; text-decoration: underline; cursor: pointer; }
+.gv-ls { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 470px; overflow-y: auto; overscroll-behavior: contain; }
+.gv-l { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; padding: 8px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); }
+.gv-vis { width: 52px; height: 72px; overflow: hidden; display: flex; align-items: center; justify-content: center; flex: none; }
+.gv-vis .hgc { --w: 52px; flex: none; }
+.gv-vis .vp-cart { --s: .24; }
+.gv-pile { width: 42px; height: 58px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid var(--sand); border-radius: 8px; box-shadow: 3px 3px 0 var(--sand); color: var(--sand); font-family: var(--font-display); font-size: 13px; }
+.gv-etoile { width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; font-size: 26px; color: var(--sand); }
+.gv-txt { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.gv-txt strong { font-size: 15px; overflow-wrap: anywhere; line-height: 1.2; }
+.gv-txt span { font-size: 13px; color: var(--muted); line-height: 1.25; }
+.gv-x { width: 44px; height: 44px; border: 0; background: none; color: var(--muted); font-size: 22px; cursor: pointer; border-radius: 8px; }
+.gv-x:hover, .gv-x:focus-visible { color: var(--text); background: var(--surface-2); }
+.gv-bas { grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.gv-qte { display: inline-flex; align-items: center; gap: 4px; }
+.gv-qte button { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text); font-size: 20px; cursor: pointer; }
+.gv-qte input { width: 76px; height: 44px; box-sizing: border-box; padding: 0 4px; text-align: center; font-size: 16px; font-weight: 700; border-radius: 10px; border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); -moz-appearance: textfield; }
+.gv-qte input::-webkit-outer-spin-button, .gv-qte input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.gv-qte input.gv-p { width: 130px; }
+.gv-br { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 14px; cursor: pointer; }
+.gv-br input { width: 20px; height: 20px; accent-color: var(--sand); }
+.gv-warn { grid-column: 1 / -1; margin: 2px 0 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--sand); color: var(--sand); font-size: 13px; line-height: 1.35; }
+.gv-rapides { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.gv-rapides button { min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border-strong); background: transparent; color: var(--text); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.gv-vide { margin: 0; padding: 18px 12px; text-align: center; color: var(--muted); border: 1px dashed var(--border-strong); border-radius: 10px; }
+.gv-sum { margin: 0; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); font-size: 15px; line-height: 1.45; font-weight: 600; }
+.gv-sum.is-warn { color: var(--rose); border-color: var(--rose); }
+.gv-opts { display: flex; flex-direction: column; gap: 10px; }
+.gv-opts .field { margin: 0; }
+
+/* Fenêtres */
+.qk-dlg.gv-dlg { width: min(1180px, calc(100vw - 32px)); }
+.qk-dlg.gv-dlg .gv-d { top: 0; }
+.qk-dlg.gv-dlg .vp-grid-cartes { max-height: 300px; }
+.qk-dlg.gv-dlg .gv-ls { max-height: 300px; }
+.qk-dlg.gv-confirm { width: min(680px, calc(100vw - 32px)); }
+.gv-strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.gv-plus { width: 52px; height: 72px; display: flex; align-items: center; justify-content: center; border: 1px dashed var(--border-strong); border-radius: 8px; color: var(--muted); font-weight: 700; }
+.gv-recu { margin: 0; padding: 0 0 0 18px; display: flex; flex-direction: column; gap: 4px; font-size: 15px; }
+
+/* Bloc étroit : une colonne, trois étapes */
+@container (max-width: 759px) {
+  .gv { grid-template-columns: minmax(0, 1fr); }
+  .gv-d { position: static; }
+  .gv-vues { display: flex; width: 100%; box-sizing: border-box; }
+  .gv-vues button { flex: 1 1 0; padding: 0 6px; font-size: 14px; }
+  .gv[data-vue="membres"] .gv-p-ajout, .gv[data-vue="membres"] .gv-d,
+  .gv[data-vue="ajouter"] .gv-p-mbr, .gv[data-vue="ajouter"] .gv-d,
+  .gv[data-vue="panier"] .gv-g { display: none; }
+  .gv-ls { max-height: none; }
+  .qk-dlg.gv-dlg .gv-ls { max-height: none; }
+}
+@media (max-width: 480px) { .gv-panier { box-shadow: 3px 3px 0 #000; } .gv-qte input.gv-p { width: 100px; } }

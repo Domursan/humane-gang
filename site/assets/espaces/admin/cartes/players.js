@@ -1,14 +1,14 @@
 // =====================================================================
 // Cartes admin : sous-section « Joueurs » en liste + détail. La liste des membres est en colonne 2 ; le détail
 // (portefeuille, exemplaires, journal) occupe la zone principale. Paillettes et cartes se donnent dans un tiroir.
-// Dépendances : core.js (sb, toast, errMsg, esc, $, avatarHtml, notify), cartes-ui.js (libellés, numéros, Paillettes),
+// Dépendances : core.js (sb, toast, errMsg, esc, $, avatarHtml), cartes-ui.js (libellés, numéros, Paillettes),
 // ui-confirm.js, admin/ui/drawer.js, admin/ui/list.js, admin/shell.js (navigate), constants.js, state.js, data.js,
 // helpers.js.
-// Lit : hg_wallet_log (journal). RPC : hg_cards_admin_paillettes, hg_cards_admin_give, hg_cards_admin_take.
+// Lit : hg_wallet_log (journal). RPC : hg_cards_admin_paillettes, hg_cards_admin_take. Le bouton Give ouvre le panier (bulk.js).
 // Exporte : mountPlayersList, refreshPlayersList, playersPanel, refreshLog, playerActions, takeCopy.
 // =====================================================================
 import { paillSym } from '../../../commun/paillettes.js';
-import { sb, toast, errMsg, esc, $, avatarHtml, notify } from '../../../commun/core.js';
+import { sb, toast, errMsg, esc, $, avatarHtml } from '../../../commun/core.js';
 import { rarityLabel, serialLabel, fmtP } from '../../cartes/cartes-ui.js';
 import { confirmBox } from '../../../commun/ui-confirm.js';
 import { openDrawer } from '../ui/drawer.js';
@@ -17,7 +17,8 @@ import { navigate } from '../shell.js';
 import { ICON, REASON_LABEL } from './constants.js';
 import { C } from './state.js';
 import { refresh } from './data.js';
-import { check, act, nf, tile, pseudo, fmtWhen, activeProfiles, uniqueRestants } from './helpers.js';
+import { check, act, nf, tile, pseudo, fmtWhen, activeProfiles } from './helpers.js';
+import { openBulkGift } from './bulk.js';
 
 /* Libellé lisible d'une raison de mouvement de Paillettes ; à défaut, la raison telle quelle. */
 const REASON = (r) => REASON_LABEL[r] || r;
@@ -86,7 +87,7 @@ export function playersPanel() {
         <div class="btn-row acd-player-actions">
           <button class="btn btn-primary" type="button" data-act="pay-open" data-sign="1">Donner des Paillettes</button>
           <button class="btn btn-ghost" type="button" data-act="pay-open" data-sign="-1">Retirer des Paillettes</button>
-          <button class="btn btn-ghost" type="button" data-act="give-open">${ICON.plus} Donner une carte</button>
+          <button class="btn btn-ghost" type="button" data-act="give-open">${ICON.plus} Give</button>
         </div>
       </div>
       <div class="acd-tiles">${tile(fmtP(w.paillettes), 'Paillettes')}${tile(nf(w.boosters_opened), 'Boosters ouverts')}${tile(nf(w.pity_epique), 'Boosters sans épique')}</div>
@@ -122,7 +123,7 @@ export async function refreshLog() {
 /* Gestionnaires des boutons du détail membre : ouvrent les tiroirs. */
 export const playerActions = {
   'pay-open': (t) => openPaillettesDrawer(t.dataset.sign === '-1' ? -1 : 1),
-  'give-open': () => openGiveDrawer(),
+  'give-open': () => openBulkGift({ choisis: [C.playerId], titre: 'Give', sousTitre: pseudo(C.playerId) }),
 };
 
 /** Ouvre le tiroir pour donner (sign = 1) ou retirer (sign = -1) des Paillettes. */
@@ -154,65 +155,6 @@ async function adjustPaillettes(form, sign, uid) {
   try {
     const bal = check(await sb.rpc('hg_cards_admin_paillettes', { p_user: uid, p_delta: sign * n, p_reason: reason }));
     toast(`Solde de ${pseudo(uid)} : ${fmtP(bal)}`, 'ok');
-    await refresh();
-  } catch (e) { showErr(errMsg(e)); return false; }
-}
-
-/** Ouvre le tiroir pour donner une carte : les cartes actives, groupées par série. */
-function openGiveDrawer() {
-  const uid = C.playerId;
-  const cardOptions = C.sets.map((s) => {
-    const list = C.cards.filter((k) => k.set_id === s.id && k.active).sort((a, b) => a.number - b.number);
-    // Une carte unique dont tous les exemplaires sont attribués ne peut plus être redonnée.
-    return list.length ? `<optgroup label="${esc(s.name)}">${list.map((k) => {
-      const taken = k.rarity === 'unique' && uniqueRestants(k) <= 0;
-      const motif = Number(k.max_copies) > 1 ? 'tous les exemplaires sont attribués' : 'déjà attribuée';
-      return `<option value="${esc(k.id)}"${taken ? ' disabled' : ''}>#${esc(k.number)} · ${esc(k.name)} (${esc(rarityLabel(k.rarity))})${taken ? ` : ${motif}` : ''}</option>`;
-    }).join('')}</optgroup>` : '';
-  }).join('');
-  openDrawer({
-    title: 'Donner une carte',
-    subtitle: pseudo(uid),
-    submitLabel: 'Donner',
-    body: `<div class="stack acd-form" id="acd-pl-give">
-      <p class="form-error" role="alert" hidden></p>
-      <div class="field"><label for="acd-give-card">Carte</label><select id="acd-give-card" name="card" required>${cardOptions || '<option value="">Aucune carte active</option>'}</select></div>
-      <div class="acd-grid-2">
-        <div class="field"><label for="acd-give-count">Nombre d'exemplaires</label><input id="acd-give-count" name="count" type="number" min="1" max="100" step="1" inputmode="numeric" value="1"></div>
-        <label class="switch acd-switch"><input type="checkbox" name="shiny"><span class="switch-ui" aria-hidden="true"></span><span>Brillante</span></label>
-      </div>
-      <div class="stack acd-form-checks">
-        <label class="switch acd-switch"><input type="checkbox" name="announce" checked><span class="switch-ui" aria-hidden="true"></span><span>Afficher dans le fil d'actualité</span></label>
-        <label class="switch acd-switch"><input type="checkbox" name="notify" checked><span class="switch-ui" aria-hidden="true"></span><span>Prévenir par MP Discord</span></label>
-      </div>
-      <p class="small muted">Les cartes limitées reçoivent le prochain numéro disponible.</p>
-    </div>`,
-    onSubmit: (form) => giveCard(form, uid),
-  });
-}
-/** Donne une ou plusieurs cartes au membre ; renvoie false (tiroir ouvert) en cas d'échec. */
-async function giveCard(form, uid) {
-  const err = $('.form-error', form);
-  /* Affiche le message d'erreur dans le formulaire, ou le masque si le message est vide. */
-  const showErr = (m) => { err.textContent = m; err.hidden = !m; };
-  showErr('');
-  const cardId = form.elements.card.value;
-  const count = Number(form.elements.count.value);
-  if (!cardId) { showErr('Choisis une carte.'); return false; }
-  const picked = C.cardById.get(cardId);
-  if (picked?.rarity === 'unique') {
-    const restants = uniqueRestants(picked);
-    if (restants <= 0) { showErr(Number(picked.max_copies) > 1 ? 'Tous les exemplaires de cette carte unique sont attribués : plus aucun exemplaire disponible.' : 'Cette carte unique est déjà attribuée : plus aucun exemplaire disponible.'); return false; }
-    if (count > restants) { showErr(`Il reste ${nf(restants)} exemplaire${restants > 1 ? 's' : ''} de cette carte unique : indique au plus ${restants}.`); return false; }
-  }
-  if (!Number.isInteger(count) || count < 1 || count > 100) { showErr('Nombre d\'exemplaires : entre 1 et 100.'); return false; }
-  const shiny = form.elements.shiny.checked;
-  const announce = form.elements.announce.checked;
-  const notifyMember = form.elements.notify.checked;
-  try {
-    check(await sb.rpc('hg_cards_admin_give', { p_user: uid, p_card: cardId, p_shiny: shiny, p_count: count, p_announce: announce }));
-    toast(`${nf(count)} carte${count > 1 ? 's' : ''} donnée${count > 1 ? 's' : ''} à ${pseudo(uid)}`, 'ok');
-    if (notifyMember) notify('card_gift_admin', { user_id: uid, card_id: cardId, count, shiny }).catch(() => {}); // MP au membre (opt-in)
     await refresh();
   } catch (e) { showErr(errMsg(e)); return false; }
 }

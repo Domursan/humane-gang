@@ -1,7 +1,8 @@
 // =====================================================================
 // Sélecteurs visuels de l'admin : une carte (cardPicker) ou un booster (boosterPicker) se choisit sur ses visuels,
 // avec recherche, filtres (série, rareté) et « Voir plus ». Utilisé par les fenêtres Give et Drop (admin/quick.js),
-// le tiroir « Don groupé » (admin-cards/bulk.js), la page Gestion globale (admin-gestion.js) et les drops (admin-cards/drops.js).
+// le panier du give (admin/give-panier.js) et les drops (admin-cards/drops.js).
+// Mode ajout (option ajout) : un clic ajoute au panier au lieu de choisir ; la quantité s'affiche sur le visuel.
 // Carte : cardHtml (cartes-ui.js), taille sm. Booster : même cartouche que la Boutique (cart-box, booster-styles.js,
 // booster-themes.js). Les types et les exemplaires restants se lisent avec chargerBoosters et chargerRestants.
 // Clavier : Tab entre les visuels (un seul arrêt par grille), flèches pour se déplacer, Début et Fin aux extrémités.
@@ -13,7 +14,7 @@
 // booster-themes.js (themeDecor), admin-cards/helpers.js (fetchAll, nf).
 // =====================================================================
 import { sb, esc, currentLogo } from '../../commun/core.js';
-import { RARITIES, rarityLabel, cardHtml } from '../cartes/cartes-ui.js';
+import { RARITIES, FAMILIES, rarityLabel, cardHtml } from '../cartes/cartes-ui.js';
 import { boosterStyleClass } from '../cartes/booster-styles.js';
 import { themeDecor } from '../cartes/booster-themes.js';
 import { fetchAll, nf } from './cartes/helpers.js';
@@ -149,31 +150,36 @@ function navGrille(e, sel) {
  * @param {object} o
  *   cards : cartes proposées (déjà filtrées : actives) ; sets : séries (id, name, sort) ;
  *   restants : Map identifiant -> restants (chargerRestants) ; bloque : (carte) => motif (chaîne) qui interdit le choix, ou '' ;
- *   idp : préfixe des identifiants HTML (unique par fenêtre) ; value : carte choisie au départ ; onChange : appelée au choix ou à la brillance.
- * @returns {{value: () => {card: string, name: string, obj: object|null, shiny: boolean}, set: (id: string) => void, focus: () => void}}
+ *   idp : préfixe des identifiants HTML (unique par fenêtre) ; value : carte choisie au départ ; onChange : appelée au choix ou à la brillance ;
+ *   types : ajoute le filtre « Type » ; ajout : (carte) => void, active le mode ajout ; quantite : (carte) => nombre au panier ; onFiltre : appelée quand les filtres changent.
+ * @returns {{value: () => {card: string, name: string, obj: object|null, shiny: boolean}, set: (id: string) => void, focus: () => void, rafraichir: () => void, filtres: () => {set: string, rar: string, fam: string}, lotHost: HTMLElement|null}}
  */
-export function cardPicker(host, { cards = [], sets = [], restants = new Map(), bloque = () => '', idp = 'vp', value = '', onChange = () => {} } = {}) {
+export function cardPicker(host, { cards = [], sets = [], restants = new Map(), bloque = () => '', idp = 'vp', value = '', onChange = () => {}, types = false, ajout = null, quantite = () => 0, onFiltre = () => {} } = {}) {
   ensureVisualCss();
   const ordreSerie = new Map(sets.map((s) => [s.id, Number(s.sort) || 0]));
   const liste = cards.slice().sort((a, b) => ((ordreSerie.get(a.set_id) ?? 1e9) - (ordreSerie.get(b.set_id) ?? 1e9))
     || ((Number(a.number) || 0) - (Number(b.number) || 0)) || String(a.name).localeCompare(b.name, 'fr'));
   const byId = new Map(cards.map((k) => [k.id, k]));
-  const S = { q: '', set: '', rar: '', n: PAGE, sel: byId.has(value) && !bloque(byId.get(value)) ? value : '' };
+  const S = { q: '', set: '', rar: '', fam: '', n: PAGE, sel: byId.has(value) && !bloque(byId.get(value)) ? value : '' };
   const seriesAvec = sets.filter((s) => cards.some((k) => k.set_id === s.id)).sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0));
 
+  const famillesAvec = FAMILIES.filter((f) => cards.some((k) => k.family === f.id));
   host.innerHTML = `<div class="vp vp-cards">
-    <div class="vp-filtres">
+    <div class="vp-filtres${types ? ' vp-filtres-4' : ''}">
       <div class="field"><label for="${idp}-q">Rechercher une carte</label>
         <input id="${idp}-q" type="search" autocomplete="off" placeholder="Nom de la carte"></div>
       <div class="field"><label for="${idp}-set">Série</label>
         <select id="${idp}-set"><option value="">Toutes les séries</option>${seriesAvec.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></div>
       <div class="field"><label for="${idp}-rar">Rareté</label>
         <select id="${idp}-rar"><option value="">Toutes les raretés</option>${RARITIES.map((r) => `<option value="${esc(r.id)}">${esc(r.label)}</option>`).join('')}</select></div>
+      ${types ? `<div class="field"><label for="${idp}-fam">Type</label>
+        <select id="${idp}-fam"><option value="">Tous les types</option>${famillesAvec.map((f) => `<option value="${esc(f.id)}">${esc(f.label)}</option>`).join('')}</select></div>` : ''}
     </div>
     <p class="vp-compte small muted" id="${idp}-n" aria-live="polite"></p>
+    ${ajout ? `<div id="${idp}-lot"></div>` : ''}
     <div class="vp-grid vp-grid-cartes" role="group" aria-label="Cartes" id="${idp}-grid"></div>
     <button class="btn btn-ghost btn-sm vp-plus" type="button" id="${idp}-plus" hidden></button>
-    <div class="vp-choix">
+    <div class="vp-choix"${ajout ? ' hidden' : ''}>
       <p class="vp-sum" id="${idp}-sum" aria-live="polite"></p>
       <label class="vp-shiny" id="${idp}-shinyl" hidden><input type="checkbox" name="shiny" id="${idp}-shiny"> <span>Brillante</span></label>
     </div>
@@ -184,7 +190,7 @@ export function cardPicker(host, { cards = [], sets = [], restants = new Map(), 
   /** Liste filtrée (recherche, série, rareté), dans l'ordre d'affichage. */
   const visibles = () => {
     const needle = norm(S.q.trim());
-    return liste.filter((k) => (!S.set || k.set_id === S.set) && (!S.rar || k.rarity === S.rar) && (!needle || norm(k.name).includes(needle)));
+    return liste.filter((k) => (!S.set || k.set_id === S.set) && (!S.rar || k.rarity === S.rar) && (!S.fam || k.family === S.fam) && (!needle || norm(k.name).includes(needle)));
   };
   /** Légende d'une carte : motif de blocage, ou nombre restant si la carte est à tirage limité. */
   const legende = (k) => {
@@ -196,10 +202,11 @@ export function cardPicker(host, { cards = [], sets = [], restants = new Map(), 
   };
   /** Une carte de la grille : visuel (bouton), légende dessous. */
   const tuile = (k) => {
-    const sel = S.sel === k.id;
+    const n = ajout ? quantite(k) : 0;
+    const sel = ajout ? n > 0 : S.sel === k.id;
     const l = legende(k);
-    return `<div class="vp-tile${sel ? ' is-sel' : ''}${l.off ? ' is-off' : ''}">${cardHtml(k, {
-      size: 'sm', button: true, shiny: sel && shinyOn(),
+    return `<div class="vp-tile${sel ? ' is-sel' : ''}${l.off ? ' is-off' : ''}">${n ? `<span class="vp-n" aria-hidden="true">×${esc(nf(n))}</span>` : ''}${cardHtml(k, {
+      size: 'sm', button: true, shiny: !ajout && sel && shinyOn(),
       attrs: `data-vp-card="${esc(k.id)}" aria-pressed="${sel}"${l.off ? ' disabled' : ''}`,
     })}<span class="vp-cap${l.off ? ' is-warn' : ''}">${esc(l.txt)}</span></div>`;
   };
@@ -229,6 +236,7 @@ export function cardPicker(host, { cards = [], sets = [], restants = new Map(), 
     plus.textContent = `Voir plus de cartes (${nf(tout.length - page.length)} de plus)`;
     roving(grille, 'button[data-vp-card]');
     majChoix();
+    onFiltre();
   };
 
   host.addEventListener('input', (e) => {
@@ -237,11 +245,19 @@ export function cardPicker(host, { cards = [], sets = [], restants = new Map(), 
   host.addEventListener('change', (e) => {
     if (e.target.id === `${idp}-set`) { S.set = e.target.value; S.n = PAGE; rendreGrille(); }
     else if (e.target.id === `${idp}-rar`) { S.rar = e.target.value; S.n = PAGE; rendreGrille(); }
+    else if (e.target.id === `${idp}-fam`) { S.fam = e.target.value; S.n = PAGE; rendreGrille(); }
     else if (e.target.id === `${idp}-shiny`) onChange();
   });
   grille.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-vp-card]');
     if (!b || b.disabled) return;
+    if (ajout) {
+      const id = b.dataset.vpCard, haut = grille.scrollTop;
+      ajout(byId.get(id));
+      grille.scrollTop = haut;
+      grille.querySelector(`[data-vp-card="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+      return;
+    }
     S.sel = b.dataset.vpCard;
     rendreGrille();
     grille.querySelector(`[data-vp-card="${CSS.escape(S.sel)}"]`)?.focus({ preventScroll: true });
@@ -263,6 +279,9 @@ export function cardPicker(host, { cards = [], sets = [], restants = new Map(), 
     },
     set(id) { if (byId.has(id) && !bloque(byId.get(id))) { S.sel = id; rendreGrille(); } },
     focus() { host.querySelector(`#${idp}-q`)?.focus(); },
+    rafraichir: () => { const haut = grille.scrollTop; rendreGrille(); grille.scrollTop = haut; },
+    filtres: () => ({ set: S.set, rar: S.rar, fam: S.fam }),
+    lotHost: host.querySelector(`#${idp}-lot`),
   };
 }
 
@@ -274,10 +293,10 @@ export function cardPicker(host, { cards = [], sets = [], restants = new Map(), 
  * @param {HTMLElement} host conteneur (vidé et rempli)
  * @param {object} o
  *   types : lignes de hg_booster_types ; idp : préfixe des identifiants ; value : identifiant choisi au départ
- *   (repli : premier type actif) ; onChange : appelée au choix.
- * @returns {{value: () => {id: string, name: string, obj: object|null}, set: (id: string) => void, focus: () => void}}
+ *   (repli : premier type actif) ; onChange : appelée au choix ; ajout : (type) => void, active le mode ajout ; quantite : (type) => nombre au panier.
+ * @returns {{value: () => {id: string, name: string, obj: object|null}, set: (id: string) => void, focus: () => void, rafraichir: () => void}}
  */
-export function boosterPicker(host, { types = [], idp = 'vpb', value = 'classique', onChange = () => {} } = {}) {
+export function boosterPicker(host, { types = [], idp = 'vpb', value = 'classique', onChange = () => {}, ajout = null, quantite = () => 0 } = {}) {
   ensureVisualCss();
   const actifs = types.filter((t) => t.active !== false);
   const passes = types.filter((t) => t.active === false);
@@ -286,16 +305,17 @@ export function boosterPicker(host, { types = [], idp = 'vpb', value = 'classiqu
 
   /** Une cartouche cliquable : visuel, nom, nombre de cartes, description au survol ou au focus. */
   const tuile = (t) => {
-    const sel = S.sel === t.id;
+    const n = ajout ? quantite(t) : 0;
+    const sel = ajout ? n > 0 : S.sel === t.id;
     const desc = t.description ? `<span class="vp-desc" id="${idp}-d-${esc(t.id)}">${esc(t.description)}</span>` : '';
     return `<button type="button" class="vp-type${sel ? ' is-sel' : ''}" data-vp-type="${esc(t.id)}" aria-pressed="${sel}"${t.description ? ` aria-describedby="${idp}-d-${esc(t.id)}"` : ''}>`
-      + `${cartHtml(t)}<span class="vp-type-n">${esc(t.name)}</span><span class="vp-type-s">${esc(nf(Number(t.size) || 5))} cartes</span>${desc}</button>`;
+      + `${n ? `<span class="vp-n" aria-hidden="true">×${esc(nf(n))}</span>` : ''}${cartHtml(t)}<span class="vp-type-n">${esc(t.name)}</span><span class="vp-type-s">${esc(nf(Number(t.size) || 5))} cartes</span>${desc}</button>`;
   };
   host.innerHTML = `<div class="vp vp-boost" id="${idp}">
     ${actifs.length ? `<div class="vp-grid vp-grid-boost" role="group" aria-label="Boosters" id="${idp}-grid">${actifs.map(tuile).join('')}</div>` : '<p class="small muted">Aucun booster actif.</p>'}
     ${passes.length ? `<p class="vp-sub" id="${idp}-passes">Boosters d’événements passés</p>`
       + `<div class="vp-grid vp-grid-boost vp-grid-past" role="group" aria-labelledby="${idp}-passes" id="${idp}-grid-passes">${passes.map(tuile).join('')}</div>` : ''}
-    <p class="vp-sum" id="${idp}-sum" aria-live="polite"></p>
+    <p class="vp-sum" id="${idp}-sum" aria-live="polite"${ajout ? ' hidden' : ''}></p>
   </div>`;
 
   /** Choix affiché sous les grilles : nom, nombre de cartes, description (lisible sans survol). */
@@ -311,6 +331,12 @@ export function boosterPicker(host, { types = [], idp = 'vpb', value = 'classiqu
   host.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-vp-type]');
     if (!b) return;
+    if (ajout) {
+      const id = b.dataset.vpType;
+      ajout(byId.get(id));
+      host.querySelector(`[data-vp-type="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+      return;
+    }
     S.sel = b.dataset.vpType;
     host.querySelectorAll('button[data-vp-type]').forEach((x) => {
       const on = x.dataset.vpType === S.sel;
@@ -336,5 +362,13 @@ export function boosterPicker(host, { types = [], idp = 'vpb', value = 'classiqu
       majSomme();
     },
     focus() { host.querySelector('button[data-vp-type]')?.focus(); },
+    rafraichir() {
+      if (!ajout) return;
+      const actuelle = host.querySelector(`#${idp}-grid`);
+      if (actuelle) actuelle.innerHTML = actifs.map(tuile).join('');
+      const passe = host.querySelector(`#${idp}-grid-passes`);
+      if (passe) passe.innerHTML = passes.map(tuile).join('');
+      host.querySelectorAll('.vp-grid').forEach((g) => roving(g, 'button[data-vp-type]'));
+    },
   };
 }

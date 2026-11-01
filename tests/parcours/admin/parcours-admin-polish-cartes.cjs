@@ -137,12 +137,13 @@ const calls = (p, fn) => p.evaluate((f) => (window.__LOG || []).filter((x) => x[
   await waitClosed(p);
 
   await p.click('[data-act="give-open"]');
-  await p.waitForSelector('dialog.ui-drawer[open] #acd-give-card', { timeout: 5000 });
-  check(await drawerTitle(p) === 'Donner une carte', 'joueurs : « Donner une carte » ouvre le tiroir');
-  await p.selectOption('#acd-give-card', { index: 1 }).catch(() => {});
+  await p.waitForSelector('dialog.ui-drawer[open] [data-vp-card="C1"]', { timeout: 5000 });
+  check(await drawerTitle(p) === 'Give', 'joueurs : « Give » ouvre le tiroir');
+  await p.click('dialog.ui-drawer[open] [data-vp-card="C1"]');
   await submitDrawer(p);
+  await p.click('dialog.gv-confirm [data-gv-ok]');
   await waitClosed(p);
-  check((await calls(p, 'hg_cards_admin_give')).length === 1, 'joueurs : carte donnée (appel RPC attendu)');
+  check((await calls(p, 'hg_cards_admin_give_panier')).length === 1, 'joueurs : carte donnée (appel RPC attendu)');
 
   check(await drawer(p).count() === 0, 'joueurs : aucun tiroir resté ouvert');
   check(p.errs.length === 0, 'bureau : aucune erreur console (' + p.errs.join(' | ') + ')');

@@ -1,20 +1,19 @@
 // =====================================================================
 // Admin : Le jeu de cartes › Gestion globale (route #fabrique/gestion, section #cartes-gestion, racine #gestion-root).
-// Trois blocs : « Give » (don groupé : même confirmation et même RPC que le tiroir d’Économie ; carte et booster se choisissent
-// sur leurs visuels, admin/visual-pick.js), « Résumé de l’économie » (hg_eco_health via admin/eco-health.js, hg_booster_type_stats,
+// Trois blocs : « Give » (le panier, admin/give-panier.js : même confirmation et même RPC que la fenêtre Give), « Résumé de l’économie » (hg_eco_health via admin/eco-health.js, hg_booster_type_stats,
 // hg_auctions_admin : seulement ce que la base renvoie) et « Derniers gives » (hg_admin_log : actions « don_groupe » et « carte_donnee »).
-// Droit : « cartes ». Écritures : RPC uniquement (hg_cards_admin_bulk_give). Lectures : hg_staff_directory, hg_cards,
+// Droit : « cartes ». Écritures : RPC uniquement (hg_cards_admin_give_panier). Lectures : hg_staff_directory, hg_cards,
 // hg_card_sets, hg_card_copies (restants), hg_booster_types, hg_admin_log (lecture seule).
-// Dépendances : core.js (sb, toast, errMsg, esc, $), admin-cards/bulk.js (KIND, MAX_MEMBRES, recapText, invalide, donnerGroupe),
-// admin-cards/helpers.js (check, fetchAll, nf, fmtWhen), admin/eco-health.js (loadEco, alertesEco), admin/visual-pick.js.
+// Dépendances : core.js (sb, toast, errMsg, esc, $), admin/give-panier.js (creerGive),
+// admin-cards/helpers.js (check, fetchAll, nf, fmtWhen), admin/eco-health.js (loadEco, alertesEco), admin/visual-pick.js (lectures).
 // Exporte : mountGestionSection.
 // =====================================================================
 import { paillSym } from '../../commun/paillettes.js';
 import { sb, toast, errMsg, esc, $ } from '../../commun/core.js';
-import { KIND, MAX_MEMBRES, recapText, invalide, donnerGroupe } from './cartes/bulk.js';
+import { creerGive } from './give-panier.js';
 import { check, fetchAll, nf, fmtWhen } from './cartes/helpers.js';
 import { loadEco, alertesEco } from './eco-health.js';
-import { cardPicker, boosterPicker, chargerBoosters, chargerRestants, visuelHtml } from './visual-pick.js';
+import { chargerBoosters, chargerRestants } from './visual-pick.js';
 
 const nf1 = new Intl.NumberFormat('fr-CH', { maximumFractionDigits: 1 });
 /* Texte normalisé pour la recherche : minuscules et sans accents. */
@@ -24,13 +23,8 @@ const plur = (n, one, many) => `${nf(n)} ${Number(n) > 1 ? many : one}`;
 /* Libellé de la sorte de don dans le journal (valeur de p_kind). */
 const QUOI = { paillettes: 'Paillettes', boosters: 'Boosters offerts', carte: 'Carte' };
 
-/* État du bloc Give : une seule copie, mise à jour par les gestionnaires d’événements. */
-const G = { kind: 'paillettes', ids: new Set(), all: false, q: '', announce: true, motif: '',
-  amt: { paillettes: KIND.paillettes.defaut, boosters: KIND.boosters.defaut, carte: KIND.carte.defaut } };
 /* Données lues : membres actifs, cartes, séries, exemplaires restants et types de boosters (index par identifiant). */
 const D = { root: null, membres: [], membresById: new Map(), cartes: [], cartesById: new Map(), sets: [], restants: new Map(), types: null };
-/* Sélecteurs visuels du bloc Give (montés après la lecture des données). */
-const P = { carte: null, boost: null };
 
 /** Membres actifs (hors fantômes), triés par pseudo, puis catalogue des cartes, séries, restants et boosters. */
 async function chargerDonnees() {
@@ -55,179 +49,35 @@ async function chargerDonnees() {
 
 /* ---------- Bloc « Give » ---------- */
 
-/** Destinataires choisis : tout le gang (tous les membres actifs) ou la sélection. */
-const destinataires = () => (G.all ? D.membres.map((p) => p.id) : [...G.ids]);
-
-/** Valeurs lues du bloc, au format attendu par recapText, invalide et donnerGroupe. */
-function lire() {
-  const ids = destinataires();
-  const cfg = KIND[G.kind];
-  const cp = P.carte?.value() ?? { card: '', name: '', obj: null, shiny: false };
-  const bo = P.boost?.value() ?? { id: '', name: '', obj: null };
-  const estCarte = G.kind === 'carte', estBoost = G.kind === 'boosters';
-  return {
-    kind: G.kind, cfg, amount: Number(String(G.amt[G.kind]).trim()),
-    card: estCarte ? cp.card : '', shiny: estCarte && cp.shiny, carteNom: cp.name,
-    booster: estBoost ? bo.id : '', boosterNom: estBoost ? bo.name : '',
-    visuel: estCarte ? cp.obj : estBoost ? bo.obj : null,
-    all: G.all, ids, n: ids.length, announce: G.announce, note: G.motif.trim(),
-  };
-}
-
-/** Liste des membres à cocher (filtrée par la recherche). Les cases reflètent la sélection. */
-function listeMembres() {
-  const needle = norm(G.q.trim());
-  const rows = D.membres.filter((p) => !needle || norm(p.pseudo).includes(needle))
-    .map((p) => `<label class="acd-bulk-row"><input type="checkbox" name="gest-who" value="${esc(p.id)}"${G.ids.has(p.id) ? ' checked' : ''}${G.all ? ' disabled' : ''}>
-      <span>${esc(p.pseudo)}</span></label>`).join('');
-  return rows || '<p class="small muted">Aucun membre ne correspond.</p>';
-}
-
-/** Pastilles des membres choisis (retirables) ; « Tout le gang » remplace la liste. */
-function pastilles() {
-  if (G.all) return `<p class="small muted">Tout le gang : ${plur(D.membres.length, 'membre actif', 'membres actifs')}.</p>`;
-  if (!G.ids.size) return '<p class="small muted">Aucun membre choisi.</p>';
-  return [...G.ids].map((id) => ({ id, pseudo: D.membresById.get(id)?.pseudo ?? 'Ancien membre' }))
-    .sort((a, b) => a.pseudo.localeCompare(b.pseudo, 'fr'))
-    .map((m) => `<button type="button" class="chip gest-chip" data-gest-remove="${esc(m.id)}" aria-label="Retirer ${esc(m.pseudo)}">${esc(m.pseudo)} <span aria-hidden="true">×</span></button>`).join('');
-}
-
-/**
- * Met à jour l’affichage dépendant de la sélection : pastilles, cases, récapitulatif.
- * liste = false : les cases existantes sont mises à jour sans être redessinées (le focus clavier reste sur la case).
- */
-function majMembres({ liste = true } = {}) {
-  const root = D.root;
-  const zone = $('#gest-list', root);
-  $('#gest-chips', root).innerHTML = pastilles();
-  zone.classList.toggle('is-off', G.all);
-  if (liste) zone.innerHTML = listeMembres();
-  else zone.querySelectorAll('input[name="gest-who"]').forEach((i) => { i.checked = G.ids.has(i.value); i.disabled = G.all; });
-  $('#gest-all', root).checked = G.all;
-  majRecap();
-}
-
-/** Type de don : onglets, libellé et valeur du montant, sélecteur de carte ou de booster. */
-function majType() {
-  const root = D.root;
-  const cfg = KIND[G.kind];
-  root.querySelectorAll('[data-gest-kind]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.gestKind === G.kind)));
-  $('#gest-amount-l', root).textContent = cfg.champ;
-  const amount = $('#gest-amount', root);
-  amount.min = cfg.min; amount.max = cfg.max; amount.value = G.amt[G.kind];
-  $('#gest-cardbox', root).hidden = G.kind !== 'carte';
-  $('#gest-boxbox', root).hidden = G.kind !== 'boosters';
-  majRecap();
-}
-
-/** Récapitulatif en direct (même phrase que dans la confirmation) et aperçu du visuel choisi. */
-function majRecap() {
-  const v = lire();
-  const out = $('#gest-recap', D.root);
-  out.textContent = recapText(v);
-  out.classList.toggle('is-warn', v.n > MAX_MEMBRES || !v.n);
-  const vis = $('#gest-visual', D.root);
-  if (vis) { vis.innerHTML = visuelHtml(v.kind, v.visuel); vis.hidden = !v.visuel; }
-}
-
-/** Affiche ou efface l’erreur du bloc Give. */
-function montrerErreur(m) {
-  const el = $('#gest-err', D.root);
-  el.textContent = m;
-  el.hidden = !m;
-  if (m) el.scrollIntoView({ block: 'nearest' });
-}
-
-/** Envoi : contrôle, confirmation (donnerGroupe), appel de la RPC, puis rafraîchissement du journal et de l’économie. */
-async function donner(bouton) {
-  montrerErreur('');
-  const v = lire();
-  if (invalide(v)) {
-    montrerErreur(recapText(v));
-    return;
-  }
-  bouton.disabled = true;
-  try {
-    const res = await donnerGroupe(v);
-    if (!res) return; // annulé dans la confirmation
-    toast(`Don envoyé à ${plur(Number(res.membres) || v.n, 'membre', 'membres')}`, 'ok');
-    G.ids.clear(); G.all = false;
-    majMembres();
-    await Promise.all([rendreEco(), rendreJournal()]);
-  } catch (e) {
-    montrerErreur(errMsg(e));
-    toast(errMsg(e), 'error');
-  } finally {
-    bouton.disabled = false;
-  }
-}
-
-/** Gestionnaires du bloc Give (délégation sur la racine : les listes sont redessinées). */
-function brancher(root) {
-  root.addEventListener('click', (e) => {
-    const kind = e.target.closest('[data-gest-kind]');
-    if (kind) { G.kind = kind.dataset.gestKind; majType(); return; }
-    const retirer = e.target.closest('[data-gest-remove]');
-    if (retirer) { G.ids.delete(retirer.dataset.gestRemove); majMembres({ liste: false }); $('#gest-q', root).focus(); return; }
-    if (e.target.closest('#gest-go')) donner(e.target.closest('#gest-go'));
-  });
-  root.addEventListener('change', (e) => {
-    const t = e.target;
-    if (t.id === 'gest-all') { G.all = t.checked; majMembres({ liste: false }); }
-    else if (t.name === 'gest-who') { if (t.checked) G.ids.add(t.value); else G.ids.delete(t.value); majMembres({ liste: false }); }
-    else if (t.id === 'gest-announce') { G.announce = t.checked; majRecap(); }
-    else if (t.id === 'gest-amount') { G.amt[G.kind] = t.value; majRecap(); }
-  });
-  root.addEventListener('input', (e) => {
-    const t = e.target;
-    if (t.id === 'gest-q') { G.q = t.value; $('#gest-list', root).innerHTML = listeMembres(); }
-    else if (t.id === 'gest-motif') { G.motif = t.value; majRecap(); }
-    else if (t.id === 'gest-amount') { G.amt[G.kind] = t.value; majRecap(); }
-  });
-}
-
-/** HTML du bloc Give. */
+/** HTML du bloc Give : le panier se monte dans #gest-panier une fois les données lues. */
 function giveHtml() {
   return `<section class="card gest-give" aria-labelledby="gest-give-h">
     <div>
       <h2 class="card-title" id="gest-give-h">Give</h2>
       <p class="small muted">Donner à un ou plusieurs membres, puis inscrire le geste au journal.</p>
     </div>
-    <fieldset class="acd-fs">
-      <legend>Membres</legend>
-      <label class="switch acd-switch"><input type="checkbox" id="gest-all"><span class="switch-ui" aria-hidden="true"></span><span>Tout le gang (tous les membres actifs)</span></label>
-      <div class="gest-chips" id="gest-chips" aria-live="polite"></div>
-      <div class="field"><label for="gest-q">Rechercher un membre</label>
-        <input id="gest-q" type="search" autocomplete="off" placeholder="Pseudo"></div>
-      <div class="acd-bulk-list" id="gest-list"></div>
-    </fieldset>
-    <div class="filters gest-tabs" role="group" aria-label="Ce qui est donné">
-      <button class="chip" type="button" data-gest-kind="paillettes" aria-pressed="true">Paillettes</button>
-      <button class="chip" type="button" data-gest-kind="carte" aria-pressed="false">Cartes</button>
-      <button class="chip" type="button" data-gest-kind="boosters" aria-pressed="false">Booster</button>
-    </div>
-    <div class="acd-form">
-      <div class="field"><label for="gest-amount" id="gest-amount-l">${esc(KIND.paillettes.champ)}</label>
-        <input id="gest-amount" name="amount" type="number" inputmode="numeric" step="1"></div>
-      <div class="acd-bulk-card" id="gest-cardbox" hidden>
-        <div id="gest-cardhost"><p class="small muted">Chargement des cartes…</p></div>
-      </div>
-      <div class="acd-bulk-card" id="gest-boxbox" hidden>
-        <div id="gest-boxhost"><p class="small muted">Chargement des boosters…</p></div>
-      </div>
-      <div class="field"><label for="gest-motif">Motif <span class="muted small">(facultatif, inscrit au journal)</span></label>
-        <input id="gest-motif" maxlength="200" autocomplete="off" placeholder="Ex. récompense de quête"></div>
-      <label class="switch acd-switch"><input type="checkbox" id="gest-announce" checked><span class="switch-ui" aria-hidden="true"></span><span>Annoncer au membre</span></label>
-      <p class="small muted">Publie une seule ligne groupée dans le fil d’actualité. Aucun message privé n’est envoyé.</p>
-    </div>
-    <p class="acd-sum" id="gest-recap" aria-live="polite"></p>
-    <div class="vp-preview" id="gest-visual" hidden></div>
-    <p class="form-error" id="gest-err" role="alert" hidden></p>
-    <div class="gest-go">
-      <button class="btn btn-primary" type="button" id="gest-go">Donner</button>
-      <p class="small muted">Inscrit au journal · visible dans Pilotage › Journal</p>
-    </div>
+    <div id="gest-panier"><p class="small muted">Chargement…</p></div>
   </section>`;
+}
+
+/** Monte le panier et son bouton « Donner » ; après un don, le journal et le résumé sont relus. */
+function monterGive(root) {
+  const give = creerGive($('#gest-panier', root), {
+    membres: D.membres, cards: D.cartes.filter((k) => k.active), sets: D.sets, restants: D.restants,
+    types: D.types, typesErreur: D.typesErreur, idp: 'gest', envoi: true,
+  });
+  give.bouton.addEventListener('click', async () => {
+    give.bouton.disabled = true;
+    try {
+      const res = await give.donner();
+      if (!res) return;
+      toast(`Don envoyé à ${plur(Number(res.membres) || 1, 'membre', 'membres')}`, 'ok');
+      give.vider();
+      await Promise.all([rendreEco(), rendreJournal()]);
+    } finally {
+      give.bouton.disabled = false;
+    }
+  });
 }
 
 /* ---------- Bloc « Résumé de l’économie » ---------- */
@@ -318,11 +168,28 @@ function ligneCarteDonnee(r) {
     </li>`;
 }
 
+/** Une ligne « panier » (migration 196) : qui, le détail du don, les totaux, quand, motif. */
+function lignePanier(r, d, ids, membres) {
+  const qui = d.tout_le_gang ? `Tout le gang (${plur(membres, 'membre', 'membres')})` : nomsDestinataires(ids);
+  const p = Number(d.paillettes) || 0, ex = Number(d.exemplaires) || 0, bo = Number(d.boosters) || 0;
+  const total = [p && `${nf(p * membres)} Paillettes`, ex && plur(ex * membres, 'exemplaire', 'exemplaires'), bo && plur(bo * membres, 'booster', 'boosters')].filter(Boolean).join(', ');
+  return `<li class="acd-item acd-item-tight">
+      <div class="acd-item-main">
+        <p><strong>${esc(qui)}</strong> <span class="small muted">Panier</span></p>
+        <p class="small">${esc((Array.isArray(d.resume) ? d.resume : []).join(' · '))}</p>
+        <p class="small">Total : ${esc(total)}</p>
+        ${d.note ? `<p class="small muted">Motif : ${esc(d.note)}</p>` : ''}
+      </div>
+      <span class="small muted">${esc(fmtWhen(r.created_at))}</span>
+    </li>`;
+}
+
 /** Une ligne du journal : qui, quoi (par membre et total), quand, motif. */
 function ligneDon(r) {
   const d = r.details || {};
   const ids = Array.isArray(d.destinataires) ? d.destinataires : [];
   const membres = Number(d.membres) || ids.length;
+  if (r.target_ref === 'panier') return lignePanier(r, d, ids, membres);
   const par = Number(d.montant) || 0;
   const quoi = r.target_ref === 'paillettes' ? `${nf(par)} Paillettes par membre`
     : r.target_ref === 'boosters' ? `${plur(par, 'booster offert', 'boosters offerts')} par membre`
@@ -367,12 +234,11 @@ async function rendreJournal() {
  */
 export async function mountGestionSection(root) {
   D.root = root;
-  root.innerHTML = `<div class="gest">
-      <div id="gest-give-zone">${giveHtml()}</div>
+  root.innerHTML = `<div id="gest-give-zone">${giveHtml()}</div>
+    <div class="gest">
       <section class="card gest-eco" id="gest-eco" aria-labelledby="gest-eco-h"><p class="small muted">Chargement…</p></section>
-    </div>
-    <section class="card gest-journal" id="gest-journal" aria-labelledby="gest-journal-h"><p class="small muted">Chargement…</p></section>`;
-  brancher(root);
+      <section class="card gest-journal" id="gest-journal" aria-labelledby="gest-journal-h"><p class="small muted">Chargement…</p></section>
+    </div>`;
   try {
     await chargerDonnees();
   } catch (e) {
@@ -380,12 +246,6 @@ export async function mountGestionSection(root) {
     toast(errMsg(e), 'error');
     return;
   }
-  P.carte = cardPicker($('#gest-cardhost', root), {
-    cards: D.cartes.filter((k) => k.active), sets: D.sets, restants: D.restants, idp: 'gest-cp', onChange: () => majRecap(),
-  });
-  if (D.types) P.boost = boosterPicker($('#gest-boxhost', root), { types: D.types, idp: 'gest-bp', value: 'classique', onChange: () => majRecap() });
-  else $('#gest-boxhost', root).innerHTML = `<p class="form-error" role="alert">Impossible de charger les boosters : ${esc(D.typesErreur)}</p>`;
-  majMembres();
-  majType();
+  monterGive(root);
   await Promise.all([rendreEco(), rendreJournal()]);
 }

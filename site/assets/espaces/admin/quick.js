@@ -5,8 +5,7 @@
 // et ouvre une petite fenêtre (<dialog>) ; sans la permission, il ne fait rien et le bouton suit son lien (repli).
 // Chaque fenêtre garde les mêmes contrôles et la même charge (RPC) que la page complète, qu'elle renvoie en lien
 // « Ouvrir la page complète » :
-//   give    : hg_cards_admin_bulk_give (validation, récapitulatif et arguments : admin-cards/bulk.js). Carte et booster
-//             se choisissent sur leurs visuels (admin/visual-pick.js). Page : Fabrique › Gestion globale.
+//   give    : le panier (admin/give-panier.js), RPC hg_cards_admin_give_panier. Page : Fabrique › Gestion globale.
 //   enchere : hg_auctions_admin (lecture), hg_auction_create (règles : enchere-regles.js). Page : Fabrique › Enchères.
 //   drop    : hg_drop_create, puis hg-notify « card_drop » si la case Discord est cochée. Carte choisie sur ses visuels.
 //             Page : Fabrique › Drops.
@@ -14,16 +13,15 @@
 // Focus : la fenêtre est modale (<dialog>), Tab reste dedans, Échap ferme, le focus revient au bouton d'origine.
 // Exporte : initQuick (à appeler une fois, dans admin.js), QUICK_PERM.
 // Dépendances : core.js, cartes-ui.js (rarityLabel), admin-cards/helpers.js (check, fetchAll, fmtWhen, nf),
-// admin-cards/bulk.js (KIND, recapText, invalide, argsDon), admin-cards/auctions.js (nextWeekend), enchere-regles.js,
-// admin/visual-pick.js (sélecteurs visuels).
+// admin/give-panier.js, admin-cards/auctions.js (nextWeekend), enchere-regles.js, admin/visual-pick.js (sélecteurs visuels).
 // =====================================================================
 import { paillSym } from '../../commun/paillettes.js';
 import { sb, toast, errMsg, esc, notify, getCachedPerms, hasPerm } from '../../commun/core.js';
 import { check, fetchAll, fmtWhen, nf } from './cartes/helpers.js';
-import { KIND, recapText, invalide, argsDon } from './cartes/bulk.js';
+import { creerGive } from './give-panier.js';
 import { nextWeekend } from './cartes/auctions.js';
 import { rulesFieldsHtml, readRules } from '../cartes/enchere-regles.js';
-import { cardPicker, boosterPicker, chargerBoosters, chargerRestants, visuelHtml, libelleEpuisee } from './visual-pick.js';
+import { cardPicker, chargerBoosters, chargerRestants, visuelHtml, libelleEpuisee } from './visual-pick.js';
 
 /** Permission exigée pour les trois actions (Jeu de cartes). */
 export const QUICK_PERM = 'cartes';
@@ -160,11 +158,12 @@ function busyOn(btn) { if (btn) { btn.disabled = true; btn.setAttribute('aria-bu
 function busyOff(btn) { if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); } }
 
 /* =========================================================
-   1. Give : cartes, paillettes ou boosters à plusieurs membres
+   1. Give : le panier (cartes, boosters, Paillettes) pour un ou plusieurs membres
    ========================================================= */
-/** Ouvre « Give ». Mêmes règles et même RPC que le tiroir « Don groupé » (admin-cards/bulk.js). */
+/** Ouvre « Give » : même panier et même RPC que Gestion globale (admin/give-panier.js). */
 async function openGive(trigger) {
   const ui = openShell({ title: 'Give', sub: 'Offrir quelque chose à des membres', color: '#159946', href: '/pages/admin/admin.html#fabrique/gestion', trigger });
+  ui.dlg.classList.add('gv-dlg');
   let members, sets, cards;
   try {
     [members, sets, cards] = await Promise.all([
@@ -173,176 +172,28 @@ async function openGive(trigger) {
       fetchAll(() => sb.from('hg_cards').select('*').eq('active', true).order('number')),
     ]);
   } catch (e) { failLoad(ui, e); return; }
-  members = members ?? [];
   sets = (sets ?? []).sort((a, b) => a.sort - b.sort);
   cards = cards ?? [];
   const setsById = new Map(sets.map((s) => [s.id, s]));
   cards.forEach((k) => { k.set_name = setsById.get(k.set_id)?.name; });
   // Exemplaires restants et boosters : une lecture qui échoue ne bloque pas la fenêtre (le sélecteur reste utilisable).
   const [rest, boost] = await Promise.allSettled([chargerRestants(cards), chargerBoosters()]);
-  const restants = rest.status === 'fulfilled' ? rest.value.restants : new Map();
-  const types = boost.status === 'fulfilled' ? boost.value : null;
-  const st = { kind: 'paillettes', amountRaw: String(KIND.paillettes.defaut), ids: new Set(), all: false, announce: true, note: '' };
-  const titles = { paillettes: 'Montant par membre', carte: KIND.carte.champ, boosters: KIND.boosters.champ };
-  /** Sélecteurs visuels (montés après le contenu) : carte et booster. */
-  let carte = null, booster = null;
-
-  ui.body.innerHTML = `
-    <p class="qk-err" role="alert" hidden></p>
-    <div class="qk-pane" data-pane="form">
-      <section class="qk-sec">
-        <p class="qk-label">Pour qui · <span data-count aria-live="polite"></span></p>
-        <div class="field"><label for="qk-g-q">Rechercher un membre</label><input id="qk-g-q" type="search" autocomplete="off" placeholder="Pseudo" data-focus></div>
-        <label class="check"><input type="checkbox" name="all"> <span>Tout le gang (${plur(members.length, 'membre actif', 'membres actifs')})</span></label>
-        <div class="qk-chips" role="group" aria-label="Membres">${members.map((m) => `<button type="button" class="qk-chip" data-id="${esc(m.id)}" data-name="${esc(norm(m.pseudo))}" aria-pressed="false">${esc(m.pseudo)}</button>`).join('') || '<p class="small muted">Aucun membre actif.</p>'}</div>
-      </section>
-      <section class="qk-sec">
-        <p class="qk-label" id="qk-g-kind-l">Quoi donner</p>
-        <div class="qk-seg" role="group" aria-labelledby="qk-g-kind-l">
-          <button type="button" data-kind="paillettes" aria-pressed="true">Paillettes</button>
-          <button type="button" data-kind="carte" aria-pressed="false">Carte</button>
-          <button type="button" data-kind="boosters" aria-pressed="false">Booster</button>
-        </div>
-      </section>
-      <section class="qk-sec qk-card" hidden>
-        <p class="qk-label">Carte</p>
-        <div id="qk-g-cardhost"></div>
-      </section>
-      <section class="qk-sec qk-boost" hidden>
-        <p class="qk-label">Booster</p>
-        <div id="qk-g-boosthost">${types ? '' : `<p class="form-error" role="alert">Impossible de charger les boosters : ${esc(errMsg(boost.reason))}</p>`}</div>
-      </section>
-      <section class="qk-sec">
-        <p class="qk-label" id="qk-g-amt-l">${esc(titles.paillettes)}</p>
-        <div class="qk-step">
-          <button type="button" class="qk-step-btn" data-step="-1" aria-label="Diminuer">−</button>
-          <div class="field qk-amount"><input id="qk-g-amt" name="amount" type="number" inputmode="numeric" step="1" min="${KIND.paillettes.min}" max="${KIND.paillettes.max}" value="${KIND.paillettes.defaut}" aria-labelledby="qk-g-amt-l"></div>
-          <button type="button" class="qk-step-btn" data-step="1" aria-label="Augmenter">+</button>
-        </div>
-      </section>
-      <section class="qk-sec">
-        <label class="check"><input type="checkbox" name="announce" checked> <span>Afficher dans le fil d'actualité (une seule ligne groupée)</span></label>
-        <div class="field"><label for="qk-g-note">Note <span class="muted small">(facultatif, réservée au journal admin)</span></label><input id="qk-g-note" name="note" maxlength="200" autocomplete="off"></div>
-      </section>
-      <p class="qk-sum" aria-live="polite"></p>
-    </div>
-    <div class="qk-pane" data-pane="confirm" hidden>
-      <div class="vp-preview" data-confirm-visual></div>
-      <p class="qk-sum qk-sum-strong" data-confirm></p>
-      <p class="small muted" data-confirm-who></p>
-      <p class="small muted">Le don est définitif. Les MP Discord ne sont pas envoyés par ce formulaire.</p>
-    </div>`;
-
-  /** Lecture du formulaire, au format attendu par recapText et argsDon (admin-cards/bulk.js). */
-  const read = () => {
-    const kind = st.kind;
-    const all = st.all;
-    const cp = carte ? carte.value() : { card: '', name: '', obj: null, shiny: false };
-    const bo = booster ? booster.value() : { id: '', name: '', obj: null };
-    const estCarte = kind === 'carte', estBoost = kind === 'boosters';
-    return {
-      kind, cfg: KIND[kind], amount: Number(String(st.amountRaw).trim()),
-      card: estCarte ? cp.card : '', shiny: estCarte && cp.shiny, carteNom: cp.name,
-      restant: estCarte ? restants.get(cp.card) : undefined,
-      booster: estBoost ? bo.id : '', boosterNom: estBoost ? bo.name : '',
-      visuel: estCarte ? cp.obj : estBoost ? bo.obj : null,
-      all, ids: [...st.ids], n: all ? members.length : st.ids.size,
-      announce: st.announce, note: st.note.trim(),
-    };
-  };
-  /** Met à jour les états affichés (type, carte ou booster, montant, compteur, récapitulatif). */
-  const refresh = () => {
-    const v = read();
-    ui.body.querySelectorAll('[data-kind]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === st.kind)));
-    ui.body.querySelector('.qk-card').hidden = st.kind !== 'carte';
-    ui.body.querySelector('.qk-boost').hidden = st.kind !== 'boosters';
-    ui.body.querySelector('#qk-g-amt-l').textContent = titles[st.kind];
-    const amt = ui.body.querySelector('#qk-g-amt');
-    amt.min = v.cfg.min; amt.max = v.cfg.max;
-    ui.body.querySelector('[data-count]').textContent = st.all ? `tout le gang (${plur(members.length, 'membre', 'membres')})` : `${nf(st.ids.size)} choisi${st.ids.size > 1 ? 's' : ''}`;
-    ui.body.querySelectorAll('.qk-chip').forEach((c) => { c.setAttribute('aria-pressed', String(st.ids.has(c.dataset.id))); c.disabled = st.all; });
-    const sum = ui.body.querySelector('.qk-sum:not(.qk-sum-strong)');
-    sum.textContent = recapText(v);
-    sum.classList.toggle('is-warn', invalide(v));
-  };
-
-  bindActions(ui, {
-    onBack: () => showPane(ui, 'form', { submit: 'Donner' }),
-    onReview: () => {
-      const v = read();
-      if (invalide(v)) { showErr(ui, recapText(v)); ui.body.querySelector('[data-pane="form"]').scrollIntoView?.({ block: 'nearest' }); return; }
-      const who = v.all ? 'Destinataires : tout le gang.' : `Destinataires : ${[...st.ids].map((id) => (members.find((m) => m.id === id)?.pseudo ?? '')).filter(Boolean).join(', ')}.`;
-      ui.body.querySelector('[data-confirm]').textContent = recapText(v);
-      ui.body.querySelector('[data-confirm-who]').textContent = who;
-      ui.body.querySelector('[data-confirm-visual]').innerHTML = visuelHtml(v.kind, v.visuel);
-      showPane(ui, 'confirm', { submit: 'Donner', confirm: 'Confirmer le don' });
-    },
-    onConfirm: (btn) => sendGive(ui, read(), btn),
+  const give = creerGive(ui.body, {
+    membres: members ?? [], cards, sets, restants: rest.status === 'fulfilled' ? rest.value.restants : new Map(),
+    types: boost.status === 'fulfilled' ? boost.value : null, typesErreur: boost.status === 'rejected' ? errMsg(boost.reason) : '',
+    idp: 'qk-g', puces: true,
   });
-
-  ui.body.addEventListener('click', (e) => {
-    const chip = e.target.closest('.qk-chip');
-    if (chip && !st.all) { const id = chip.dataset.id; st.ids.has(id) ? st.ids.delete(id) : st.ids.add(id); refresh(); return; }
-    const kindBtn = e.target.closest('[data-kind]');
-    if (kindBtn) {
-      const old = KIND[st.kind];
-      const next = kindBtn.dataset.kind;
-      // Quand on change de type, le montant revient à la valeur par défaut du nouveau type (sinon on garde la saisie).
-      if (next !== st.kind && Number(st.amountRaw) === old.defaut) { st.amountRaw = String(KIND[next].defaut); ui.body.querySelector('#qk-g-amt').value = st.amountRaw; }
-      st.kind = next; refresh(); return;
-    }
-    const step = e.target.closest('[data-step]');
-    if (step) {
-      const cfg = KIND[st.kind];
-      const cur = Number(String(st.amountRaw).trim()) || 0;
-      const val = Math.min(cfg.max, Math.max(cfg.min, cur + Number(step.dataset.step)));
-      st.amountRaw = String(val); ui.body.querySelector('#qk-g-amt').value = st.amountRaw; refresh();
-    }
-  });
-  ui.body.addEventListener('input', (e) => {
-    const t = e.target;
-    if (t.id === 'qk-g-q') {
-      const needle = norm(t.value.trim());
-      ui.body.querySelectorAll('.qk-chip').forEach((c) => { c.hidden = !!needle && !c.dataset.name.includes(needle); });
-    } else if (t.id === 'qk-g-amt') { st.amountRaw = t.value; }
-    else if (t.id === 'qk-g-note') { st.note = t.value; }
-    refresh();
-  });
-  ui.body.addEventListener('change', (e) => {
-    const t = e.target;
-    if (t.name === 'all') st.all = t.checked;
-    else if (t.name === 'announce') st.announce = t.checked;
-    refresh();
-  });
-
-  // Sélecteurs visuels : montés une fois le contenu en place ; chaque choix relance le récapitulatif.
-  carte = cardPicker(ui.body.querySelector('#qk-g-cardhost'), {
-    cards, sets, restants, idp: 'qk-gc', onChange: () => refresh(),
-    bloque: (k) => (restants.has(k.id) && restants.get(k.id) <= 0 ? libelleEpuisee(k) : ''),
-  });
-  if (types) booster = boosterPicker(ui.body.querySelector('#qk-g-boosthost'), { types, idp: 'qk-gb', value: 'classique', onChange: () => refresh() });
-  showPane(ui, 'form', { submit: 'Donner' });
-  refresh();
-}
-
-/**
- * Envoie le don : même appel que donnerGroupe (admin-cards/bulk.js), sans la confirmation de ce module (déjà affichée).
- * @param {object} ui fenêtre
- * @param {object} v valeurs lues (read)
- * @param {HTMLButtonElement} btn bouton « Confirmer le don »
- */
-async function sendGive(ui, v, btn) {
-  if (invalide(v)) { showErr(ui, recapText(v)); return; }
-  busyOn(btn);
-  try {
-    const res = check(await sb.rpc('hg_cards_admin_bulk_give', argsDon(v)));
-    const servis = Number(res?.membres) || v.n;
-    toast(`Don envoyé à ${plur(servis, 'membre', 'membres')}`, 'ok');
-    ui.close();
-  } catch (e) {
-    showErr(ui, errMsg(e));
+  ui.btns.innerHTML = '<button class="btn btn-ghost" type="button" data-qk-close>Annuler</button><button class="btn btn-primary" type="submit" data-qk-submit>Donner</button>';
+  ui.form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = ui.btns.querySelector('[data-qk-submit]');
+    busyOn(btn);
+    const res = await give.donner();
     busyOff(btn);
-  }
+    if (!res) return;
+    toast(`Don envoyé à ${plur(Number(res.membres) || 1, 'membre', 'membres')}`, 'ok');
+    ui.close();
+  });
 }
 
 /* =========================================================
