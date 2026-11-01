@@ -49,3 +49,6 @@ supabase/migrations/182_arcade_prises.sql
 supabase/migrations/183_jeux_programme.sql
 supabase/migrations/184_jeux_programme_jour.sql
 supabase/migrations/185_duel_coups_manques.sql
+supabase/migrations/186_adrep_sudoku.sql
+supabase/migrations/187_geo_credit_photo.sql
+supabase/migrations/188_framed_tirage.sql

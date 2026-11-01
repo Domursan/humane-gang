@@ -189,7 +189,7 @@ export async function afficher(root) {
     const focus = root.contains(document.activeElement) ? document.activeElement.dataset.k : null;
     root.innerHTML = `<section class="duels-jour">
       <header class="duels-jour-tete">
-        <p class="duels-fil"><a href="/pages/jeux/duels.html">Retour aux duels</a></p>
+        <p class="duels-fil"><a href="/pages/jeux/jeux.html#tous">Retour aux jeux</a></p>
         <h1 class="duels-titre">Code du jour</h1>
         <p class="duels-jour-expl">Un code secret par jour, le même pour tout le gang. 10 essais. Trouve-le vite pour grimper au classement.</p>
         ${serie > 0 ? `<p class="duels-jour-serie"><strong>${serie} jour${serie > 1 ? 's' : ''} de suite</strong></p>` : ''}
@@ -251,7 +251,7 @@ export async function afficher(root) {
     st.jour = await duel.jour();
   } catch (err) {
     root.innerHTML = `<section class="card duels-erreur"><h1 class="display">Code du jour</h1>
-      <p>${esc(erreurTexte(err))}</p><p><a class="btn btn-primary" href="/pages/jeux/duels.html">Retour aux duels</a></p></section>`;
+      <p>${esc(erreurTexte(err))}</p><p><a class="btn btn-primary" href="/pages/jeux/jeux.html#tous">Retour aux jeux</a></p></section>`;
     return () => {};
   }
   root.addEventListener('click', surClic);

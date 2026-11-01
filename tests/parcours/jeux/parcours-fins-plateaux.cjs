@@ -190,7 +190,7 @@ const conf = (p) => p.locator('.fxd-confettis, .rk-anim-conf, .mo-conf, .ds-anim
   check(await conf(p) === 0, 'CL1 : pas de confettis');
   check((await p.locator('.plat-fin h1').innerText()) === 'Défaite', 'CL1 : titre du socle, Défaite');
   await p.screenshot({ path: `${__dirname}/../../shots/fins-cl1-1280.png` });
-  await sleep(2400);
+  await p.waitForFunction(() => !document.querySelector('.ch-anim-vol, .fxd-ban'), null, { timeout: 6000 }).catch(() => {});
   check(await p.locator('.ch-anim-vol, .fxd-ban').count() === 0 && await p.locator('.ch-sol:visible').count() === 3, 'CL1 : à la fin, les vraies cartes reviennent et rien ne reste');
   sansErreur(p, 'CL1');
   await p.ctx.close();

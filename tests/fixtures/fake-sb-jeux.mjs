@@ -1,7 +1,7 @@
 // Faux client Supabase de la page « Jeux » (/pages/jeux/jeux.html) et de ses sous-sections admin (migration 083).
 // Enveloppe fake-sb.mjs (chargé depuis le dépôt) : ajoute la page « jeux » au menu et simule les RPC GeoGuessr (J1),
 // « Qui a dit ça ? » (J3), avec les mêmes règles que la base (une tentative, plafonds, masquage).
-// Scénario (window.__SCN) : geoNone (pas de manche), geoPlayed (manche déjà jouée), quotesNone, quoteConsent (une citation
+// Scénario (window.__SCN) : geoNone (pas de manche), geoMonde (manche du jour à l'échelle 1500 km), geoPlayed (manche déjà jouée), quotesNone, quoteConsent (une citation
 // attend l'accord du membre), jeuxFail (toutes les RPC des jeux échouent).
 // Exporte createClient().
 const base = await import(`${location.origin}${window.__HG_RACINE || ''}/tests/fixtures/fake-sb.mjs`);
@@ -45,12 +45,15 @@ const G = {
     { id: 'pr-2', quote: 'Je ramène la raclette', context: null, status: 'nouvelle', author: 'Chloé', proposed_by: 'Alice', publiable: false, refused_by: null },
   ],
 };
+// Manche du lot Commons : échelle propre (migration 187), jamais renvoyée par hg_geo_today.
+if (S.geoMonde) G.rounds.find((r) => r.id === 'geo-today').echelle_km = 1500;
 if (S.geoNone) G.rounds = G.rounds.filter((r) => r.id !== 'geo-today' && r.id !== 'geo-res');
 if (S.geoPlayed) G.guesses.push({ round: 'geo-today', user_id: ME, pseudo: 'Ethan', color: '#4F6A8F', score: 4210, distance_m: 800, lat: 45.765, lon: 4.85, reward: 42 });
 window.__JEUX = G;
 
 /** Solution d'une manche (après le vote). */
-const sol = (r) => ({ lat: r.lat, lon: r.lon, label: r.label, event_id: r.event_id, event_title: r.event_title, event_date: '2026-03-14T12:00:00Z' });
+const sol = (r) => ({ lat: r.lat, lon: r.lon, label: r.label, event_id: r.event_id, event_title: r.event_title, event_date: '2026-03-14T12:00:00Z',
+  credit: r.event_id ? null : { auteur: 'Jeanne Photo', licence: 'CC BY-SA 4.0', licence_url: 'https://creativecommons.org/licenses/by-sa/4.0', source: 'https://commons.wikimedia.org/wiki/File:Exemple.jpg' } });
 /** Ma tentative sur une manche, au format de hg_geo_today. */
 function mine(r) {
   const g = G.guesses.find((x) => x.round === r.id && x.user_id === ME);
@@ -90,7 +93,7 @@ function jeux(fn, a = {}) {
       if (!r || !r.day || r.day > d) return ko('Cette manche n’est pas ouverte');
       if (a.p_lat == null || a.p_lon == null) return ko('Pose ton épingle sur la carte');
       if (G.guesses.some((x) => x.round === r.id && x.user_id === ME)) return ko('Tu as déjà joué cette manche');
-      const honor = r.day < d, m = dist(a.p_lat, a.p_lon, r.lat, r.lon), score = Math.round(5000 * Math.exp(-m / 50000));
+      const honor = r.day < d, m = dist(a.p_lat, a.p_lon, r.lat, r.lon), score = Math.round(5000 * Math.exp(-m / ((r.echelle_km ?? 50) * 1000)));
       const reward = honor ? 0 : Math.min(50, Math.floor(score / 100));
       G.guesses.push({ round: r.id, user_id: ME, pseudo: 'Ethan', color: '#4F6A8F', score, distance_m: m, lat: a.p_lat, lon: a.p_lon, reward, honor });
       return ok({ round_id: r.id, distance_m: m, score, reward, honor, lat: a.p_lat, lon: a.p_lon, solution: sol(r) });

@@ -1,0 +1,69 @@
+# Importe les lots d'images des jeux (affiches Framed, photos GeoGuessr) : voir outils/images/importer-lots.mjs.
+# Lancement à la main seulement (onglet Actions › « Importer les lots d'images » › Run workflow). Commencer par « espace », lecture seule.
+# Reprenable : relancer saute ce qui existe déjà. Le lot geo exige la migration 187 (supabase/appliquer.txt). Le lot framed peut
+# partir après la 188 : un film n'entre dans la base qu'une fois ses 6 images envoyées, donc le tirage du jour ne le voit jamais incomplet.
+# Le compte rendu outils/images/rapport-lots.json est ajouté au dépôt, même après une erreur.
+name: Importer les lots d'images
+
+on:
+  workflow_dispatch:
+    inputs:
+      etape:
+        description: Étape
+        type: choice
+        required: true
+        default: espace
+        options: [espace, framed, geo, tout]
+      limite:
+        description: Nombre maximal d'éléments par lot (vide = tout)
+        type: string
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: importer-lots
+  cancel-in-progress: false
+
+jobs:
+  importer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      # Sans identifiants dans .git/config : le code de sharp, qui tourne à l'étape Importer, ne peut pas pousser sur main.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Versions et empreintes figées par outils/images/package-lock.json, aucun script d'installation.
+      - name: Installer sharp
+        run: npm ci --ignore-scripts --prefix outils/images
+      - name: Importer
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PROJECT_REF: zqbdzokyhgavgmqgiwuw
+          ETAPE: ${{ inputs.etape }}
+          LIMITE: ${{ inputs.limite }}
+        run: node outils/images/importer-lots.mjs "$ETAPE" ${LIMITE:+--limite "$LIMITE"}
+      - name: Résumé
+        if: always()
+        run: |
+          [ -f outils/images/rapport-lots.json ] || exit 0
+          node -e "const r=require('./outils/images/rapport-lots.json');const m=(o)=>o&&(Number(o)/1048576).toFixed(1)+' Mo';console.log('### Lots d\'images\n');console.log('- Stockage : '+m(r.espace?.total)+', marge '+m(r.espace?.marge));if(r.framed)console.log('- Framed : '+r.framed.ajoutes+' ajoutés, '+r.framed.echecs.length+' échecs, '+r.framed.ecartes.length+' écartés');if(r.geo)console.log('- GeoGuessr : '+r.geo.ajoutes+' ajoutées, '+r.geo.echecs.length+' échecs')" >> "$GITHUB_STEP_SUMMARY"
+      - name: Ajouter le compte rendu au dépôt
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git config user.name Domursan
+          git config user.email domursan1@gmail.com
+          [ -f outils/images/rapport-lots.json ] || exit 0
+          git add outils/images/rapport-lots.json
+          if git diff --cached --quiet; then echo "Rien de nouveau."; exit 0; fi
+          git commit -m "Lots d'images : compte rendu [skip ci]"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break; sleep 5; done

@@ -46,6 +46,13 @@ const J = window.__J3 = {
   framedFilms: FILMS.map((f, i) => ({ ...f, frames: i === 0 ? [1, 2, 3, 4, 5, 6].map((n) => `framed/${f.id}/${n}.webp`) : [], active: true, day: i === 0 ? today : null })),
   heardleTracks: TRACKS.map((t) => ({ ...t, status: 'valide', day: t.id === 't-lyon' ? today : null })).concat([{ id: 't-prop', title: 'Le morceau du RDV', artist: 'Groupe', youtube_id: 'abcdefghijk', start_s: 30, status: 'propose', proposed_pseudo: 'Bruno' }]),
 };
+// framedTirage : 'pleine' : un film servi, un inactif, un à 2 images, un seul bon. 'epuisee' : aucun bon.
+J.framedRounds = new Map();
+if (S.framedTirage) {
+  J.framedRounds.set('2020-01-01', { film_id: 'f-nope', created_by: 'x' });
+  J.framedFilms = FILMS.map((f, i) => ({ ...f, day: null, active: i === 0 || i === 2 || (i === 3 && S.framedTirage === 'pleine'),
+    frames: [1, 2, 3, 4, 5, 6].slice(0, i === 2 ? 2 : 6).map((n) => `framed/${f.id}/${n}.webp`) }));
+}
 if (S.framedDone) Object.assign(J.framed, { guesses: ['f-prestige', ''], solved: false, finished: false });
 
 /* ---------- Framed et Heardle ---------- */
@@ -70,8 +77,22 @@ const heardleHistorique = () => {
 };
 
 const board = () => [{ user_id: U(2), pseudo: 'Alice', points: 14, wins: 3 }, { user_id: ME, pseudo: 'Ethan', points: 9, wins: 2 }];
+/**
+ * Tirage du jour, mêmes règles que hg_framed__jour (migration 188) : une ligne déjà là prime ; sinon un film actif, 3 images au
+ * moins, jamais servi ; created_by null ; aujourd'hui seulement ; réserve épuisée : rien n'est écrit.
+ */
+function framedJour() {
+  if (!S.framedTirage) return true;
+  if (J.framedRounds.has(today)) return J.framedRounds.get(today);
+  const servis = new Set([...J.framedRounds.values()].map((r) => r.film_id));
+  const f = J.framedFilms.find((x) => x.active && x.frames.length >= 3 && !servis.has(x.id));
+  if (!f) return null;
+  const r = { film_id: f.id, created_by: null };
+  J.framedRounds.set(today, r); J.framed.answer = f.id;
+  return r;
+}
 function framedState() {
-  if (S.noRound) return { day: today, round: null, next_day: null, board: board(), hier: null };
+  if (S.noRound || !framedJour()) return { day: today, round: null, next_day: null, board: board(), hier: null };
   const g = J.framed, k = g.finished ? 6 : Math.min(6, g.guesses.length + 1);
   const film = FILMS.find((f) => f.id === g.answer);
   return { day: today, round: 18, total_frames: 6, frames: [1, 2, 3, 4, 5, 6].slice(0, k).map((n) => `framed/${film.id}/${n}.webp`),
@@ -147,7 +168,7 @@ function attack(def, ids) {
 /* ---------- RPC ---------- */
 const HANDLERS = {
   hg_framed_state: () => ok(framedState()),
-  hg_framed_guess: (a) => { const m = apply(J.framed, a.p_film); return m ? err(m) : ok(framedState()); },
+  hg_framed_guess: (a) => { if (!framedJour()) return err('Pas de Framed aujourd’hui.'); const m = apply(J.framed, a.p_film); return m ? err(m) : ok(framedState()); },
   hg_heardle_state: () => ok(heardleState()),
   hg_heardle_guess: (a) => { const m = apply(J.heardle, a.p_track); return m ? err(m) : ok(heardleState()); },
   hg_heardle_historique: () => (S.heardleHistErr ? err('Historique en panne') : ok(heardleHistorique())),

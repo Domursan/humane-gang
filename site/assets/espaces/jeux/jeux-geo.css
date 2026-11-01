@@ -31,6 +31,7 @@
 .geo-result { display: flex; flex-direction: column; gap: 10px; outline: none; }
 .geo-score { font-size: 30px; line-height: 1; }
 .geo-score .small { font-family: var(--font-body); }
+.geo-credit { margin: 8px 0 0; overflow-wrap: anywhere; }
 .geo-origin { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 10px; }
 .geo-album { white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; }
 

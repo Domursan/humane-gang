@@ -21,6 +21,7 @@ import { paillSym } from '../../commun/paillettes.js';
 import { esc, errMsg } from '../../commun/core.js';
 import { chargerCss, nf, classementHtml, zurichIso, jourLong } from './commun.js';
 import { sonJour, pointsDeGain, rejoue, secouer, finDePartie } from './effets-jour.js';
+import { boutonReponses } from '../../commun/core/admin-reponses.js';
 
 /* ---------- Constantes ---------- */
 /** Déplacement au clavier (ligne, colonne). */
@@ -166,6 +167,7 @@ export async function mount(panel, ctx) {
     S.cases.push(b);
   }
 
+  boutonReponses(q('.sol-head > div'), 'sudoku');
   panel.addEventListener('click', onClic);
   q('#su-jeu').addEventListener('keydown', onClavier);
   grille.addEventListener('focusin', (e) => { const b = e.target.closest?.('.sol-s'); if (b) S.actif = Number(b.dataset.i); });

@@ -82,6 +82,10 @@ export function bindGuess(root, id, o) {
   const input = form.querySelector(`#${id}-input`);
   const list = form.querySelector(`#${id}-list`);
   const hint = form.querySelector(`#${id}-hint`);
+  // Avec plusieurs centaines de réponses, les 8 premières par ordre alphabétique cacheraient « It » ou « Her » : le titre exact
+  // passe d'abord, puis les titres qui commencent par la saisie, puis ceux dont un mot commence par elle.
+  const cles = o.items.map((it) => ({ it, texte: normalize(o.label(it)), titre: normalize(it.title ?? o.label(it)) }));
+  const rang = (c, q) => (c.titre === q ? 0 : c.titre.startsWith(q) ? 1 : ` ${c.texte}`.includes(` ${q}`) ? 2 : 3);
   let shown = [], active = -1, picked = null;
   const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; };
   const paint = () => {
@@ -95,7 +99,8 @@ export function bindGuess(root, id, o) {
     const q = normalize(input.value);
     picked = null;
     if (q.length < 1) { shown = []; close(); return; }
-    shown = o.items.filter((it) => !o.exclude.has(String(it.id)) && normalize(o.label(it)).includes(q)).slice(0, 8);
+    shown = cles.filter((c) => !o.exclude.has(String(c.it.id)) && c.texte.includes(q))
+      .sort((a, b) => rang(a, q) - rang(b, q)).slice(0, 8).map((c) => c.it);
     active = shown.length ? 0 : -1;
     paint();
   };
@@ -115,7 +120,7 @@ export function bindGuess(root, id, o) {
     if (!picked) {
       // Saisie exacte d'un titre de la liste : acceptée sans passer par la liste.
       const q = normalize(input.value);
-      picked = o.items.find((it) => normalize(o.label(it)) === q || normalize(it.title) === q) || null;
+      picked = cles.find((c) => c.texte === q || c.titre === q)?.it || null;
     }
     if (!picked) { hint.textContent = 'Choisis une réponse dans la liste des suggestions.'; input.focus(); return; }
     if (o.exclude.has(String(picked.id))) { hint.textContent = 'Tu as déjà proposé cette réponse.'; return; }

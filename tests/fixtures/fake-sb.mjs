@@ -716,7 +716,7 @@ function xa1Rpc(fn, args = {}) {
       const genere = (cle, titre) => ({ cle, titre, mode: 'genere', route: null, jours: [], reserve: null, reserve_totale: null });
       const jeux = [];
       if (hasP('souvenirs')) jeux.push(date('sutom', 'Sutom du gang', 'fete/sutom', true, [120, 200]), date('heardle', 'Heardle', 'fete/framed-heardle/heardle', false, [12, 40]),
-        date('framed', 'Framed', 'fete/framed-heardle/framed', false, [8, 30]), date('geo', 'GeoGuessr', 'fete/geoguessr', true, [15, 22], { jour_courant: geoAuj }));
+        date('framed', 'Framed', 'fete/framed-heardle/framed', true, [8, 30]), date('geo', 'GeoGuessr', 'fete/geoguessr', true, [15, 22], { jour_courant: geoAuj }));
       if (hasP('quiz')) jeux.push(date('quiz', 'Question du jour', 'fete/questions/jour', true, [60, 90]));
       if (hasP('souvenirs')) jeux.push(reserve('carte', 'Carte mystère', [300, 320]), reserve('jv', 'Jeu vidéo du jour', [90, 100]), reserve('pochette', 'Pochette du jour', [10, 80]),
         reserve('replique', 'Réplique du jour', [90, 100]), reserve('pays', 'Pays du jour', [190, 197]), reserve('plat', 'Plat du jour', [50, 60]), reserve('connexions', 'Connexions', [30, 30]),

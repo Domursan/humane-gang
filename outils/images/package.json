@@ -1,0 +1,8 @@
+{
+  "name": "hg-outils-images",
+  "private": true,
+  "description": "Dépendance figée de importer-lots.mjs : voir .github/workflows/importer-lots.yml",
+  "dependencies": {
+    "sharp": "0.33.5"
+  }
+}

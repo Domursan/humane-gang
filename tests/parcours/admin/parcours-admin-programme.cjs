@@ -87,6 +87,7 @@ const retarde = (p, fn, ms, reponse) => p.evaluate(([f, d, r]) => {
     check((await ligne('sutom')).includes('4 jours vides sur 14'), '(a) Sutom : 4 jours vides sur 14');
     check((await ligne('heardle')).includes('Moins de 7 jours d’avance'), '(a) Heardle : alerte sous 7 jours');
     check((await ligne('heardle')).includes('pas de partie'), '(a) Heardle : sans filet, il le dit');
+    check((await ligne('framed')).includes('tirage automatique') && !(await ligne('framed')).includes('pas de partie'), '(a) Framed : tirage automatique annoncé');
     check((await ligne('geo')).includes('Rien de prévu avant le'), '(a) GeoGuessr : prochaine manche lointaine signalée');
     check((await ligne('quiz')).includes('tirage automatique'), '(a) Question du jour : tirage automatique annoncé');
     check(await p.$eval('.pg-row[data-jeu="sutom"] a.pg-lien', (a) => a.getAttribute('href')) === '#fete/sutom', '(a) lien vers l’écran complet');
@@ -491,6 +492,12 @@ const retarde = (p, fn, ms, reponse) => p.evaluate(([f, d, r]) => {
     check(garde('184_jeux_programme_jour.sql', 'hg_geo_reserve', 'souvenirs') && garde('184_jeux_programme_jour.sql', 'hg_geo_programme', 'souvenirs') && garde('184_jeux_programme_jour.sql', 'hg_geo_active', 'souvenirs'), '(f) SQL 184 : droits de hg_geo_round_save');
     check(JSON.stringify(active.match(/update hg_geo_rounds set [^;]*/g)) === '["update hg_geo_rounds set active = p_active, updated_at = now() where id = p_round"]' && active.includes('hg_admin_audit('), '(f) SQL 184 : hg_geo_active ne change que active et updated_at, avec audit');
     check((ecrit.match(/update hg_geo_rounds set [^;]*/g) || []).length === 2 && (ecrit.match(/update hg_geo_rounds set [^;]*/g) || []).every((u) => /set day = (null|p_day), updated_at = now\(\) where id =/.test(u)) && ecrit.includes("pg_advisory_xact_lock(hashtextextended('hg_geo_day', 0))"), '(f) SQL 184 : seul le jour change, sous le verrou du tirage');
+
+    // Framed tiré au sort : la ligne sans auteur s'affiche « Automatique ».
+    p = await openPage(browser, { page: 'admin', width: 1280, scenario: { ...scenario, programme: { ...scenario.programme, framed: [{ n: 0, statut: 'auto', titre: 'Film tiré' }] } } });
+    await ouvre(p);
+    check((await bloc(p, 'framed')).includes('Automatique') && (await bloc(p, 'framed')).includes('Tirage automatique') && !(await bloc(p, 'framed')).includes('Programmé par'), '(f) Framed : jour tiré affiché Automatique');
+    await p.ctx.close();
 
     /* ---------- (g) téléphone ---------- */
     p = await openPage(browser, { page: 'admin', width: 390, height: 844, scenario });

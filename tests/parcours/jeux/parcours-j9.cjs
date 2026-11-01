@@ -28,6 +28,11 @@ const { ROOT, check, finish, openPage, adminSection, hscroll, log, sleep, chromi
   await sleep(150);
   const opts = await p.locator('#jf-list [role="option"]').allInnerTexts();
   check(opts.length === 3 && opts.some((t) => t.includes('Interstellar')) && opts.some((t) => t.includes('vu le')), 'suggestions : 3 films contenant « In », avec la date de séance');
+  await p.fill('#jf-input', 'p');
+  await sleep(150);
+  check((await p.locator('#jf-list [role="option"]').first().innerText()).includes('Le Prestige'), 'suggestions : un mot qui commence par la saisie passe avant un titre qui la contient');
+  await p.fill('#jf-input', 'In');
+  await sleep(150);
   check((await p.locator('#jf-input').getAttribute('aria-expanded')) === 'true', 'combobox : aria-expanded vrai pendant les suggestions');
   // Mauvaise réponse (clavier)
   await p.fill('#jf-input', 'Prest');
@@ -89,6 +94,28 @@ const { ROOT, check, finish, openPage, adminSection, hscroll, log, sleep, chromi
   p = await openPage(browser, { page: 'jeux', fixture: 'fake-sb-jeux3.mjs', hash: '#framed', scenario: { noRound: true } });
   check((await p.locator('#jeux-panel-framed').innerText()).includes('Pas d’image aujourd’hui'), 'sans manche : « Pas d’image aujourd’hui »');
   await p.ctx.close();
+
+  /* ---------- Tirage automatique (migration 188) : mêmes règles dans le faux serveur ---------- */
+  p = await openPage(browser, { page: 'jeux', fixture: 'fake-sb-jeux3.mjs', hash: '#framed', scenario: { framedTirage: 'pleine' } });
+  await p.waitForSelector('#jeux-panel-framed .jd-title', { timeout: 8000 });
+  const tire = (q) => q.evaluate(() => { const j = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zurich' }).format(new Date()); return { n: window.__J3.framedRounds.size, r: window.__J3.framedRounds.get(j) }; });
+  const t1 = await tire(p);
+  check(t1.n === 2 && t1.r?.film_id === 'f-inconnus' && t1.r.created_by === null, `tirage : un film actif, 3 images, jamais servi, sans auteur (${t1.r?.film_id})`);
+  await p.locator('[data-act="passer"]').click();
+  await p.waitForFunction(() => window.__LOG.some((e) => e[1] === 'hg_framed_guess'), null, { timeout: 8000 });
+  const t2 = await tire(p);
+  check(t2.n === 2 && t2.r.film_id === t1.r.film_id, 'tirage : l’essai ne retire pas au sort');
+  await p.ctx.close();
+
+  p = await openPage(browser, { page: 'jeux', fixture: 'fake-sb-jeux3.mjs', hash: '#framed', scenario: { framedTirage: 'epuisee' } });
+  await p.waitForFunction(() => document.querySelector('#jeux-panel-framed')?.innerText.includes('Pas d’image aujourd’hui'), null, { timeout: 8000 }).catch(() => {});
+  check((await p.locator('#jeux-panel-framed').innerText()).includes('Pas d’image aujourd’hui') && await p.evaluate(() => window.__J3.framedRounds.size) === 1, 'tirage : réserve épuisée, pas de partie, rien d’écrit');
+  await p.ctx.close();
+
+  const m188 = fs.readFileSync(path.join(__dirname, '../../../supabase/migrations/188_framed_tirage.sql'), 'utf8');
+  check(/pg_advisory_xact_lock\(hashtextextended\('hg_framed_day', 0\)\);\s+select \* into r from hg_framed_rounds where day = d;/.test(m188), 'SQL 188 : verrou, puis nouvelle lecture avant de tirer');
+  check(m188.includes('function public.hg_framed__jour()') && m188.includes('revoke all on function public.hg_framed__jour() from public, anon, authenticated'), 'SQL 188 : sans paramètre, fermé aux membres');
+  check(['hg_framed_state()', 'hg_framed_guess(uuid)', 'hg_framed_round_save(date, uuid)', 'hg_jeux_programme(date, int)'].every((f) => m188.includes(`public.${f}'::regprocedure`)), 'SQL 188 : les quatre fonctions sont reprises');
 
   /* ---------- Admin Framed : affiches du site ---------- */
   const MAN = JSON.parse(fs.readFileSync(path.join(ROOT, 'assets/espaces/jeux/donnees/framed-affiches.json'), 'utf8'));

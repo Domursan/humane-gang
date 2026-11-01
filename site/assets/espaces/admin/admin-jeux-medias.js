@@ -62,9 +62,12 @@ async function load() {
   S.manifest = m;
   S.F = f.error || !f.data ? { error: f.error ? errMsg(f.error) : 'Données indisponibles' } : f.data;
   S.H = h.error || !h.data ? { error: h.error ? errMsg(h.error) : 'Données indisponibles' } : h.data;
-  const paths = (S.F.films || []).flatMap((x) => x.frames || []).filter((p) => !S.urls[p]);
-  for (const r of await urlsImages(paths)) if (r.signedUrl) S.urls[r.path] = r.signedUrl;
   render();
+}
+
+/** Signe les images du film ouvert seulement : le catalogue compte plusieurs milliers d'images, et une adresse signée expire en 10 min. */
+async function signerFilm(f) {
+  for (const r of await urlsImages(f?.frames || [])) if (r.signedUrl) S.urls[r.path] = r.signedUrl;
 }
 
 /** Dessine la section. */
@@ -89,7 +92,7 @@ function framedHtml() {
       <span class="small muted">${f.seen_on ? `vu le ${esc(day(f.seen_on))} · ` : ''}${esc(f.frames.length)}/6 images${f.day ? ` · manche du ${esc(day(f.day))}` : ''}</span>
       <button type="button" class="btn btn-ghost" data-act="f-edit" data-id="${esc(f.id)}">Modifier</button></li>`).join('');
   return `<section class="jm-sec" aria-labelledby="jm-f-cal"><h3 id="jm-f-cal">Calendrier des manches</h3>
-      <p class="small muted">Rythme conseillé : 3 par semaine. Un élément ne revient jamais ; la manche du jour ne change plus dès qu’un membre a joué.</p>
+      <p class="small muted">Un jour sans manche, le premier passage tire au sort un élément jamais servi, avec 3 images au moins ; sans élément disponible, pas de partie. Un élément ne revient jamais ; la manche du jour ne change plus dès qu’un membre a joué.</p>
       <form class="jm-inline" id="jm-f-round"><label for="jm-f-day">Jour</label><input type="date" id="jm-f-day" class="input" min="${esc(F.today)}" value="${esc(F.today)}" required>
         <label for="jm-f-film">Film ou affiche</label><select id="jm-f-film" class="input" required>${usable.map((f) => `<option value="${esc(f.id)}">${esc(f.title)}</option>`).join('') || '<option value="">Aucun élément prêt (3 images au moins)</option>'}</select>
         <button type="submit" class="btn btn-primary" ${usable.length ? '' : 'disabled'}>Programmer</button></form>
@@ -346,9 +349,16 @@ function onClick(e) {
   if (b.dataset.part) { S.part = b.dataset.part; render(); return; }
   if (b.dataset.pick !== undefined) { const e = S.manifest?.[Number(b.dataset.pick)]; if (e) fillFromSource(() => loadImage(e.src), e.slug, e.title); return; }
   const a = b.dataset.act;
-  if (a === 'f-new') { S.edit = { frames: [], active: true }; S.files = {}; S.picker = null; render(); root.querySelector('#jm-title')?.focus(); }
-  if (a === 'f-edit') { S.edit = structuredClone(S.F.films.find((f) => f.id === b.dataset.id)); S.files = {}; S.picker = null; render(); root.querySelector('#jm-title')?.focus(); }
-  if (a === 'f-cancel') { S.edit = null; S.files = {}; S.picker = null; render(); }
+  if (a === 'f-new') { S.ouverture = null; S.edit = { frames: [], active: true }; S.files = {}; S.picker = null; render(); root.querySelector('#jm-title')?.focus(); }
+  if (a === 'f-edit') {
+    const film = structuredClone(S.F.films.find((f) => f.id === b.dataset.id));
+    S.ouverture = film;
+    signerFilm(film).finally(() => {
+      if (S.ouverture !== film) return;
+      S.edit = film; S.files = {}; S.picker = null; render(); root.querySelector('#jm-title')?.focus();
+    });
+  }
+  if (a === 'f-cancel') { S.ouverture = null; S.edit = null; S.files = {}; S.picker = null; render(); }
   if (a === 'f-from-poster') togglePicker();
   if (a === 'f-pick-close') { S.picker = null; render(); root.querySelector('[data-act="f-from-poster"]')?.focus(); }
   if (a === 'f-bulk') { S.bulk = { phase: 'confirm' }; render(); root.querySelector('[data-act="f-bulk-go"]')?.focus(); }

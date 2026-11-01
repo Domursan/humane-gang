@@ -172,17 +172,17 @@ registerTodo('fete', async () => {
 });
 
 // Framed et Heardle : manches non programmées sur les 3 prochains jours (une ligne par jeu).
-const manchesLibres = (nom, d, valide) => {
+const manchesLibres = (nom, d, valide, meta = 'Une manche se programme dans la page Framed et Heardle') => {
   if (!d?.today) return [];
   const programmes = new Set((d.rounds || []).filter(valide).map((r) => r.day));
   const libres = joursLibres(d.today, programmes, 3);
   return libres ? [{ title: `${nom} : ${nombre(libres, 'jour sans manche', 'jours sans manche')} sur les 3 prochains`,
-    meta: 'Une manche se programme dans la page Framed et Heardle',
+    meta,
     actions: [{ label: `Ouvrir ${nom}`, href: '#fete/framed-heardle' }] }] : [];
 };
 registerTodo('fete', async () => {
   if (!allowed('framed-heardle')) return [];
-  return manchesLibres('Framed', await read('fete', sb.rpc('hg_framed_admin')), () => true);
+  return manchesLibres('Framed', await read('fete', sb.rpc('hg_framed_admin')), () => true, 'Sans manche programmée, un film de la réserve est tiré automatiquement');
 });
 registerTodo('fete', async () => {
   if (!allowed('framed-heardle')) return [];

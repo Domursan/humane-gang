@@ -82,6 +82,7 @@ async function ouvrir(browser, opts) {
   await p.locator('.geo-valider').click();
   await sleep(2800);
   check((await p.locator('#geo-result').innerText()).includes('Pour l’honneur'), 'archive : résultat sans Paillettes');
+  check((await p.locator('.geo-credit').innerText().catch(() => '')).includes('Jeanne Photo, CC BY-SA 4.0') && (await p.locator('.geo-credit a').first().getAttribute('href')).startsWith('https://commons.wikimedia.org/'), 'photo libre : auteur, licence et lien après le vote');
   check(await p.locator('#geo-result .fxj-tampon').count() === 0, 'archive : pas de fin de partie pour une manche pour l’honneur');
   await p.locator('.geo-back').click();
   await sleep(600);
@@ -135,6 +136,22 @@ async function ouvrir(browser, opts) {
   await p.keyboard.press('Escape');
   check(p.errs.filter((e) => !/Choisis une photo/.test(e)).length === 0, `panel : aucune erreur JS ${p.errs.join(' | ')}`);
   await p.ctx.close();
+
+  /* ---------- Manche du lot Commons : son échelle compte, et rien ne l'envoie avant le vote ---------- */
+  p = await ouvrir(browser, { page: 'jeux', hash: '#geo', scenario: { geoMonde: true } });
+  await p.waitForSelector('.geo-valider', { timeout: 8000 });
+  await p.evaluate(() => window.__fakeMapClick(40, 10));
+  await sleep(200);
+  await p.locator('.geo-valider').click();
+  await p.waitForSelector('#geo-result:not([hidden])', { timeout: 4000 }).catch(() => {});
+  const monde = await p.evaluate(() => window.__JEUX.guesses.find((g) => g.user_id.startsWith('1111')));
+  check(monde && monde.distance_m > 500000 && monde.score === Math.round(5000 * Math.exp(-monde.distance_m / 1500000)), `échelle 1500 km : ${monde?.distance_m} m valent ${monde?.score} points`);
+  check(monde && monde.score > 1000 && p.errs.length === 0, 'échelle 1500 km : une erreur de plusieurs centaines de km rapporte encore des points');
+  await p.ctx.close();
+
+  const m187 = fs.readFileSync(path.join(__dirname, '../../../supabase/migrations/187_geo_credit_photo.sql'), 'utf8');
+  check(m187.includes("coalesce(r.echelle_km, hg_jeux_cap('geo_echelle_km', 50, 1, 20000))") && m187.includes('echelle_km int check (echelle_km between 1 and 20000)'), 'SQL 187 : échelle de la manche, sinon réglage global');
+  check(/ECHELLE_GEO_KM = 1500/.test(fs.readFileSync(path.join(__dirname, '../../../outils/images/importer-lots.mjs'), 'utf8')), 'import : le lot pose 1500 km');
 
   /* ---------- Panel : un Staff sans « souvenirs » ne voit pas la sous-section ---------- */
   p = await openPage(browser, { page: 'admin', fixture: FIX, width: 1280, scenario: { uid: '00000002-0000-4000-8000-000000000002', staff: ['quiz'] } });

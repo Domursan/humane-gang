@@ -1,6 +1,6 @@
 // ===== Humane Gang — Jeux › GeoGuessr du gang (idée J1) =====
 /*
- * Rôle : la manche du jour (une photo d'une sortie passée), une épingle à poser sur la carte, une seule tentative ;
+ * Rôle : la manche du jour (une photo d'une sortie passée, ou une photo libre du monde entier), une épingle à poser sur la carte, une seule tentative ;
  * puis le résultat : vraie position, ligne entre les deux points, distance, score sur 5 000, Paillettes, sortie
  * d'origine. Classements du jour et de la semaine ; archive des manches passées jouable « pour l'honneur ».
  * La réponse ne quitte le serveur qu'après le vote (RPC hg_geo_guess).
@@ -57,7 +57,7 @@ export async function mount(panel, ctx) {
       <div class="jg-col">
         <figure class="geo-photo" id="geo-photo" hidden>
           <button class="geo-photo-btn" type="button" data-geo="zoom" aria-label="Agrandir la photo"><img id="geo-img" alt="Photo de la manche : où a-t-elle été prise ?" decoding="async"></button>
-          <figcaption class="geo-photo-tag">Photo d’une sortie passée</figcaption>
+          <figcaption class="geo-photo-tag">Photo de la manche</figcaption>
         </figure>
         <section class="jg-card geo-play" id="geo-play" aria-labelledby="geo-play-h">
           <div class="jg-between geo-play-head">
@@ -260,6 +260,10 @@ function resultat(m, focus, animer = false) {
       <span class="small">C’était : <b>${esc(sol.label)}</b>${sol.event_title ? `, ${esc(sol.event_title)}${esc(date)}` : ''}</span>
       ${sol.event_id ? `<a class="small geo-album" href="/pages/irl/irl.html#event-${encodeURIComponent(sol.event_id)}">Voir l’album</a>` : ''}
     </div>` : '';
+  // Photo libre (Wikimedia Commons) : auteur, licence et source, exigés par CC BY. Montrés après le vote seulement.
+  const cr = sol.credit;
+  const lien = (u, t) => (String(u || '').startsWith('https://') ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(t)}</a>` : esc(t));
+  const credit = cr ? `<p class="small muted geo-credit">Photo : ${lien(cr.source, cr.auteur || 'Wikimedia Commons')}, ${lien(cr.licence_url, cr.licence || '')}, réduite.</p>` : '';
   // Le gain est écrit par finDePartie dans la pastille (+ N, qui défile) ; sinon pastille fixe.
   const gain = m.honor ? '<span class="pill">Pour l’honneur</span>' : avecGain ? '<span class="pill jg-gain" data-geo-gain></span>' : '<span class="pill">0 Paillette</span>';
   const box = q('#geo-result');
@@ -272,7 +276,7 @@ function resultat(m, focus, animer = false) {
       <div><div class="jg-display geo-score">${ecrireScore(score)}</div>
       <div class="small muted">Ton épingle est à ${esc(km(m.distance_m))}</div></div>
       ${gain}
-    </div>${origine}`;
+    </div>${origine}${credit}`;
     box.hidden = false;
   };
   /** Dernier temps : message d'état, tampon et gain (sauf manche pour l'honneur), toast, focus. */

@@ -124,6 +124,7 @@ Un espace = un dossier = une fonctionnalité du site. Chaque espace a sa page (o
 | `ci.yml` | Contrôles et tests : syntaxe JS, présence des fonctions et tables de la base, tests de parcours (4 morceaux en parallèle), accessibilité (axe-core), budget de performance mobile. Tourne sur un faux Supabase : aucune donnée réelle. | Envoi sur `main`, demande de fusion, passage de nuit (2 h 17 UTC), lancement manuel |
 | `appliquer-sql.yml` | Applique sur la base les migrations de `supabase/appliquer.txt` qui ne sont pas encore dans `supabase/appliquees.txt` (script `outils/appliquer-sql.mjs`), puis note le résultat. Utilise le secret `SUPABASE_ACCESS_TOKEN`. | Envoi sur `main` qui modifie `supabase/appliquer.txt`, ou lancement manuel |
 | `deploy-functions.yml` | Déploie les fonctions edge listées dans `supabase/functions/a-deployer.txt`. Utilise le secret `SUPABASE_ACCESS_TOKEN`. | Envoi sur `main` qui modifie `supabase/functions/a-deployer.txt`, ou lancement manuel (choix de la fonction) |
+| `importer-lots.yml` | Importe les lots d'images des jeux (`outils/images/lots/`) : affiches Framed et photos GeoGuessr vers le stockage et la base, compte rendu dans `outils/images/rapport-lots.json`. | Lancement manuel seulement |
 | `importer-images.yml` | Importe dans le dépôt les images de `outils/images/a-importer.json` (captures Steam, images Wikipédia, adresses), les convertit en .webp et les ajoute par un commit. | Envoi sur `main` qui modifie `a-importer.json` ou `importer.mjs`, ou lancement manuel |
 
 ## Où ranger un nouveau fichier ?
