@@ -272,6 +272,23 @@ export function initEnchere(ctx) {
   });
   ctx.app.addEventListener('input', (e) => { if (e.target.id === 'c2-auc-amount') { E.amount = e.target.value; } });
   loadEnchere();
-  E.tick = setInterval(() => { if (!document.hidden && ctx.visible()) tick(); }, 1000);
-  E.timer = setInterval(() => { if (!document.hidden && ctx.visible() && !E.busy && document.activeElement?.id !== 'c2-auc-amount' && !E.edit) loadEnchere(); }, 20000);
+  demarrer();
+  // Page quittée : plus de minuterie ; retour depuis le cache de navigation : on les relance.
+  window.addEventListener('pagehide', arreter);
+  window.addEventListener('pageshow', (e) => { if (e.persisted && C) demarrer(); });
+}
+
+/** Lance le compte à rebours (1 s) et la relecture (20 s) ; ils s'arrêtent seuls si l'écran disparaît. */
+function demarrer() {
+  arreter();
+  E.tick = setInterval(() => { if (!C?.app.isConnected) { arreter(); return; } if (!document.hidden && C.visible()) tick(); }, 1000);
+  E.timer = setInterval(() => {
+    if (!C?.app.isConnected) { arreter(); return; }
+    if (!document.hidden && C.visible() && !E.busy && document.activeElement?.id !== 'c2-auc-amount' && !E.edit) loadEnchere();
+  }, 20000);
+}
+
+/** Arrête les deux minuteries (écran disparu ou page quittée). */
+function arreter() {
+  clearInterval(E.tick); clearInterval(E.timer); E.tick = null; E.timer = null;
 }

@@ -57,7 +57,7 @@ export const DEFAULT_INFO_GROUPS = [
     { id: 'nintendo', label: 'Nintendo (code ami)', type: 'text', placeholder: 'SW-0000-0000-0000' },
     { id: 'battlenet', label: 'Battle.net', type: 'text', placeholder: 'Pseudo#1234' },
     { id: 'riot', label: 'Riot ID', type: 'text', placeholder: 'Pseudo#TAG' },
-    { id: 'rockstar', label: 'Rockstar Social Club / FiveM', type: 'text' },
+    { id: 'rockstar', label: 'Pseudo en ligne', type: 'text' },
     { id: 'ea', label: 'EA / Ubisoft', type: 'text' },
     { id: 'autres_reseaux', label: 'Autres plateformes', type: 'textarea' },
   ] },

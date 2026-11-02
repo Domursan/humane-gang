@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css; font-src 'self' data:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://zqbdzokyhgavgmqgiwuw.supabase.co wss://zqbdzokyhgavgmqgiwuw.supabase.co https://nominatim.openstreetmap.org; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/leaflet@1.9.4/; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css; font-src 'self' data:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://zqbdzokyhgavgmqgiwuw.supabase.co wss://zqbdzokyhgavgmqgiwuw.supabase.co https://nominatim.openstreetmap.org; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <script src="/assets/commun/theme-boot.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mentions légales et confidentialité · Humane Gang</title>
@@ -39,7 +39,7 @@
       <div>
         <p class="eyebrow">Informations légales</p>
         <h1 class="page-title">Mentions légales et confidentialité</h1>
-        <p class="muted legal-updated">Dernière mise à jour : <time datetime="2026-10-23">23 octobre 2026</time></p>
+        <p class="muted legal-updated">Dernière mise à jour : <time datetime="2026-11-02">2 novembre 2026</time></p>
       </div>
     </header>
 
@@ -106,6 +106,11 @@
                 <tr><th scope="row">Boîte à idées</th><td>Texte des idées envoyées.</td></tr>
                 <tr><th scope="row">Assistance</th><td>Pseudo, sujet, message et, si tu n'es pas connecté·e, contact Discord indiqué.</td></tr>
                 <tr><th scope="row">Vie du gang</th><td>Badges obtenus, fil d'activité (par exemple « X a rejoint le gang »).</td></tr>
+                <tr><th scope="row">Messages : réactions</th><td>Les réactions (emoji) que tu poses sur les messages d'une conversation, avec ton identifiant de membre.</td></tr>
+                <tr><th scope="row">Cartes d'anniversaire</th><td>Le mot que tu écris sur la carte d'anniversaire d'un membre, avec ton pseudo comme signataire.</td></tr>
+                <tr><th scope="row">Enchères entre membres</th><td>Cartes mises en vente par un membre, offres des enchérisseurs et prix atteints.</td></tr>
+                <tr><th scope="row">Jeux : jokers, séries et archives</th><td>Jokers utilisés sur les jeux du jour, séries de jours joués, parties jouées « pour l'honneur » dans les archives et défis de collection réussis.</td></tr>
+                <tr><th scope="row">Jeux : spectateurs</th><td>Les parties de Uno, Blackjack, Monopoly et Destins peuvent être regardées par les autres membres ; le fait que tu regardes une partie est noté, et les messages que tu écris dans le chat des spectateurs sont enregistrés avec ton pseudo.</td></tr>
                 <tr><th scope="row">Données techniques</th><td>Adresse IP et journaux techniques conservés par les hébergeurs, stockage local de ton navigateur (voir <a href="#cookies">Cookies et stockage</a>).</td></tr>
               </tbody>
             </table>
@@ -140,6 +145,10 @@
             <li><strong>Ton e-mail, ta date de naissance complète et ton identifiant Discord</strong> ne sont affichés à aucun autre membre (seulement à l'administrateur).</li>
             <li><strong>L'administrateur</strong> gère les invitations, les éditions et les badges, lit la boîte à idées et les demandes d'assistance. Pour la gestion du site, <strong>il a accès à toutes les données des comptes</strong> (y compris l'e-mail, la date de naissance complète, l'identifiant Discord, les informations diverses, les listes de souhaits et le tirage) et peut les consulter ou les corriger depuis l'espace d'administration. Il s'engage à n'utiliser cet accès que pour faire fonctionner le site, l'organisation du Secret Santa et des sorties, la maintenance, la sécurité ou à ta demande, et à ne jamais divulguer ces données en dehors de ce cadre.</li>
             <li><strong>La messagerie</strong> : tes messages ne sont visibles que par les membres de la conversation. Dans une conversation Secret Santa, ta cible voit seulement « Ton Santa », jamais ton pseudo. <strong>Les messages peuvent être consultés par l'administrateur</strong> (avec le vrai nom de l'expéditeur, y compris pour le Secret Santa), qui peut aussi supprimer un message, uniquement pour la modération, la sécurité ou à ta demande. N'y partage pas de mots de passe ni d'informations sensibles.</li>
+            <li><strong>Réactions aux messages</strong> : ton pseudo est visible des membres de la conversation où tu réagis.</li>
+            <li><strong>Cartes d'anniversaire</strong> : le mot que tu écris est vu par le membre fêté le jour de son anniversaire, et par les autres membres qui ont signé la carte, avec ton pseudo.</li>
+            <li><strong>Enchères entre membres</strong> : le pseudo du vendeur et ceux des enchérisseurs sont visibles des membres connectés.</li>
+            <li><strong>Jeux</strong> : tes jokers, ta série de jours joués, tes parties « pour l'honneur » dans les archives et tes défis de collection réussis sont liés à ton compte (et gérés par l'administrateur avec le reste du site). Quand tu regardes une partie en spectateur, les joueurs voient le nombre de spectateurs ; les messages du chat des spectateurs, écrits avec ton pseudo, sont lus par les joueurs et les autres spectateurs.</li>
             <li><strong>Visiteurs non connectés</strong> : ils ne voient aucune donnée des membres.</li>
           </ul>
 
@@ -176,6 +185,12 @@
                 <tr><th scope="row">Idées</th><td>24 mois au plus ; détachées de ton profil si tu supprimes ton compte.</td></tr>
                 <tr><th scope="row">Notifications du site</th><td>90 jours, puis suppression automatique. Tu peux les supprimer toi-même avant.</td></tr>
                 <tr><th scope="row">Demandes d'assistance</th><td>12 mois après leur traitement.</td></tr>
+                <tr><th scope="row">Réactions aux messages</th><td>Aussi longtemps que le message ; supprimées avec lui ou avec ton compte.</td></tr>
+                <tr><th scope="row">Cartes d'anniversaire et leurs mots</th><td>12 mois après le jour de l'anniversaire.</td></tr>
+                <tr><th scope="row">Enchères entre membres closes et leurs offres</th><td>12 mois après la clôture. À la suppression de ton compte, une vente close garde la carte et le prix, sans le vendeur ni l'acheteur.</td></tr>
+                <tr><th scope="row">Jokers des jeux du jour</th><td>12 mois ; plus longtemps seulement tant que le joker maintient une série en cours.</td></tr>
+                <tr><th scope="row">Parties pour l'honneur des archives et défis de collection réussis</th><td>Tant que ton compte existe.</td></tr>
+                <tr><th scope="row">Spectateurs vus</th><td>30 jours.</td></tr>
                 <tr><th scope="row">Journaux techniques des hébergeurs</th><td>Durée fixée par chaque prestataire (en général de quelques jours à quelques semaines).</td></tr>
                 <tr><th scope="row">Stockage local du navigateur</th><td>Jusqu'à ta déconnexion ou jusqu'à ce que tu effaces les données de ton navigateur.</td></tr>
               </tbody>
@@ -201,7 +216,7 @@
         <!-- ================================================================ -->
         <section id="cookies" class="legal-section" aria-labelledby="h-cookies">
           <h2 id="h-cookies" class="display">Cookies et stockage local</h2>
-          <p>Le site <strong>ne dépose aucun cookie publicitaire ni traceur</strong> et n'utilise aucun outil de mesure d'audience. Il utilise seulement le stockage local de ton navigateur (« localStorage »), strictement nécessaire à son fonctionnement ; aucun consentement n'est donc requis, mais voici la liste complète :</p>
+          <p>Le site <strong>ne dépose aucun cookie publicitaire ni traceur</strong> et n'utilise aucun outil de mesure d'audience. Il utilise seulement le stockage local de ton navigateur (« localStorage »), strictement nécessaire à son fonctionnement ou qui garde tes préférences ; aucun consentement n'est donc requis, mais voici les clés principales, regroupées par familles (certaines clés existent en plusieurs exemplaires, voir les motifs en fin de tableau) :</p>
           <div class="table-wrap" tabindex="0" role="region" aria-label="Stockage local utilisé">
             <table class="legal-table">
               <thead><tr><th scope="col">Nom</th><th scope="col">Rôle</th><th scope="col">Durée</th></tr></thead>
@@ -220,6 +235,14 @@
                 <tr><th scope="row"><code>hg_seen_day</code></th><td>Jour où ta visite a déjà été notée, pour ne l’envoyer qu’une fois par jour</td><td>Jusqu'à effacement</td></tr>
                 <tr><th scope="row"><code>hg_geo_v1</code></th><td>Coordonnées des lieux de rencontre déjà trouvées, pour ne pas les rechercher à chaque ouverture de la carte IRL (aucune donnée personnelle)</td><td>Jusqu'à effacement</td></tr>
                 <tr><th scope="row"><code>hg_ss_seen_&lt;édition&gt;</code></th><td>Se souvenir que tu as déjà vu ta cible du Secret Santa pour cette édition</td><td>Jusqu'à effacement</td></tr>
+                <tr><th scope="row"><code>hg_site_settings</code></th><td>Réglages publics du site en cache (nom, textes, identité), pour afficher la page sans attendre le serveur</td><td>Jusqu'à effacement</td></tr>
+                <tr><th scope="row"><code>hg_comptes</code></th><td>« Changer de compte » : pseudo, couleur, photo, rôle et jeton de renouvellement de session du second compte, gardés sur l'appareil. Réservé aux administrateurs et au Staff, 2 comptes au plus ; jamais d'e-mail ni de mot de passe</td><td>Jusqu'au retrait du compte ou à la déconnexion</td></tr>
+                <tr><th scope="row"><code>hg_comptes_arrivee</code> <span class="small">(sessionStorage)</span></th><td>Message affiché une fois après un changement de compte</td><td>Jusqu'à la fermeture de l'onglet</td></tr>
+                <tr><th scope="row"><code>hg_memo:&lt;id&gt;</code> <span class="small">(sessionStorage)</span></th><td>Copie de ton profil et de tes pages accessibles, gardée dix minutes pour afficher l'en-tête et le menu tout de suite (la base reste seule juge des accès)</td><td>Jusqu'à la fermeture de l'onglet ou à la déconnexion</td></tr>
+                <tr><th scope="row">Affichage et accueil : <code>hg_accueil_blocs</code>, <code>hg_home_layout</code>, <code>hg_cal_filters</code>, <code>hg_cal_vue</code>, <code>hg_bandeau_ferme</code> <span class="small">(sessionStorage)</span>, <code>hg_staff_dock:&lt;id&gt;</code>, <code>hg_view_as</code> <span class="small">(sessionStorage)</span></th><td>Préférences d'affichage : blocs de l'accueil ouverts ou réarrangés, vue et filtres du calendrier, bandeau d'information fermé, raccourcis du Staff, aperçu « voir comme » d'un administrateur</td><td>Jusqu'à effacement (ou fermeture de l'onglet pour sessionStorage)</td></tr>
+                <tr><th scope="row">Jeux et préférences de jeux : <code>hg_duel_daltonien</code>, <code>hg_uno_tri</code>, <code>hg_heardle_volume</code>, <code>hg_creeper_jour</code>, <code>hg_egg_…</code> <span class="small">(sessionStorage)</span>, <code>hg-qt:…</code> <span class="small">(sessionStorage)</span></th><td>Réglages de jeux (mode daltonien, tri des cartes, volume), jour de la dernière partie d'un jeu, et indications « déjà signalé pendant cette visite » (clins d'œil et suivi de défis)</td><td>Jusqu'à effacement (ou fermeture de l'onglet pour sessionStorage)</td></tr>
+                <tr><th scope="row">Parties en cours : <code>&lt;jeu&gt;_invite:&lt;code&gt;</code> (par exemple <code>hg_duel_invite:…</code>), <code>hg_plat_invite:…</code></th><td>Permet de reprendre une salle de jeu rejointe par invitation sur cet appareil</td><td>Jusqu'à effacement ou fin de la partie</td></tr>
+                <tr><th scope="row">Clés par compte : <code>&lt;clé&gt;@&lt;identifiant du compte&gt;</code></th><td>Motif utilisé pour les clés de jeux qui dépendent du compte (meilleurs scores, grilles du jour, carnet de Cluedo, cible du Secret Santa vue), afin que deux comptes sur le même appareil ne se mélangent pas. Mêmes rôles que ci-dessus, sans autre donnée</td><td>Jusqu'à effacement</td></tr>
               </tbody>
             </table>
           </div>

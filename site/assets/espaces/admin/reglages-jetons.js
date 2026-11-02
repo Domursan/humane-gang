@@ -41,9 +41,12 @@ export function chargerReglages() {
   if (chargement) return chargement;
   chargement = (async () => {
     const out = { cartes: {}, badges: {}, irl: {}, invites: {}, ss: {}, support: {}, eggs: {}, anciennete: {} };
+    const membre = await hasSession();
     try {
-      const { data, error } = await sb.rpc('hg_card_cfg');
-      if (!error && estObjet(data)) out.cartes = data;
+      if (membre) { // sans session la RPC rend 401 : on garde le repli des textes, sans appel
+        const { data, error } = await sb.rpc('hg_card_cfg');
+        if (!error && estObjet(data)) out.cartes = data;
+      }
     } catch (e) {
       console.warn('[réglages] jeu de cartes illisible, valeurs actuelles affichées :', e?.message || e);
     }
@@ -54,7 +57,6 @@ export function chargerReglages() {
     } catch (e) {
       console.warn('[réglages] réglages du site illisibles, valeurs actuelles affichées :', e?.message || e);
     }
-    const membre = await hasSession();
     await Promise.all(Object.entries(RPC_SETTINGS).map(async ([cle, rpc]) => {
       if (cle === 'eggs' && !membre) return; // réservée aux membres connectés (migration 072) : pas d’appel refusé pour un visiteur
       try {

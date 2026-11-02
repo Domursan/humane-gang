@@ -19,7 +19,7 @@ Gravité : haute / moyenne / basse / info. « Corrigé » = correctif dans le d�
 |---|---|---|---|---|---|
 | 1 | Moyenne | `anon` et `authenticated` ont INSERT, UPDATE, TRUNCATE, REFERENCES et TRIGGER sur des tables sans politique qui les accorde. La RLS les bloque aujourd'hui, mais une politique future mal écrite ouvrirait l'écriture directe ; TRUNCATE n'est pas soumis à la RLS. | Base, `public.hg_*` (16 couples de privilèges) | `information_schema.role_table_grants` en production. Test à blanc : `update hg_wallets` par un membre renvoie « 0 ligne » avant, « permission denied » après | Migration 105 (bloc DO) |
 | 2 | Basse | `hg_role_grants(uuid, text)` est exécutable par `authenticated` et renvoie les rôles d'un autre membre. Elle n'est appelée que par `hg_page_ok` (SECURITY DEFINER). | Base, `public.hg_role_grants` | `has_function_privilege` : `t` pour authenticated. Test à blanc : `t` avant, « permission denied » après | Migration 105 (`revoke execute`) |
-| 3 | Moyenne | Pas d'empreinte SRI sur `supabase-js` chargé depuis jsDelivr par `import()` (version figée `@2.45.4`, mais un CDN compromis servirait du code à tous les visiteurs). | `site/assets/commun/core/supabase.js` et autres imports | Lecture du code : aucun `integrity` | À décider (voir plus bas) |
+| 3 | Moyenne | ~~Pas d'empreinte SRI sur `supabase-js` chargé depuis jsDelivr.~~ Périmé : `supabase-js`, `qrcode-generator` et `html-to-image` sont désormais servis par le site lui-même (`site/assets/vendor/`, version figée, contrôlée par `tests/controles/vendor-check.cjs`). Le seul script encore chargé depuis jsDelivr est Leaflet 1.9.4, avec empreinte SRI. | `site/assets/vendor/`, `site/assets/commun/leaflet-load.js` | Lecture du code | Corrigé (bibliothèques locales) |
 | 4 | Moyenne | Protection contre les mots de passe fuités désactivée dans Auth. | Réglage du tableau de bord Supabase | Advisor de sécurité Supabase | À décider (réglage du tableau de bord, pas de code) |
 | 5 | Basse | Pas de SRI sur `qrcode-generator@1.4.4` (admin : codes et liens d'invitation). | `site/assets/espaces/admin/cartes/codes.js`, `admin-invite-links.js` | Lecture du code | À décider |
 | 6 | Basse | Le chargeur Leaflet partagé (pages/jeux/jeux.html, pages/admin/admin.html) ne vérifiait pas l'empreinte du script ni de la feuille de style. | `site/assets/commun/leaflet-load.js` | Lecture du code | Corrigé : mêmes empreintes que `irl-history.js`, `crossOrigin` ajouté |
@@ -33,7 +33,7 @@ Gravité : haute / moyenne / basse / info. « Corrigé » = correctif dans le d�
 | 14 | Basse | Privilège DELETE accordé à `anon` et `authenticated` sur les tables sans politique de suppression. Sans politique, la RLS refuse la suppression, mais une politique future pourrait l'ouvrir. Non traité par la migration 105 (voir « À décider »). | Base, `public.hg_*` | `information_schema.role_table_grants` | À décider |
 | 15 | Info | CORS `*` sur les fonctions edge partagées. Acceptable tant que les fonctions n'utilisent pas de cookies. | `supabase/functions/_shared/discord.ts` | Lecture du code | Aucun |
 | 16 | Info | Pas de `frame-ancestors` dans la CSP (la protection contre l'affichage dans une iframe repose sur l'hébergeur GitHub Pages). | Pages HTML (meta CSP) | Lecture des pages | Aucun (une meta ne peut pas le porter) |
-| 17 | Info | CSP : `script-src` autorise `/npm/` de jsDelivr en entier. Nécessaire pour les imports dynamiques, mais élargit la surface si un paquet est compromis. | Pages HTML | Lecture des CSP | Aucun (lié au constat 3) |
+| 17 | Info | ~~CSP : `script-src` autorise `/npm/` de jsDelivr en entier.~~ Périmé : `script-src` est restreint à `https://cdn.jsdelivr.net/npm/leaflet@1.9.4/` sur les pages concernées (aucun autre paquet npm ne peut s'exécuter). `sw.js` ne met en cache jsDelivr que cette adresse. | Pages HTML, `site/sw.js` | Lecture des CSP ; `parcours-securite-front` refuse tout autre paquet | Corrigé |
 | 18 | Info | `hg_has_perm` et `hg_is_staff` sont exécutables par `anon`. Elles ne renvoient rien d'exploitable sans session. | Base | `has_function_privilege` | Laissé en l'état |
 
 ## Ce qui a été vérifié sans problème
@@ -64,7 +64,7 @@ Gravité : haute / moyenne / basse / info. « Corrigé » = correctif dans le d�
 
 ## À décider
 
-1. **SRI sur `supabase-js` et `qrcode-generator`** : ajouter une import map avec `integrity`, ou héberger les fichiers dans le dépôt. Les deux options demandent une vérification des empreintes.
+1. ~~**SRI sur `supabase-js` et `qrcode-generator`**~~ : réglé, les fichiers sont hébergés dans `site/assets/vendor/` et la CSP ne vise plus que Leaflet sur jsDelivr (02.11.2026).
 2. **Mots de passe fuités** : activer la protection dans le tableau de bord Supabase (Auth > Passwords). Réglage, pas de code.
 3. **Clé `service_role` comme secret HMAC** (`hg-support`) : créer un secret dédié (`HG_SUPPORT_HMAC_SECRET`) et migrer les liens existants.
 4. **Politiques `*_own` sur `d_*`, dossier `cine/` de `hg-assets`** : confirmer que l'écriture publique ou les politiques sont voulues.

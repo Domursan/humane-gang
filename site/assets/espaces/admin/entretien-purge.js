@@ -6,7 +6,7 @@
 import { sb, toast, errMsg, esc } from '../../commun/core.js';
 import { nf } from './entretien-sante.js';
 
-/** Tables rendues par la base : libellé et durée qui s'y applique. */
+/** Tables rendues par la base : libellé et durée qui s'y applique (clé du réglage, ou nombre de jours fixe de la migration 216). */
 const TABLES = [
   ['job_run_details', 'Journal des tâches', 'journal_jours'],
   ['hg_plat_coups', 'Coups : Plateaux', 'coups_jours'],
@@ -14,6 +14,12 @@ const TABLES = [
   ['hg_duel_coups', 'Coups : Duels', 'coups_jours'],
   ['hg_ndc_coups', 'Coups : Nom de code', 'coups_jours'],
   ['hg_site_notifs', 'Notifications du site', 'notifs_jours'],
+  ['hg_spect_vus', 'Spectateurs vus', 30],
+  ['hg_card_member_bids', 'Offres des enchères closes', 365],
+  ['hg_card_member_auctions', 'Enchères closes', 365],
+  ['hg_cartes_anniv_mots', 'Mots des cartes d’anniversaire', 365],
+  ['hg_cartes_anniv', 'Cartes d’anniversaire', 365],
+  ['hg_jeux_jokers', 'Jokers (série terminée)', 365],
 ];
 const TEXTE = {
   charge: 'L’aperçu compte les lignes concernées.',
@@ -29,7 +35,7 @@ export const lignes = (n) => `${nf(n)} ${n > 1 ? 'lignes' : 'ligne'}`;
  * @param {{plafond: number, tables: Object<string, number>, journal_jours: number, coups_jours: number, notifs_jours: number}} a Réponse de hg_entretien_apercu.
  */
 function calcul(a) {
-  const liste = TABLES.filter(([cle]) => cle in (a.tables || {})).map(([cle, nom, duree]) => ({ nom, jours: a[duree], n: Number(a.tables[cle]) || 0 }));
+  const liste = TABLES.filter(([cle]) => cle in (a.tables || {})).map(([cle, nom, duree]) => ({ nom, jours: typeof duree === 'number' ? duree : a[duree], n: Number(a.tables[cle]) || 0 }));
   return { liste, passage: liste.reduce((s, l) => s + Math.min(l.n, a.plafond), 0), plafonnees: liste.filter((l) => l.n > a.plafond).length };
 }
 

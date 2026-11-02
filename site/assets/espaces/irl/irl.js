@@ -79,7 +79,7 @@ async function load() {
   const err = [m, ev, rs, dt, vt, ph].find((r) => r.error)?.error;
   if (err) throw err;
   S.members = new Map((m.data || []).map((x) => [x.id, x]));
-  if (isAdmin) for (const [id, g] of await ghostDirectory()) S.members.set(id, g); // l'admin voit les fantômes, pas les membres
+  if (isAdmin) for (const [id, g] of await (await import('../admin/admin-ghosts.js')).ghostDirectory()) S.members.set(id, g); // l'admin voit les fantômes, pas les membres
   S.events = ev.data || [];
   S.rsvps = rs.data || [];
   S.dates = dt.data || [];

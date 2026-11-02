@@ -126,13 +126,13 @@ self.addEventListener('fetch', (event) => {
 /* ---------- Stratégies de cache ---------- */
 
 /**
- * Fichier jsDelivr d'une version exacte (ex. /npm/@supabase/auth-js@2.65.0/+esm) : son contenu ne change pas.
- * Une adresse sans version exacte (plage, « latest », /gh/…) n'est jamais mise en cache.
+ * Fichier Leaflet 1.9.4 servi par jsDelivr (seule bibliothèque encore chargée depuis ce CDN, comme la CSP des pages) :
+ * son contenu ne change pas. Toute autre adresse jsDelivr (autre paquet, plage, « latest », /gh/…) n'est jamais mise en cache.
  * @param {URL} url Adresse demandée.
  * @returns {boolean}
  */
 function isPinnedLibrary(url) {
-  return url.origin === 'https://cdn.jsdelivr.net' && /^\/npm\/(@[\w.-]+\/)?[\w.-]+@\d+\.\d+\.\d+\//.test(url.pathname);
+  return url.origin === 'https://cdn.jsdelivr.net' && url.pathname.startsWith('/npm/leaflet@1.9.4/');
 }
 
 /**
