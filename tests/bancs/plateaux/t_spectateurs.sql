@@ -36,15 +36,20 @@ begin
   perform t_call(5, format('hg_spect_arreter(%L)', pid));
   perform t_ok(t_err(5, format('hg_plat_messages(%L)', pid)) is not null, 'arrêter : plus de chat');
 
-  -- Blackjack : la carte cachée de la banque reste « ?? » chez le spectateur.
-  c := t_call(1, format('hg_plat_creer(%L::jsonb)', '{"jeu":"blackjack","nb_places":2,"visibilite":"publique"}')) #>> '{}';
-  pid := t_pid(c);
-  perform t_call(2, format('hg_plat_rejoindre(%L)', c)); perform t_call(2, format('hg_plat_pret(%L, true)', c));
-  perform t_call(1, format('hg_plat_lancer(%L)', c));
-  update hg_plat_parties set etat = jsonb_set(jsonb_set(etat, '{phase}', '"jeu"'), '{banque}', '["AS", "KH"]') where id = pid;
-  e := t_etat(t_uid(5), c);
-  perform t_ok(e->'jeu'->'banque' = '["AS", "??"]'::jsonb and e->'jeu'->'banque_total' = 'null'::jsonb, 'blackjack : carte cachée de la banque');
-  perform t_ok(e::text !~ 'KH', 'blackjack : la carte cachée ne part pas');
+  -- Blackjack : la carte cachée de la banque reste « ?? » chez le spectateur. Seulement si le Blackjack est dans la base :
+  -- la base de la CI (rebuild.sh) ne peut pas charger la migration 143, qui dépend des jeux du jour (136, 150) absents du banc.
+  if to_regproc('public.hg_bj__total') is not null then
+    c := t_call(1, format('hg_plat_creer(%L::jsonb)', '{"jeu":"blackjack","nb_places":2,"visibilite":"publique"}')) #>> '{}';
+    pid := t_pid(c);
+    perform t_call(2, format('hg_plat_rejoindre(%L)', c)); perform t_call(2, format('hg_plat_pret(%L, true)', c));
+    perform t_call(1, format('hg_plat_lancer(%L)', c));
+    update hg_plat_parties set etat = jsonb_set(jsonb_set(etat, '{phase}', '"jeu"'), '{banque}', '["AS", "KH"]') where id = pid;
+    e := t_etat(t_uid(5), c);
+    perform t_ok(e->'jeu'->'banque' = '["AS", "??"]'::jsonb and e->'jeu'->'banque_total' = 'null'::jsonb, 'blackjack : carte cachée de la banque');
+    perform t_ok(e::text !~ 'KH', 'blackjack : la carte cachée ne part pas');
+  else
+    raise notice 'sauté : blackjack absent de cette base';
+  end if;
 
   -- Destins : se regarde aussi.
   c := t_call(1, format('hg_plat_creer(%L::jsonb)', '{"jeu":"destins","nb_places":2,"visibilite":"publique"}')) #>> '{}';
