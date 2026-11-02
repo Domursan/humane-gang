@@ -8,7 +8,7 @@
  *     Un lien n'apparaît que si le membre a accès à sa page (pages-access.js) ; un menu vide disparaît.
  *   - À droite, la photo de profil seule. Un clic ouvre un quart de cercle d'icônes autour d'elle, sur deux rangées :
  *     Messages, Recherche, Mon compte ; puis Aide et tutos, Affichage, Mode sans limite (admin), Admin ou Staff,
- *     Déconnexion. La pastille des messages non lus est aussi posée sur la photo.
+ *     Changer de compte (admin et Staff, ou deux comptes déjà sur l'appareil ; comptes.js), Déconnexion. La pastille des messages non lus est aussi posée sur la photo.
  *   - Vue « comme un membre » (admin, view-as.js) : menus et pages du membre ; Admin, Staff et Sans limite sont masqués.
  *   - Téléphone (760 px et moins) : bouton « Menu » qui déplie les menus en accordéon ; même arc, en plus petit.
  * Les boutons gardent leurs classes historiques (.nav-msg, .nav-search-open, .nav-help, .prefs-open, .nav-god,
@@ -29,8 +29,9 @@ import { paintGod, openGodDialog, disableGodMode, isGodMode } from './godmode.js
 import { avatarHtml, esc, reducedMotion } from './util.js';
 import {
   ICON_MSG, ICON_DOOR, ICON_PREFS, ICON_BOLT, ICON_USER, ICON_HELP, ICON_MENU, ICON_SEARCH, ICON_CHEVRON, ICON_CHEVRON_RIGHT, ICON_SHIELD,
-  ICON_STATUT,
+  ICON_STATUT, ICON_COMPTES,
 } from './icons.js';
+import { autresComptes } from './comptes-etat.js';
 import { bindRechercheLien, ouvreRecherche } from './recherche-lien.js';
 import { bindShortcuts } from './shortcuts.js';
 import { siteIdentite, navLibelle } from './site-defaults.js';
@@ -351,6 +352,8 @@ function fanHtml(profile) {
     item('prefs-open', 'button', 'type="button" aria-haspopup="dialog" aria-label="Préférences d’affichage"', ICON_PREFS, 'Affichage'),
     profile.is_admin && !viewAsActive() ? item('nav-god', 'button', 'type="button" aria-pressed="false" aria-label="Activer le mode sans limite"', ICON_BOLT, 'Sans limite') : '',
     item('nav-admin', 'a', `href="/pages/admin/admin.html"${curAttr('/pages/admin/admin.html')} hidden`, ICON_SHIELD, profile.is_admin ? 'Admin' : 'Staff'),
+    // Changer de compte : masqué tant que les droits ne sont pas connus (syncComptes) ; la petite photo de l'autre compte y est posée
+    item('nav-comptes', 'button', 'type="button" aria-haspopup="dialog" aria-controls="cc-panel" aria-expanded="false" aria-label="Changer de compte" hidden', ICON_COMPTES, 'Changer de compte'),
     item('nav-logout', 'button', 'type="button" aria-label="Se déconnecter"', ICON_DOOR, 'Déconnexion'),
   ].join('');
 }
@@ -412,6 +415,7 @@ function setFan(header, open, { focus = false } = {}) {
   if (open) {
     closeMenus(header);
     setNavOpen(header, false);
+    if (!header.querySelector('.fan-item.nav-comptes')?.hidden) cssComptes();
     layoutFan(header);
   }
   fan.hidden = !open;
@@ -481,6 +485,36 @@ function syncAdmin(header, profile) {
   adm.closest('.fan-li').hidden = !panel;
   adm.querySelector('.fan-label').textContent = profile.is_admin ? 'Admin' : 'Staff';
   adm.setAttribute('aria-label', profile.is_admin ? 'Admin' : 'Staff');
+  syncComptes(header, profile);
+}
+/**
+ * Entrée « Changer de compte » du menu en arc : pour l'admin et le Staff (comme l'entrée Admin), ou pour tout compte qui a déjà
+ * un autre compte sur l'appareil (le compte de test ajouté par un admin, pour revenir). Masquée pendant la vue « comme un membre ».
+ * Porte la petite photo de l'autre compte. Les styles (comptes.css) ne sont chargés qu'à l'ouverture du menu, ou tout de suite
+ * s'il y a un autre compte (petite photo).
+ * @param {HTMLElement} header En-tête.
+ * @param {object|null} profile Profil courant.
+ */
+/** Ajoute la feuille comptes.css (une seule fois). */
+function cssComptes() {
+  if (document.querySelector('link[href$="/comptes.css"]')) return;
+  const l = document.createElement('link');
+  l.rel = 'stylesheet'; l.href = new URL('../comptes.css', import.meta.url).href;
+  document.head.append(l);
+}
+function syncComptes(header, profile) {
+  const it = header.querySelector('.fan-item.nav-comptes');
+  if (!it || !profile) return;
+  const autre = autresComptes()[0];
+  const montre = !viewAsActive() && (!!autre || !!profile.is_admin || canPanel(getCachedPerms()));
+  it.hidden = !montre;
+  it.closest('.fan-li').hidden = !montre;
+  it.querySelector('.cc-mini')?.remove();
+  if (!montre) return;
+  if (autre) cssComptes(); // petite photo de l'autre compte ; sinon, styles chargés à l'ouverture du menu (setFan)
+  if (autre) it.querySelector('.fan-ico').insertAdjacentHTML('afterend', `<span class="cc-mini">${avatarHtml(autre, 26)}</span>`);
+  it.setAttribute('aria-label', autre ? 'Changer de compte (2 comptes sur cet appareil)' : 'Changer de compte');
+  if (header.classList.contains('fan-open')) layoutFan(header);
 }
 /**
  * Ouvre ou ferme le menu replié (760 px et moins). Met à jour aria-expanded du bouton « Menu ».
@@ -576,8 +610,12 @@ export function renderHeader(profile, { nav = true } = {}) {
     if (!it) return;
     // Recherche, affichage, mode sans limite : leur dialogue s'ouvre, l'arc se ferme sans reprendre le focus.
     // Statut : l'arc se ferme, c'est presence.js qui ouvre le panneau des notifications (clic délégué sur le document).
-    if (it.matches('.prefs-open, .nav-god, .nav-search-open, .nav-statut-open, a')) setFan(header, false);
+    if (it.matches('.prefs-open, .nav-god, .nav-search-open, .nav-statut-open, .nav-comptes, a')) setFan(header, false);
+    // Changer de compte : panneau « Comptes sur cet appareil », sous la photo (comptes.js, chargé à la demande)
+    if (it.matches('.nav-comptes')) import('./comptes.js').then((m) => m.ouvrirPanneau()).catch((x) => console.warn('[comptes]', x?.message || x));
   });
+  // Compte ajouté ou retiré (comptes.js) : l'entrée et sa petite photo sont mises à jour
+  window.addEventListener('hg:comptes', () => { const h = document.querySelector('.site-header'); if (h) syncComptes(h, getCachedProfile()); });
   fan.addEventListener('focusout', (e) => {
     if (header.classList.contains('fan-open') && e.relatedTarget && !fan.contains(e.relatedTarget) && e.relatedTarget !== me) setFan(header, false);
   });
@@ -602,8 +640,10 @@ export function renderHeader(profile, { nav = true } = {}) {
   });
   paintGod();
   bindRechercheLien(header);
-  // Déconnexion : on coupe la session, on oublie les droits et les badges vus pour cette session, puis on va à la page de connexion
+  // Déconnexion : on coupe la session (cet appareil seulement), on oublie les droits et les badges vus pour cette session,
+  // puis on va à la page de connexion. Avec deux comptes sur l'appareil, comptes.js demande lequel déconnecter.
   header.querySelector('.nav-logout').addEventListener('click', async (e) => {
+    if (autresComptes().some((a) => a.rt)) { setFan(header, false); (await import('./comptes.js')).deconnexion(); return; }
     const b = e.currentTarget; b.disabled = true;
     await signOutDevice(); // retire aussi l'abonnement push de l'appareil
     try { sessionStorage.removeItem('hg_badges_checked'); } catch {}

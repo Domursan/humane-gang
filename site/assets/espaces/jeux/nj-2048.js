@@ -18,7 +18,7 @@
  * Exporte : mount, unmount, resume.
  */
 import { paillSym } from '../../commun/paillettes.js';
-import { esc, errMsg, motionAllowed } from '../../commun/core.js';
+import { esc, errMsg, motionAllowed, lireLocal, ecrireLocal } from '../../commun/core.js';
 import { sonFlash } from '../arcade/fx.js';
 import { chargerCss, nf, classementHtml } from './commun.js';
 
@@ -27,7 +27,7 @@ import { chargerCss, nf, classementHtml } from './commun.js';
 const TAILLE = 4;
 /** Glissement minimal au doigt (px) pour déclencher un coup. */
 const SEUIL = 30;
-/** Clé du meilleur score mémorisé dans ce navigateur (convenance seulement). */
+/** Clé du meilleur score mémorisé dans ce navigateur (convenance seulement), rangée par compte (lireLocal). */
 const CLE_MEILLEUR = 'hg_2048_meilleur';
 /** Échelle des raretés, pour la légende (valeur de départ, nom, fond, texte). */
 const RARETES = [
@@ -62,12 +62,12 @@ const q = (sel) => G.panel.querySelector(sel);
 
 /** Meilleur score mémorisé dans ce navigateur (0 si rien ou stockage bloqué). */
 function meilleurLocal() {
-  try { return Number(localStorage.getItem(CLE_MEILLEUR)) || 0; } catch { return 0; }
+  return Number(lireLocal(CLE_MEILLEUR)) || 0;
 }
 
 /** Mémorise le meilleur score dans ce navigateur (sans importance si le stockage est bloqué). */
 function memoriserMeilleur(v) {
-  try { localStorage.setItem(CLE_MEILLEUR, String(v)); } catch { /* stockage bloqué */ }
+  ecrireLocal(CLE_MEILLEUR, String(v)); // stockage bloqué : sans importance
 }
 
 /** Rang de rareté d'une valeur : 2 → 1, 4 → 2, … (log2). */

@@ -13,7 +13,7 @@
  * Exporte : creer(root, ctx) -> { maj(etat), message(msg), detruire() }.
  *   ctx = { code, naviguer, moi, suivi, contenus } ; suivi = retour de suivrePartie.
  */
-import { esc, initials, toast } from '../../../../commun/core.js';
+import { esc, initials, toast, lireLocal, ecrireLocal } from '../../../../commun/core.js';
 import { plat, erreurTexte, nomDe, imageExiste } from '../../api.js';
 import { bandeauHtml, brancherChrono, journalHtml, imagePlateau, envoyer, moiJoueur, joueurDe, quitterPartie } from '../../vues/commun.js';
 import { boutonQuitter } from '../../../../commun/quitter.js';
@@ -251,10 +251,10 @@ export function creer(root, ctx) {
 
   /** Marques posées à la main (localStorage, en try/catch). */
   function lireMarques() {
-    try { return JSON.parse(localStorage.getItem(CARNET_CLE(code)) || '{}') || {}; } catch { return {}; }
+    try { return JSON.parse(lireLocal(CARNET_CLE(code)) || '{}') || {}; } catch { return {}; } // rangé par compte (comptes-etat.js)
   }
   function ecrireMarques(m) {
-    try { localStorage.setItem(CARNET_CLE(code), JSON.stringify(m)); } catch { /* navigation privée stricte */ }
+    ecrireLocal(CARNET_CLE(code), JSON.stringify(m)); // navigation privée stricte : sans effet
   }
 
   /**

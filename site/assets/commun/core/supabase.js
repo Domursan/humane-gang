@@ -5,10 +5,14 @@
  * hasSession (y a-t-il une session ouverte ?) et isNavCancel (faut-il ignorer cette erreur, due à une navigation ?).
  * Page : toutes les pages (tous les autres fichiers du socle importent sb depuis ici).
  * Dépendances : config.js (URL et clé publique), supabase-js servi localement (/assets/vendor, version 2.45.4).
- * Exporte : sb, hasSession, isNavCancel, authLanding, signOutDevice.
+ * Changer de compte (comptes-etat.js) : le client passe ses requêtes par fetchGarde (rien ne part d'un onglet figé, ni avec
+ * le jeton d'un autre compte que celui de la page) ; clientTemporaire() connecte ou retire un second compte sans toucher à
+ * la session du site.
+ * Exporte : sb, hasSession, isNavCancel, authLanding, signOutDevice, clientTemporaire, revoquerSession.
  */
 import { SUPABASE_URL, SUPABASE_KEY } from '../config.js';
 import { memoEffacer } from './memoire.js';
+import { fetchGarde, signalerCompte, sujetJeton, comptePage, lireComptes, effacerComptes } from './comptes-etat.js';
 
 // supabase-js est chargé ici et non par une balise <script> : le fichier local porte la version (2.45.4).
 const { createClient } = await import('../../vendor/supabase-js-2.45.4.mjs');
@@ -52,7 +56,55 @@ const detectSessionInUrl = URL_SESSION_PAGES.has(_page) && (!_code || _isAuthCod
 /** Client Supabase partagé par tout le site : session persistante, rafraîchissement automatique du jeton, flux PKCE. */
 export const sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl, flowType: 'pkce', lock: memoryLock },
+  global: { fetch: fetchGarde },
 });
+
+/* ---------- Changer de compte : un seul compte actif pour tout le navigateur ----------
+   supabase-js prévient les autres onglets quand la session change. Un onglet dont le compte change ailleurs se fige
+   (comptes-etat.js) au lieu d'agir au nom du nouveau compte ; le temps réel ne reçoit jamais le jeton d'un autre compte. */
+sb.auth.onAuthStateChange((_event, session) => { if (session?.user?.id) signalerCompte(session.user.id); });
+if (typeof sb.realtime?.setAuth === 'function') {
+  const setAuth = sb.realtime.setAuth.bind(sb.realtime);
+  sb.realtime.setAuth = (jeton) => {
+    const sub = sujetJeton(jeton);
+    if (sub && comptePage() && sub !== comptePage()) { signalerCompte(sub); return undefined; }
+    return setAuth(jeton);
+  };
+}
+
+/**
+ * Client Supabase à part, sans session gardée (rien dans la clé du site, aucun renouvellement en fond) : connexion d'un
+ * second compte, vérification ou fermeture de sa session. À jeter après usage.
+ * @returns {object}
+ */
+export function clientTemporaire() {
+  return createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'hg-compte-temporaire' },
+  });
+}
+
+/**
+ * Ferme sur le serveur la session d'un compte en attente (jeton de renouvellement), pour cet appareil seulement.
+ * Retire aussi l'abonnement push de l'appareil s'il est à ce compte. Au mieux, borné à 4 secondes ; ne jette jamais.
+ * @param {string|null} rt Jeton de renouvellement.
+ * @param {{push?: boolean}} [o] push : l'abonnement push de l'appareil appartient à ce compte.
+ * @returns {Promise<void>}
+ */
+export async function revoquerSession(rt, { push = false } = {}) {
+  if (!rt) return;
+  await Promise.race([(async () => {
+    try {
+      const t = clientTemporaire();
+      const { data, error } = await t.auth.refreshSession({ refresh_token: rt });
+      if (error || !data?.session) return; // session déjà fermée
+      if (push && 'serviceWorker' in navigator) {
+        const sub = await (await navigator.serviceWorker.getRegistration())?.pushManager?.getSubscription();
+        if (sub) { try { await t.from('hg_push_subscriptions').delete().eq('endpoint', sub.endpoint); } catch { /* réseau */ } await sub.unsubscribe().catch(() => {}); }
+      }
+      await t.auth.signOut({ scope: 'local' });
+    } catch { /* au mieux */ }
+  })(), new Promise((r) => setTimeout(r, 4000))]);
+}
 
 /**
  * Résultat du retour par lien d'e-mail sur cette page.
@@ -93,13 +145,24 @@ export const isNavCancel = (e) => _leaving && (e?.name === 'AbortError' || /Netw
 /**
  * Déconnexion de cet appareil : retire d'abord l'abonnement aux notifications push de l'appareil (ligne
  * hg_push_subscriptions, tant que la session permet encore de la supprimer, puis désabonnement du navigateur),
- * pour que le compte suivant sur un appareil partagé ne reçoive pas les alertes du précédent. Puis ferme la session.
+ * pour que le compte suivant sur un appareil partagé ne reçoive pas les alertes du précédent. Puis ferme la session
+ * de CET appareil seulement (les autres appareils du membre restent connectés), sauf avec partout : true.
+ * Un second compte rangé sur l'appareil (comptes-etat.js) est aussi déconnecté d'ici et oublié, sauf avec garderComptes : true
+ * (« Déconnecter Ethan » : on passe ensuite sur l'autre compte).
  * Ne jette jamais : chaque étape est au mieux, et l'ensemble du push est borné à 3 secondes.
+ * @param {{partout?: boolean, garderComptes?: boolean}} [o]
  * @returns {Promise<void>}
  */
-export async function signOutDevice() {
+export async function signOutDevice({ partout = false, garderComptes = false } = {}) {
+  const st = lireComptes();
+  if (!garderComptes) {
+    for (const a of st?.autres || []) await revoquerSession(a.rt, { push: st.push === a.id });
+    effacerComptes();
+  }
+  // Push de l'appareil activé par le compte qui reste (en attente) : il lui reste.
+  const pushAutre = garderComptes && st?.push && st.push !== comptePage();
   try {
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
+    if (!pushAutre && 'serviceWorker' in navigator && 'PushManager' in window) {
       await Promise.race([
         (async () => {
           const reg = await navigator.serviceWorker.getRegistration();
@@ -116,5 +179,5 @@ export async function signOutDevice() {
   // ordinateur partagé. Sans cela, la page Compte et le panel admin la laissaient sur l'appareil.
   try { await (await import('../offline-store.js')).clearOffline(); } catch { /* rien à effacer */ }
   memoEffacer(); // mémoire d'affichage (profil, pages, droits, mode sans limite) : rien ne reste pour le compte suivant
-  try { await sb.auth.signOut(); } catch { /* déconnexion locale au mieux */ }
+  try { await sb.auth.signOut({ scope: partout ? 'global' : 'local' }); } catch { /* déconnexion locale au mieux */ }
 }

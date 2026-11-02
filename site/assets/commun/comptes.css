@@ -1,0 +1,56 @@
+/* ===== Changer de compte (comptes.js) : entrée du menu en arc, panneau « Comptes sur cet appareil », boîtes, voile =====
+   Maquette validée le 02.11.2026. Variables de base.css uniquement. Le panneau reprend .notif-panel / .notif-head / .notif-h
+   (notifs.css), les boîtes le gabarit .hg-dialog (ui-confirm.css). Chargée par header.js quand l'entrée est montrée. */
+
+/* Arc : petite photo de l'autre compte sur l'icône (même place que la pastille .nav-badge) */
+.fan-item .cc-mini { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; border-radius: 999px; box-shadow: 0 0 0 2px var(--surface); }
+.fan-item .cc-mini .avatar { font-size: 11px; font-weight: 800; display: grid; place-items: center; border-radius: 999px; }
+
+/* Panneau */
+.cc-panel { gap: 12px; }
+.cc-nb { font-family: var(--font-pixel); font-size: 12px; color: var(--muted); }
+.cc-liste { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cc-ligne { display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 8px 10px; box-sizing: border-box; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); }
+.cc-ligne .avatar { flex: none; display: grid; place-items: center; border-radius: 999px; font-weight: 800; font-size: 14px; }
+.cc-ligne.is-actif { border-left: 4px solid var(--esp, var(--sand)); }
+.cc-nom { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; text-align: left; }
+.cc-nom strong { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-sous { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+.cc-alerte { color: var(--rose); font-weight: 600; }
+.cc-actif { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-pixel); font-size: 12px; text-transform: uppercase; color: var(--text); padding: 4px 8px; border: 2px solid #000; border-radius: 6px; background: var(--esp, var(--sand)); color: var(--esp-text, #121212); box-shadow: 2px 2px 0 #000; }
+.cc-ligne:not(.is-actif) { padding: 0 4px 0 0; }
+.cc-passer { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 8px 6px 8px 10px; border: 0; border-radius: 10px; background: none; color: var(--text); font: inherit; cursor: pointer; }
+.cc-passer:hover { background: var(--surface); }
+.cc-passer:focus-visible, .cc-retirer:focus-visible { outline: 3px solid var(--sand); outline-offset: 2px; }
+.cc-go { pointer-events: none; min-height: 40px; padding: 8px 14px; }
+.cc-retirer { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 10px; background: none; color: var(--muted); cursor: pointer; }
+.cc-retirer:hover { background: var(--surface); color: var(--text); }
+.cc-ajout { align-self: flex-start; }
+.cc-aide { margin: -4px 0 0; }
+.cc-push { margin: 0; padding-top: 10px; border-top: 1px solid var(--border); }
+.cc-tout { align-self: flex-start; color: var(--rose); border-color: var(--accent); }
+
+/* Boîtes (gabarit .hg-dialog de ui-confirm.css) */
+.cc-dlg .stack { display: flex; flex-direction: column; gap: 14px; }
+.cc-dlg-tete { display: flex; align-items: center; gap: 12px; }
+.cc-dlg-tete .avatar, .cc-voile-avs .avatar, .cc-choix-b .avatar { flex: none; display: grid; place-items: center; border-radius: 999px; font-weight: 800; }
+.cc-dlg-tete .dialog-title { margin: 0; }
+.cc-dlg .field input { font-size: 16px; min-height: 44px; box-sizing: border-box; }
+.cc-err { margin: 0; padding: 12px 14px; border-radius: var(--radius-sm); border: 1px solid var(--accent); color: var(--rose); font-size: 14px; background: var(--surface-2); }
+.cc-dlg-actions { margin-top: 4px; }
+.cc-choix { display: flex; flex-direction: column; gap: 8px; }
+.cc-choix-b { justify-content: flex-start; text-align: left; gap: 12px; padding: 10px 14px; min-height: 60px; }
+.cc-choix-b > span:last-child { display: flex; flex-direction: column; gap: 2px; }
+.cc-choix-b strong { font-size: 15px; }
+.cc-choix-avs { display: flex; }
+.cc-choix-avs .avatar + .avatar { margin-left: -10px; box-shadow: 0 0 0 2px var(--surface); }
+.cc-note { margin: 0; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--border-strong); font-size: 14px; }
+.cc-dlg-avs { justify-content: flex-start; }
+
+/* Voile de bascule */
+.cc-voile { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(3px); }
+.cc-voile-boite { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px 28px; border-radius: var(--radius); border: 1px solid var(--border-strong); background: var(--surface); box-shadow: 0 12px 40px rgba(0, 0, 0, .45); text-align: center; max-width: 340px; }
+.cc-voile-boite p { margin: 0; }
+.cc-voile-t { font-family: var(--font-display); font-size: 20px; }
+.cc-voile-avs { display: flex; align-items: center; gap: 10px; }
+.cc-voile-fl { color: var(--muted); display: grid; }

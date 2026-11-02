@@ -47,7 +47,7 @@ Raccourcis clavier : « g » puis une lettre (aller à une page), « / » (reche
 
 ## Menu en arc (photo de profil)
 
-La photo de profil, à droite de la barre, ouvre un quart de cercle d'icônes. Rangée proche de la photo : Messages, Recherche, Mon compte. Rangée extérieure : Aide et tutos, Affichage (préférences d'affichage), Sans limite (mode sans limite, administrateur seulement), Admin ou Staff (si on y a droit), Déconnexion.
+La photo de profil, à droite de la barre, ouvre un quart de cercle d'icônes. Rangée proche de la photo : Messages, Recherche, Mon compte. Rangée extérieure : Aide et tutos, Affichage (préférences d'affichage), Sans limite (mode sans limite, administrateur seulement), Admin ou Staff (si on y a droit), Changer de compte (admin et Staff, ou dès qu'un second compte est sur l'appareil : deux comptes au plus, passage de l'un à l'autre sans se déconnecter ; `core/comptes.js`), Déconnexion (de cet appareil seulement ; « Déconnecter tous mes appareils » est dans Mon compte).
 
 Vue « comme un membre » (voir ADMIN-PANEL.md) : Admin, Staff et Sans limite sont masqués.
 

@@ -32,6 +32,7 @@ export { openPrefs, setPrefs } from './core/prefs.js';
 
 /* ---------- Session, profil et droits ---------- */
 export { sb, hasSession, isNavCancel, authLanding, signOutDevice } from './core/supabase.js';
+export { cleCompte, lireLocal, ecrireLocal } from './core/comptes-etat.js'; // clés locales rangées par compte (jeux)
 export { getUser, getProfile, requireMember, requireAdmin } from './core/profile.js';
 export { loadMyPerms, getCachedPerms, canPanel, hasPerm, clearPerms } from './core/perms.js';
 export { callFn, notify } from './core/functions.js';

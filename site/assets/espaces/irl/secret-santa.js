@@ -7,7 +7,7 @@
 // ui-confirm.js, ss-pairs.js (paires), reglages-valeurs-lot3.js (limite de souhaits), utils.js (liens sûrs).
 // Tables et RPC : hg_ss_editions, hg_ss_participants, hg_ss_wishes, hg_ss_progress, hg_members, hg_ss_my_target,
 // hg_ss_target_info, hg_ss_reveal, hg_open_santa. N'exporte rien.
-import { sb, initPage, toast, errMsg, esc, $, fmtDate, fmtDateTime, daysUntil, avatarHtml, notify, LOGO_SRC, isGodMode, godTag } from '../../commun/core.js';
+import { sb, initPage, toast, errMsg, esc, $, fmtDate, fmtDateTime, daysUntil, avatarHtml, notify, LOGO_SRC, isGodMode, godTag, lireLocal, ecrireLocal } from '../../commun/core.js';
 import { renderCardFront, renderCardBack, downloadCanvas } from './ss-card.js';
 import { INFO_GROUPS, INFO_LABEL } from '../compte/profile-fields.js';
 import { confirmBox } from '../../commun/ui-confirm.js';
@@ -59,12 +59,12 @@ const S = {
 /* ---------- Utilitaires ---------- */
 /** Nom de domaine d'une adresse, sans « www. », pour l'afficher sous un souhait. Chaîne vide si l'adresse est invalide. */
 function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } }
-/** Clé du stockage local : carte déjà retournée, pour cette édition seulement. */
+/** Clé du stockage local : carte déjà retournée, pour cette édition seulement ; rangée par compte (comptes-etat.js). */
 const seenKey = () => `hg_ss_seen_${S.ed?.id}`;
 /** Vrai si j'ai déjà retourné ma carte pour cette édition. Faux si le stockage est indisponible. */
-function readSeen() { try { return localStorage.getItem(seenKey()) === '1'; } catch { return false; } }
+function readSeen() { return lireLocal(seenKey()) === '1'; }
 /** Mémorise que ma carte a été retournée. Une erreur de stockage est ignorée. */
-function writeSeen() { try { localStorage.setItem(seenKey(), '1'); } catch {} }
+function writeSeen() { ecrireLocal(seenKey(), '1'); }
 /** Membre à partir de son identifiant ; valeurs par défaut s'il est inconnu. */
 const memberOf = (id) => S.members.get(id) || { pseudo: 'Membre', avatar_url: null, color: null };
 /** Position du statut actuel dans l'ordre des étapes. */

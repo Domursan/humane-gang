@@ -17,6 +17,8 @@ import { mountNotifPrefs } from './notif-prefs.js';
 import { hasLevels, sortedLevels, levelDef, nextLevelDef, levelImage, levelLabel, levelPipsHtml, metricCount, roman, METRIC_LABEL } from './badge-levels.js';
 import { svg } from '../../commun/icons.js';
 import { loadInviteConfig, inviteCodeRe } from './invite-config.js';
+import { autresComptes } from '../../commun/core/comptes-etat.js';
+import { confirmBox } from '../../commun/ui-confirm.js';
 
 /* ---------- Indices lus AVANT que le client Supabase ne nettoie l'URL ---------- */
 const url = new URL(location.href);
@@ -473,10 +475,22 @@ function renderJoin(prefill = {}, error = '') {
   });
 }
 
-/** Déconnecte la personne (et retire l'abonnement push de l'appareil) puis renvoie à l'accueil. Une erreur de déconnexion est ignorée. */
+/**
+ * Déconnecte la personne de cet appareil (et retire l'abonnement push de l'appareil) puis renvoie à l'accueil.
+ * Avec deux comptes sur l'appareil, la boîte de comptes.js demande lequel. Une erreur de déconnexion est ignorée.
+ */
 async function logout() {
+  if (autresComptes().some((a) => a.rt)) { (await import('../../commun/core/comptes.js')).deconnexion(); return; }
   await signOutDevice();
   location.replace('/pages/compte/accueil.html');
+}
+
+/** « Déconnecter tous mes appareils » : ferme la session du compte partout (scope global), après confirmation. */
+async function logoutAll() {
+  const ok = await confirmBox('Déconnecter tous tes appareils ?', 'Ta session est fermée partout : ce navigateur, ton téléphone et tes autres appareils. Il faudra te reconnecter sur chacun.', { ok: 'Déconnecter partout', danger: true });
+  if (!ok) return;
+  await signOutDevice({ partout: true });
+  location.replace('/pages/compte/compte.html');
 }
 
 /* ======================================================================
@@ -609,7 +623,12 @@ async function renderMember(user) {
           <div class="field"><label for="pw-current">Mot de passe actuel</label><input id="pw-current" type="password" autocomplete="current-password"></div>
           <div class="field"><label for="pw-new">Nouveau mot de passe</label><input id="pw-new" type="password" autocomplete="new-password" minlength="8"></div>
           <div class="btn-row"><button class="btn btn-ghost" type="submit">Changer le mot de passe</button></div>
+          <div class="acc-partout">
+            <p class="small muted" id="logout-all-aide">Se déconnecter ici ne touche pas tes autres appareils. Ce bouton ferme ta session partout : ce navigateur, ton téléphone et tes autres appareils.</p>
+            <div class="btn-row"><button class="btn btn-ghost" type="button" id="logout-all" aria-describedby="logout-all-aide">Déconnecter tous mes appareils</button></div>
+          </div>
         </form>
+        <div id="comptes-slot" hidden></div>
       </div>
     </section>
 
@@ -681,6 +700,9 @@ async function renderMember(user) {
   bindSommaire();
 
   $('#logout').addEventListener('click', logout);
+  $('#logout-all').addEventListener('click', logoutAll);
+  // Comptes sur cet appareil (Changer de compte : admin et Staff, ou deux comptes déjà sur l'appareil)
+  import('../../commun/core/comptes.js').then((m) => m.monterComptesAppareil($('#comptes-slot'))).catch((e) => console.warn('[comptes]', e?.message || e));
   mountPushBlock($('#push-slot'), me);
   mountNotifPrefs($('#notif-slot'), me, (p) => { me = { ...me, ...p }; }); // bloc « Mes notifications » (idée Q6)
   bindProfile();

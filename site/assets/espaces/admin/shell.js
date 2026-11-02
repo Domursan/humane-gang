@@ -25,6 +25,7 @@
 // ------------------------------------------------------
 
 import { $, sb, esc, signOutDevice, openPrefs, openGodDialog, disableGodMode, isGodMode, getGodMode, clearPerms } from '../../commun/core.js';
+import { autresComptes } from '../../commun/core/comptes-etat.js';
 import { svg as iconSvg } from '../../commun/icons.js';
 import { LIEUX, visibleLieux, canSection } from './perms.js';
 import { resolve } from './router.js';
@@ -178,6 +179,8 @@ function bindMenu() {
     if (!b) return;
     if (b.dataset.menu === 'prefs') { setMenu(false); openPrefs(e); return; }
     if (b.dataset.menu === 'logout') {
+      // Deux comptes sur l'appareil : la boîte de comptes.js demande lequel déconnecter
+      if (autresComptes().some((a) => a.rt)) { setMenu(false); (await import('../../commun/core/comptes.js')).deconnexion(); return; }
       b.disabled = true;
       await signOutDevice(); // retire aussi l'abonnement push de l'appareil
       try { sessionStorage.removeItem('hg_badges_checked'); } catch { /* stockage bloqué */ }

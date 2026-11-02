@@ -12,7 +12,7 @@
  * Exporte : mount(panel, ctx), resume(ctx).
  */
 import { monterGrille, resumerGrille, formatDuree } from './nj-grilles.js';
-import { motionAllowed } from '../../commun/core.js';
+import { motionAllowed, lireLocal, ecrireLocal } from '../../commun/core.js';
 import { sonJour, secouer, rejoue, enCascade } from './effets-jour.js';
 
 const JEU = 'motscroises';
@@ -21,19 +21,19 @@ const JEU = 'motscroises';
 const noire = (g, r, c) => g.motif[r][c] === '.';
 /** Nombre de cases à remplir. */
 const blanches = (g) => (g.motif.join('').match(/#/g) || []).length;
-/** Clé de stockage local de la saisie, par jour. */
+/** Clé de stockage local de la saisie, par jour ; rangée par compte (lireLocal, comptes-etat.js). */
 const cleLocale = (day) => `hg-motscroises:${day}`;
 
 /** Saisie gardée sur l'appareil (null si absente ou d'une autre taille). */
 function lireLocale(day, n) {
   try {
-    const v = localStorage.getItem(cleLocale(day));
+    const v = lireLocal(cleLocale(day));
     return v && v.length === n ? v : null;
   } catch { return null; }
 }
 /** Garde la saisie sur l'appareil (sans bloquer le jeu si le stockage est refusé). */
 function sauveLocale(day, flat) {
-  try { localStorage.setItem(cleLocale(day), flat); } catch { /* stockage refusé : rien à faire */ }
+  ecrireLocal(cleLocale(day), flat); // stockage refusé : rien à faire
 }
 
 /**

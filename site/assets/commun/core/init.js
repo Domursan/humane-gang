@@ -13,7 +13,8 @@
  * Dépendances : theme-load.js, theme.js, effects.js, profile.js, pages-access.js, perms.js, godmode.js,
  * header.js, footer.js, unread.js, badges.js, site-load.js, site-defaults.js, site-etat.js (bandeau et maintenance),
  * view-as.js (vue « comme un membre » de l'admin : résolue dès le profil connu, bandeau sous le menu),
- * memoire.js (mémoire d'affichage par compte), supabase.js (session locale).
+ * memoire.js (mémoire d'affichage par compte), supabase.js (session locale), comptes-etat.js (compte de la page : un onglet dont
+ * le compte change ailleurs se fige ; comptes.js, chargé à la demande, ouvre la boîte et montre le message d'après une bascule).
  *   Chargés à part (import dynamique, sans bloquer la page) : dyn-events.js, card-drops.js, staff-dock.js
  *   (raccourcis Staff : barre à gauche pour l'admin et le Staff, pas sur /pages/admin/admin.html).
  * Exporte : initPage.
@@ -36,6 +37,10 @@ import { resolveViewAs, viewAsActive, renderViewAsBar } from './view-as.js';
 import { installLightDismiss } from './light-dismiss.js';
 import { sb } from './supabase.js';
 import { memoCompte, memoCompteCourant, memoLire, memoEffacer, vueActive } from './memoire.js';
+import { fixerComptePage, surChangementCompte, lireComptes, CLE_ARRIVEE } from './comptes-etat.js';
+
+// Changer de compte : si le compte du navigateur change dans un autre onglet, cette page (figée) demande quoi faire.
+surChangementCompte((uid) => import('./comptes.js').then((m) => m.ongletFige(uid)).catch((e) => console.warn('[comptes]', e?.message || e)));
 
 /* ---------- Constantes ---------- */
 
@@ -160,11 +165,24 @@ function demarrerRaccourcisStaff(profile) {
 }
 
 /**
+ * Changer de compte : message d'après une bascule, comptes de l'appareil tenus à jour, session expirée. Le module n'est chargé
+ * que s'il y a des comptes rangés sur l'appareil ou un message à montrer (rien pour les autres membres).
+ * @param {object|null} profile Profil courant.
+ */
+function lancerComptes(profile) {
+  let arrivee = false;
+  try { arrivee = sessionStorage.getItem(CLE_ARRIVEE) !== null; } catch { /* stockage bloqué */ }
+  if (!arrivee && !lireComptes()) return;
+  import('./comptes.js').then((m) => m.auDemarrage(profile)).catch((e) => console.warn('[comptes]', e?.message || e));
+}
+
+/**
  * Partie finale du démarrage, commune aux deux chemins : pied, bandeau cookies, état du site, effets, services.
  * @param {object|null} profile Profil courant.
  * @returns {{maintenance: boolean, bandeau: boolean}} Ce qui a été affiché pour l'état du site.
  */
 function finir(profile) {
+  lancerComptes(profile);
   renderFooter(profile);
   cookieNotice();
   // État du site (bandeau d'annonce, écran de maintenance) : affichage seulement ; admin et Staff ne sont jamais bloqués
@@ -264,6 +282,7 @@ async function startPage(auth) {
   applyTheme();
   const uid = await compteCourant();
   memoCompte(uid); // mémoire propre à ce compte ; un autre compte ou un visiteur efface celle d'avant
+  fixerComptePage(uid); // compte de la page : un changement de compte ailleurs fige cet onglet (comptes-etat.js)
   const garde = uid && !vueActive() ? lireMemoire(auth) : null;
   if (garde) return demarrerAvecMemoire(auth, garde);
   const siteP = loadSiteSettings(); // réglages du site (nom, menu, pied, textes) : ne lève jamais d'erreur

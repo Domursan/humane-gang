@@ -16,6 +16,7 @@
       "requetes": 60,
       "cls": 0.1,
       "plafond": {
+        "ko": 640,
         "cls": 0.12,
         "requetes": 85
       }
@@ -26,7 +27,7 @@
       "requetes": 60,
       "cls": 0.1,
       "plafond": {
-        "ko": 830,
+        "ko": 850,
         "lcp_ms": 2800,
         "requetes": 85
       }
@@ -37,6 +38,7 @@
       "requetes": 60,
       "cls": 0.1,
       "plafond": {
+        "ko": 640,
         "requetes": 80
       }
     },
@@ -55,6 +57,7 @@
       "requetes": 60,
       "cls": 0.1,
       "plafond": {
+        "ko": 640,
         "requetes": 80
       }
     }

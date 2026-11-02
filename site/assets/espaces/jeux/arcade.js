@@ -16,6 +16,7 @@
 import { paillSym } from '../../commun/paillettes.js';
 import { creeArcade } from '../arcade/arcade.js';
 import { avatarHtml } from '../../commun/core/util.js';
+import { lireLocal, ecrireLocal } from '../../commun/core/comptes-etat.js';
 import { canAccess, pageLabel, pageMode } from '../../commun/core/pages-access.js';
 
 /** Mini-jeux connus : identifiant du serveur → module, nom, icône en pixel art (SVG 16 × 16). */
@@ -57,10 +58,10 @@ const jourFmt = new Intl.DateTimeFormat('fr-CH', { timeZone: 'Europe/Zurich', we
 /** Moteur de la partie en cours (une seule borne à la fois). */
 let borne = null;
 
-/** Meilleur score personnel (navigateur) d'un mini-jeu ; lecture et écriture prudentes. */
+/** Meilleur score personnel (navigateur, rangé par compte) d'un mini-jeu ; lecture et écriture prudentes. */
 const record = {
-  lire: (g) => { try { return Number(localStorage.getItem(`hg_arcade_best_${g}`)) || 0; } catch { return 0; } },
-  ecrire: (g, n) => { try { localStorage.setItem(`hg_arcade_best_${g}`, String(n)); } catch { /* stockage bloqué */ } },
+  lire: (g) => Number(lireLocal(`hg_arcade_best_${g}`)) || 0,
+  ecrire: (g, n) => ecrireLocal(`hg_arcade_best_${g}`, String(n)),
 };
 
 /** Charge la feuille de style de l'onglet une seule fois. */

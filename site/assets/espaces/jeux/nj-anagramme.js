@@ -11,7 +11,7 @@
  * Exporte : mount(panel, ctx), resume(ctx).
  */
 import { monterGrille, resumerGrille, formatDuree, voisinFleche } from './nj-grilles.js';
-import { motionAllowed } from '../../commun/core.js';
+import { motionAllowed, lireLocal, ecrireLocal } from '../../commun/core.js';
 import { sonJour, rejoue, enCascade } from './effets-jour.js';
 
 const JEU = 'anagramme';
@@ -24,16 +24,16 @@ const lettresDe = (m) => Array.from(m.lettres || '');
 const mots = (st) => st.grille?.mots || [];
 /** Statut d'un mot : 'trouve', 'passe' ou null. */
 const statutDe = (st, i) => st.partie?.etat?.mots?.[i] || null;
-/** Clé de stockage local des mots révélés (trouvés ou passés), par jour. */
+/** Clé de stockage local des mots révélés (trouvés ou passés), par jour ; rangée par compte (lireLocal, comptes-etat.js). */
 const cleLocale = (day) => `hg-anagramme:${day}`;
 
 /** Lit les mots révélés gardés sur l'appareil (vide si indisponible). */
 function lireRevele(day) {
-  try { return JSON.parse(localStorage.getItem(cleLocale(day)) || '{}') || {}; } catch { return {}; }
+  try { return JSON.parse(lireLocal(cleLocale(day)) || '{}') || {}; } catch { return {}; }
 }
 /** Garde les mots révélés sur l'appareil (sans bloquer le jeu si le stockage est refusé). */
 function sauveRevele(ui, day) {
-  try { localStorage.setItem(cleLocale(day), JSON.stringify(ui.revele)); } catch { /* stockage refusé : rien à faire */ }
+  ecrireLocal(cleLocale(day), JSON.stringify(ui.revele)); // stockage refusé : rien à faire
 }
 
 /** Ordre aléatoire d'une liste (Mélanger). */

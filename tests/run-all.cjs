@@ -42,7 +42,7 @@ const parcours = fs.readdirSync(path.join(dir, 'parcours'), { withFileTypes: tru
   .filter((d) => d.isDirectory())
   .flatMap((d) => fs.readdirSync(path.join(dir, 'parcours', d.name)).filter((f) => /^parcours-.*\.cjs$/.test(f)).map((f) => `parcours/${d.name}/${f}`))
   .sort();
-const STATIQUES = ['controles/check-js.cjs', 'controles/check-rpc.mjs', 'controles/check-migrations.cjs', 'controles/check-echappement.cjs', 'controles/check-polices.cjs', 'unitaires/check-hg-discord.mjs', 'unitaires/check-hg-calendar.mjs', 'unitaires/check-notif-prefs.mjs', 'unitaires/check-ton-tour.mjs', 'unitaires/check-anniversaires.mjs', 'unitaires/check-salon-etat.mjs', 'unitaires/hg-archive-lib.mjs', 'unitaires/check-plan-depot.mjs', 'unitaires/check-maintenance-sql.mjs'];
+const STATIQUES = ['controles/check-js.cjs', 'controles/check-rpc.mjs', 'controles/check-migrations.cjs', 'controles/check-echappement.cjs', 'controles/check-polices.cjs', 'unitaires/check-hg-discord.mjs', 'unitaires/check-hg-calendar.mjs', 'unitaires/check-notif-prefs.mjs', 'unitaires/check-ton-tour.mjs', 'unitaires/check-anniversaires.mjs', 'unitaires/check-salon-etat.mjs', 'unitaires/hg-archive-lib.mjs', 'unitaires/check-plan-depot.mjs', 'unitaires/check-maintenance-sql.mjs', 'unitaires/check-comptes-garde.mjs'];
 /** Site construit (outils/build/construire.mjs) : contrôles lancés sur _site/ seulement s'il existe, sinon sautés. */
 const SITE_CONSTRUIT = path.resolve(dir, '..', '_site');
 const CONSTRUIT = ['controles/check-build.cjs'];

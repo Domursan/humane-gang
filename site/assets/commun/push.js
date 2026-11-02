@@ -6,9 +6,12 @@
  * Page : /pages/compte/compte.html (bloc « Notifications sur cet appareil »).
  * Dépendances : core.js (client Supabase, toast, errMsg), sw.js (service worker qui reçoit les notifications).
  * Tables / RPC : hg_settings (clé 'push_vapid_public'), hg_push_subscriptions (une ligne par appareil).
+ * Changer de compte (comptes-etat.js) : un navigateur n'a qu'un abonnement ; il reste au compte qui l'a activé, noté sur l'appareil
+ * quand deux comptes y sont rangés. Sur l'autre compte, le bloc le dit et propose de reprendre les notifications pour lui.
  * Exporte : mountPushBlock.
  */
 import { sb, toast, errMsg } from './core.js';
+import { lireComptes, ecrireComptes } from './core/comptes-etat.js';
 
 /* ---------- Constantes ---------- */
 
@@ -99,8 +102,21 @@ export async function mountPushBlock(container, me) {
       return;
     }
     const sub = await reg.pushManager.getSubscription();
-    if (sub) setState('Activées sur cet appareil.', { label: 'Désactiver' });
+    const autre = sub ? autreProprio() : null;
+    if (autre) setState(`Activées sur cet appareil pour ${autre.pseudo}, ton autre compte.`, { label: 'Les recevoir sur ce compte' });
+    else if (sub) setState('Activées sur cet appareil.', { label: 'Désactiver' });
     else setState('Désactivées sur cet appareil.', { label: 'Activer' });
+  }
+
+  /** Compte en attente sur l'appareil qui a activé les notifications (null : celui de la page, ou inconnu). */
+  function autreProprio() {
+    const st = lireComptes();
+    return st?.push && st.push !== me.id ? st.autres.find((a) => a.id === st.push) || null : null;
+  }
+  /** Note sur l'appareil le compte qui reçoit les notifications (seulement si deux comptes y sont rangés). */
+  function noterProprio(id) {
+    const st = lireComptes();
+    if (st) ecrireComptes({ ...st, push: id });
   }
 
   /**
@@ -118,6 +134,7 @@ export async function mountPushBlock(container, me) {
       { onConflict: 'endpoint' },
     );
     if (error) { await sub.unsubscribe().catch(() => {}); throw error; }
+    noterProprio(me.id);
     toast('Notifications activées sur cet appareil.', 'ok');
   }
 
@@ -132,6 +149,7 @@ export async function mountPushBlock(container, me) {
     const { error } = await sb.from('hg_push_subscriptions').delete().eq('endpoint', sub.endpoint);
     if (error) throw error;
     await sub.unsubscribe().catch(() => {});
+    noterProprio(null);
     toast('Notifications désactivées sur cet appareil.', 'ok');
   }
 
@@ -139,7 +157,9 @@ export async function mountPushBlock(container, me) {
     btn.disabled = true;
     try {
       const sub = await reg.pushManager.getSubscription();
-      if (sub) await disable(); else await enable();
+      // Abonnement de l'autre compte : il est retiré du navigateur (sa ligne en base ne sert plus), puis repris pour ce compte
+      if (sub && autreProprio()) { await sub.unsubscribe().catch(() => {}); await enable(); }
+      else if (sub) await disable(); else await enable();
     } catch (e) {
       toast(`Notifications : ${errMsg(e)}`, 'error');
     } finally {

@@ -22,7 +22,7 @@
 /* ---------- Constantes ---------- */
 
 // Nom du cache : préfixe commun + version. Les caches des anciennes versions (même préfixe) sont supprimés à l'activation.
-const CACHE_VERSION = 'v157';
+const CACHE_VERSION = 'v158';
 const CACHE_PREFIX = 'hg-coque-';
 const CACHE = `${CACHE_PREFIX}${CACHE_VERSION}`;
 // Q4 : images des cartes (même nom et même plafond que assets/commun/offline-store.js). Hors du préfixe : gardé d'une version à l'autre.
@@ -257,6 +257,7 @@ self.addEventListener('notificationclick', (event) => {
   const lien = event.notification.data?.lien;
   const target = new URL(/^\/pages\/jeux\/[a-z0-9-]+\.html[?#][\w=/-]+$/.test(lien || '') ? lien : '/pages/compte/messages.html', self.registration.scope);
   if (conv && /^[0-9a-f-]{36}$/i.test(conv)) target.searchParams.set('c', conv);
+  target.searchParams.set('notif', '1'); // ouvert depuis une notification : comptes.js propose de passer sur l'autre compte s'il la reçoit
   event.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const win = wins.find((w) => w.url.startsWith(self.registration.scope));

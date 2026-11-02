@@ -7,6 +7,9 @@
 /* ---------- Scénario et constantes ---------- */
 const S = window.__SCN || {};
 const ME = '11111111-1111-4111-8111-111111111111';
+// Changer de compte (core/comptes.js) : le compte de la session simulée suit la clé hg_test_uid (posée par setSession,
+// refreshSession ou une connexion à un compte de S.comptes), comme le vrai client qui relit sa session dans le stockage.
+try { const u = localStorage.getItem('hg_test_uid'); if (u) S.uid = u; } catch (e) { /* stockage indisponible */ }
 /** Identifiant factice du membre n (même format que ME, pour les données de test). */
 const U = (n) => `0000000${n}-0000-4000-8000-00000000000${n}`;
 // Dates relatives à maintenant : iso(-2) donne la date d'il y a deux jours, iso(3) celle de dans trois jours.
@@ -988,9 +991,63 @@ function rolesRpc(fn, args = {}) {
   return undefined;
 }
 
+/* ---------- Changer de compte (core/comptes.js) ----------
+   Scénario : comptes = { e-mail: identifiant } (connexion d'un autre compte, mot de passe S.password ou tout mot de passe non vide) ;
+   sessionsExpirees = [identifiant] (jeton de renouvellement refusé). Jetons factices : accès « jeton:<id> », renouvellement
+   « rt:<id>:<n> » (tourné à chaque renouvellement). Un jeton fermé (signOut d'un client temporaire) ou déjà tourné est noté dans
+   localStorage hg_test_revoques et refusé ensuite. */
+const REVOQUES = 'hg_test_revoques';
+const revoques = () => { try { return JSON.parse(localStorage.getItem(REVOQUES) || '[]'); } catch (e) { return []; } };
+const idDuJeton = (t) => (/^(?:rt|jeton):([0-9a-f-]{36})(?::[a-z0-9]+)?$/.exec(String(t || '')) || [])[1] || null;
+let rtN = 0;
+/** Session factice d'un compte (jamais un vrai jeton). */
+const sessionDe = (id) => ({ user: { id, email: 'compte@test.ch' }, access_token: 'jeton:' + id, refresh_token: `rt:${id}:${Date.now().toString(36)}${++rtN}` });
+/** Le jeton de renouvellement est-il encore valable ? */
+const rtValable = (rt) => !!idDuJeton(rt) && !(S.sessionsExpirees || []).includes(idDuJeton(rt)) && !revoques().includes(rt);
+/** Pose le compte de la session du site (comme le stockage du vrai client) ; les autres onglets reçoivent l'événement « storage ». */
+const poserCompte = (id, rt) => { try { localStorage.setItem('hg_test_uid', id); if (rt) localStorage.setItem('hg_test_rt', rt); } catch (e) { /* stockage indisponible */ } S.uid = id; setSigned(true); };
+/** Jeton de renouvellement de la session du site (celui posé par setSession / refreshSession, sinon un jeton fixe du compte). */
+const rtSite = () => { let rt = null; try { rt = localStorage.getItem('hg_test_rt'); } catch (e) { /* stockage indisponible */ } return idDuJeton(rt) === (S.uid || ME) ? rt : `rt:${S.uid || ME}:site`; };
+/** Client temporaire (persistSession: false) : sa session vit en mémoire et ne touche jamais celle du site. */
+function clientTemporaire() {
+  let moi = null, rtMoi = null;
+  const refuse = { data: { session: null, user: null }, error: { message: 'Invalid Refresh Token: Refresh Token Not Found', status: 400, name: 'AuthApiError' } };
+  return {
+    auth: {
+      signInWithPassword: async ({ email, password } = {}) => {
+        window.__LOG.push(['auth-tmp', 'signInWithPassword', email]);
+        const id = S.comptes?.[email] || (email === (S.email || 'moi@test.ch') ? (S.uid || ME) : null);
+        if (!id || !password || (S.password && password !== S.password)) return { data: { session: null, user: null }, error: { message: 'Invalid login credentials', status: 400, name: 'AuthApiError' } };
+        moi = id; const ss = sessionDe(id); rtMoi = ss.refresh_token; return { data: { session: ss, user: { id } }, error: null };
+      },
+      refreshSession: async ({ refresh_token } = {}) => {
+        const id = idDuJeton(refresh_token);
+        window.__LOG.push(['auth-tmp', 'refreshSession', id]);
+        if (!rtValable(refresh_token)) return refuse;
+        const r = revoques(); r.push(refresh_token); try { localStorage.setItem(REVOQUES, JSON.stringify(r)); } catch (e) { /* stockage indisponible */ } // jeton tourné : l'ancien ne sert plus
+        moi = id; const ss = sessionDe(id); rtMoi = ss.refresh_token; return { data: { session: ss, user: { id } }, error: null };
+      },
+      signOut: async ({ scope } = {}) => {
+        window.__LOG.push(['auth-tmp', 'signOut', scope, moi]);
+        if (rtMoi) { const r = revoques(); r.push(rtMoi); try { localStorage.setItem(REVOQUES, JSON.stringify(r)); } catch (e) { /* stockage indisponible */ } }
+        moi = null; rtMoi = null; return { error: null };
+      },
+    },
+    from: (t) => new Q(t),
+    rpc: async (fn) => {
+      window.__LOG.push(['rpc-tmp', fn]);
+      if (fn !== 'hg_my_perms' || !moi) return { data: null, error: null };
+      const adm = !!DB.hg_profiles.find((p) => p.id === moi)?.is_admin;
+      const row = DB.hg_staff.find((x) => x.user_id === moi && x.active);
+      return { data: adm ? { is_admin: true, perms: [...CATALOG_KEYS] } : { is_admin: false, perms: row ? [...row.perms] : [] }, error: null };
+    },
+  };
+}
+
 export function createClient(_url, _key, opts = {}) {
+  if (opts.auth?.persistSession === false) return clientTemporaire();
   // Options passées par core/supabase.js (detectSessionInUrl, flowType…), lisibles par les tests.
-  window.__SB_OPTS = JSON.parse(JSON.stringify({ auth: { ...(opts.auth || {}), lock: undefined } }));
+  window.__SB_OPTS = JSON.parse(JSON.stringify({ auth: { ...(opts.auth || {}), lock: undefined }, globalFetch: typeof opts.global?.fetch === 'function' }));
   /** Utilisateur de la session simulée (e-mail : S.email, sinon une adresse de test). */
   const who = () => ({ id: S.uid || ME, email: S.email || 'moi@test.ch' });
   return {
@@ -998,16 +1055,43 @@ export function createClient(_url, _key, opts = {}) {
       // Ajout par rapport au faux de qa/ : connexion simulée. Un visiteur (S.guest) devient
       // connecté après signInWithPassword réussi, sauf si S.badPassword.
       // Session lue dans l'état simulé.
-      getSession: async () => ({ data: { session: signed() ? { user: who(), access_token: 'jeton-factice' } : null } }),
-      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+      getSession: async () => ({ data: { session: signed() ? { user: who(), access_token: 'jeton-factice', refresh_token: rtSite() } : null } }),
+      // Comme le vrai client : un changement de session dans un autre onglet est annoncé (ici par l'événement « storage »).
+      onAuthStateChange: (cb) => {
+        const f = (e) => {
+          if (e.key !== 'hg_test_uid' && e.key !== SESSION_KEY) return;
+          let id = null;
+          try { id = localStorage.getItem(SESSION_KEY) === '0' ? null : localStorage.getItem('hg_test_uid'); } catch (x) { /* stockage indisponible */ }
+          cb(id ? 'SIGNED_IN' : 'SIGNED_OUT', id ? sessionDe(id) : null);
+        };
+        window.addEventListener('storage', f);
+        return { data: { subscription: { unsubscribe() { window.removeEventListener('storage', f); } } } };
+      },
+      // Changer de compte : la session du site passe sur le compte du jeton (journalisé sans jeton).
+      setSession: async ({ access_token, refresh_token } = {}) => {
+        const id = idDuJeton(access_token);
+        window.__LOG.push(['auth', 'setSession', id]);
+        if (!id || !refresh_token) return { data: { session: null, user: null }, error: { message: 'Auth session missing!', status: 400 } };
+        poserCompte(id, refresh_token); return { data: { session: { ...sessionDe(id), refresh_token }, user: { id } }, error: null };
+      },
+      refreshSession: async ({ refresh_token } = {}) => {
+        const id = idDuJeton(refresh_token);
+        window.__LOG.push(['auth', 'refreshSession', id]);
+        if (!rtValable(refresh_token)) return { data: { session: null, user: null }, error: { message: 'Invalid Refresh Token', status: 400 } };
+        const r = revoques(); r.push(refresh_token); try { localStorage.setItem(REVOQUES, JSON.stringify(r)); } catch (e) { /* stockage indisponible */ }
+        const ss = sessionDe(id); poserCompte(id, ss.refresh_token); return { data: { session: ss, user: { id } }, error: null };
+      },
+      stopAutoRefresh: async () => {}, startAutoRefresh: async () => {},
       getUser: async () => ({ data: { user: signed() ? who() : null } }),
       signInWithPassword: async ({ email, password } = {}) => {
         window.__LOG.push(['auth', 'signInWithPassword', email]);
         if (S.badPassword || !password || (S.password && password !== S.password)) return { data: { session: null, user: null }, error: { message: 'Invalid login credentials' } };
+        if (S.comptes?.[email]) poserCompte(S.comptes[email]); // connexion à un autre compte du scénario (Changer de compte)
         setSigned(true);
         return { data: { session: { user: { id: S.uid || ME } }, user: { id: S.uid || ME } }, error: null };
       },
-      signOut: async () => { setSigned(false); window.__LOG.push(['auth', 'signOut']); return {}; },
+      // scope : 'local' (cet appareil) ou 'global' (tous les appareils), journalisé.
+      signOut: async (o = {}) => { setSigned(false); window.__LOG.push(['auth', 'signOut', o?.scope || 'global']); return {}; },
       // Changement de mot de passe (journalisé, sans le mot de passe).
       updateUser: async (attrs = {}) => { window.__LOG.push(['auth', 'updateUser', Object.keys(attrs)]); return { data: { user: who() }, error: null }; },
     },
