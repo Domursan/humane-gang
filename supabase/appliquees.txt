@@ -60,3 +60,16 @@
 2026-11-02T07:02:29.850Z ok supabase/migrations/201_suppression_compte.sql
 2026-11-02T07:02:30.637Z ok supabase/migrations/202_champion_v2.sql
 2026-11-02T12:09:41.126Z ERREUR supabase/migrations/203_recherche_messages.sql : {"message":"Invalid access token"}
+2026-11-02T12:21:40.638Z ok supabase/migrations/203_recherche_messages.sql
+2026-11-02T12:21:41.407Z ok supabase/migrations/204_reactions_messages.sql
+2026-11-02T12:21:42.354Z ok supabase/migrations/205_carte_anniversaire.sql
+2026-11-02T12:21:43.099Z ok supabase/migrations/206_series_jeux.sql
+2026-11-02T12:21:43.814Z ok supabase/migrations/207_joker_payant.sql
+2026-11-02T12:21:44.480Z ok supabase/migrations/208_mes_stats.sql
+2026-11-02T12:21:45.190Z ok supabase/migrations/209_serie_manquantes.sql
+2026-11-02T12:21:45.989Z ok supabase/migrations/210_defi_collection.sql
+2026-11-02T12:21:46.742Z ok supabase/migrations/211_uno_robot_remplacant.sql
+2026-11-02T12:21:47.524Z ok supabase/migrations/212_encheres_membres.sql
+2026-11-02T12:21:48.392Z ok supabase/migrations/213_archives_jeux.sql
+2026-11-02T12:21:49.152Z ok supabase/migrations/214_spectateurs.sql
+2026-11-02T12:21:49.987Z ok supabase/migrations/215_encheres_panier.sql
