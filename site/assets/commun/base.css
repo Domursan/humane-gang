@@ -917,7 +917,7 @@ html:not([data-mode="clair"]) body {
 .nav-search-pill { display: none; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 2px solid var(--border); border-radius: 12px;
   background: var(--surface); color: var(--muted); font: 500 14px var(--font-body); cursor: pointer; white-space: nowrap; transition: border-color .15s ease, color .15s ease; }
 .nav-search-pill:hover { border-color: var(--esp); color: var(--text); }
-.nav-search-pill kbd { font: 400 11px var(--font-pixel); padding: 2px 5px; border: 2px solid var(--border-strong); border-radius: 5px; color: var(--muted); }
+.nav-search-pill kbd { font: 400 12px var(--font-pixel); padding: 2px 5px; border: 2px solid var(--border-strong); border-radius: 5px; color: var(--muted); }
 @media (min-width: 1180px) { .nav-search-pill { display: inline-flex; } }
 /* Photo de profil : carrée, ombre jaune franche, étiquette Admin */
 .nav-me { width: 44px; height: 44px; padding: 0; border: 2px solid #000; border-radius: 12px; background: var(--accent); box-shadow: 3px 3px 0 var(--sand);

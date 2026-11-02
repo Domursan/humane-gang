@@ -3,12 +3,13 @@
 // fil d'activité (pastilles et « Voir plus », idée 74), anniversaires à venir (30 jours, carte commune : carte-anniv.js),
 // défi du gang, bandeaux (récap, événement en cours) et boîte à idées.
 // Chaque tuile et chaque bloc se charge séparément : une erreur n'empêche pas les autres.
-// Dépendances : core.js (sb, initPage, canAccess, textes réglables), icons.js, dyn-events.js (événement en cours, chargé à la demande),
+// Dépendances : core.js (sb, initPage, canAccess, textes réglables), icons.js, dyn-events.js (événement en cours, lu dès le démarrage),
 // accueil-ce-jour.js (tuile « Ce jour-là »).
 // Tables et RPC : hg_settings (site_textes), hg_ss_editions, hg_ss_participants, hg_ss_progress, hg_events, hg_event_rsvps,
 // hg_moments, hg_activity, hg_members, hg_challenges_active, hg_ideas, hg_profiles. N'exporte rien.
 import { sb, initPage, esc, $, fmtDate, fmtDateTime, avatarHtml, errMsg, toast, logoAttrs, canAccess, pageLabel, applyTheme, getSiteTheme } from '../../commun/core.js';
 import { viewAsActive } from '../../commun/core/view-as.js';
+import { getActiveDynEvents } from '../../commun/dyn-events.js'; // bandeau « Événement en cours », lu dès le démarrage (DYN)
 import { svg } from '../../commun/icons.js';
 import { prochainsAnniversaires } from './anniversaires-liste.js';
 import { tourState } from '../../commun/core/tour-etat.js'; // Q1 : visite guidée au premier passage (tour.js ne se charge que si une visite est due)
@@ -18,6 +19,15 @@ const D = SITE_DEFAULTS.textes;
 /* ---------- Conteneur et session : me = personne connectée, ou null pour un visiteur ---------- */
 const app = $('#app');
 const me = await initPage({ auth: 'optional' });
+
+/* ---------- Bandeau « Événement en cours » : lecture lancée tout de suite, en même temps que les textes ---------- */
+// Arrivée avant le squelette, la liste y est dessinée directement : le bandeau ne repousse plus les tuiles déjà affichées
+// (décalage de mise en page, CLS 0.12 à la première visite). Sinon, comportement d'avant (loadDynBanner).
+// dyn-events.js est importé statiquement (préchargé avec la page) : init.js le charge de toute façon pour un membre.
+const DYN = { pret: false, liste: [], attente: null };
+if (me && canAccess('evenements')) {
+  DYN.attente = getActiveDynEvents().then((l) => { DYN.liste = l; DYN.pret = true; }).catch(() => {});
+}
 
 /* ---------- Textes réglables (hg_settings.site_textes, lot 2) : repli sur les textes d'origine ---------- */
 // Lisible par les visiteurs (migration 051). Une clé absente ou vide garde le texte d'origine.
@@ -179,7 +189,7 @@ function renderMemberShell() {
     </section>
     ${recapBanner()}
     <div id="saison-home" hidden></div>
-    ${blocAttente('dyn-banner', 'dyn', '<span class="home-sk home-sk-rond"></span><span class="home-sk-txt"><span class="home-sk home-sk-long"></span><span class="home-sk home-sk-court"></span></span>')}
+    ${dynBannerShell()}
     <section class="card home-defi" id="defi" aria-labelledby="defi-title" hidden></section>
     <div id="qdj-home" hidden></div>
 
@@ -570,27 +580,38 @@ function recapBanner() {
 /* ---------- Bandeau « Événement en cours » (événements dynamiques) ---------- */
 /**
  * Bandeau « Événement en cours » : affiche le premier événement qui se termine (les autres sont comptés).
- * Le module des événements est chargé à la demande.
+ * La liste est souvent déjà là : le squelette dessine alors le bandeau (dynBannerShell) et rien n'est refait ici.
  */
 async function loadDynBanner() {
   const box = $('#dyn-banner');
-  if (!box || !canAccess('evenements')) return;
+  if (!box || !canAccess('evenements') || box.dataset.pret) return; // déjà dessiné avec le squelette (voir DYN)
   try {
-    const { getActiveDynEvents } = await import('../../commun/dyn-events.js');
     const list = await getActiveDynEvents();
     if (!list.length) { box.hidden = true; box.classList.remove('is-attente'); return; }
-    const ev = [...list].sort((a, b) => new Date(a.ends_at) - new Date(b.ends_at))[0];
-    const more = list.length > 1 ? ` (+${list.length - 1} autre${list.length > 2 ? 's' : ''})` : '';
-    const vis = ev.image_url
-      ? `<img class="dyn-banner-img" src="${esc(ev.image_url)}" alt="" data-on-error="remove" decoding="async">`
-      : `<span class="recap-banner-emoji" aria-hidden="true">${esc(ev.emoji || '✨')}</span>`;
-    box.innerHTML = `<a class="recap-banner dyn-banner" href="/pages/irl/evenements.html">
+    box.innerHTML = dynBannerHtml(list);
+    box.hidden = false; box.classList.remove('is-attente');
+  } catch (e) { console.warn('[événements]', e); box.hidden = true; box.classList.remove('is-attente'); }
+}
+/**
+ * Contenu du bandeau : le premier événement qui se termine (les autres sont comptés).
+ * @param {object[]} list événements en cours (au moins un)
+ */
+function dynBannerHtml(list) {
+  const ev = [...list].sort((a, b) => new Date(a.ends_at) - new Date(b.ends_at))[0];
+  const more = list.length > 1 ? ` (+${list.length - 1} autre${list.length > 2 ? 's' : ''})` : '';
+  const vis = ev.image_url
+    ? `<img class="dyn-banner-img" src="${esc(ev.image_url)}" alt="" data-on-error="remove" decoding="async">`
+    : `<span class="recap-banner-emoji" aria-hidden="true">${esc(ev.emoji || '✨')}</span>`;
+  return `<a class="recap-banner dyn-banner" href="/pages/irl/evenements.html">
         ${vis}
         <span class="recap-banner-txt"><strong>Événement en cours : ${esc(ev.name)}${esc(more)}</strong><span>Jusqu'au ${esc(fmtDateTime(ev.ends_at))} · une image spéciale traverse le site, attrape-la !</span></span>
         <span class="recap-banner-go" aria-hidden="true">${ICON.arrow}</span>
       </a>`;
-    box.hidden = false; box.classList.remove('is-attente');
-  } catch (e) { console.warn('[événements]', e); box.hidden = true; box.classList.remove('is-attente'); }
+}
+/** Bandeau dans le squelette : dessiné tout de suite si la liste est déjà arrivée, sinon place réservée ou masquée (blocAttente). */
+function dynBannerShell() {
+  if (!DYN.pret) return blocAttente('dyn-banner', 'dyn', '<span class="home-sk home-sk-rond"></span><span class="home-sk-txt"><span class="home-sk home-sk-long"></span><span class="home-sk home-sk-court"></span></span>');
+  return DYN.liste.length ? `<div id="dyn-banner" data-pret="1">${dynBannerHtml(DYN.liste)}</div>` : '<div id="dyn-banner" data-pret="1" hidden></div>';
 }
 
 /* ---------- Fil d'activité ---------- */
@@ -889,6 +910,8 @@ if (!me) {
   renderGuest();
 } else {
   syncIntro();
+  // Bandeau d'événement pas encore lu (réseau plus lent que pour les textes) : courte attente bornée, puis squelette quoi qu'il arrive
+  if (DYN.attente && !DYN.pret) await Promise.race([DYN.attente, new Promise((r) => setTimeout(r, 250))]);
   renderMemberShell();
   hideForbiddenTiles();
   // Accueil personnalisable (idée P9) : ordre, blocs masqués (retirés avant tout chargement) et blocs ajoutés

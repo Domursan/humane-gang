@@ -3,10 +3,10 @@
 // Accessible sans compte : seuls les groupes PUBLIC_GROUP_IDS (« premiers pas ») sont visibles aux visiteurs.
 // Dépendances : core.js (initPage, esc, $) et tutos/index.js (chargement des groupes de tutos).
 // Les données des tutos viennent de assets/js/tutos/ ; cette page ne fait que les afficher. N'exporte rien.
-// Les chiffres des tutos sont des jetons {{chemin|repli}} remplacés par les réglages du site (reglages-jetons.js).
+// Les chiffres des tutos sont des jetons {{chemin|repli}} remplacés par les réglages du site (commun/reglages/jetons.js).
 import { initPage, esc, $ } from '../../commun/core.js';
 import { loadTutoGroups, PUBLIC_GROUP_IDS } from './tutos/index.js';
-import { chargerReglages, jetons } from '../admin/reglages-jetons.js';
+import { chargerReglages, jetons } from '../../commun/reglages/jetons.js';
 import { questTrack } from '../../commun/quest-track.js';
 
 /* ---------- Initialisation : session facultative (les visiteurs voient « premiers pas ») ---------- */

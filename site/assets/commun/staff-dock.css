@@ -63,17 +63,18 @@
 /* ---------- Téléphone : bouton flottant et liste ---------- */
 @media (max-width: 719.98px) {
   .sd {
-    position: fixed; left: max(12px, env(safe-area-inset-left)); bottom: calc(12px + env(safe-area-inset-bottom));
+    position: fixed; left: max(8px, env(safe-area-inset-left)); bottom: calc(8px + env(safe-area-inset-bottom));
     z-index: 55; width: auto; background: transparent; border: 0; box-shadow: none; overflow: visible; transition: transform .2s ease;
   }
   .sd:hover, .sd:focus-within { width: auto; box-shadow: none; }
   /* Espace en bas pour que le bouton ne cache jamais le dernier élément ; masqué pendant une partie (actions en bas) */
-  html[data-staff-dock] body { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  html[data-staff-dock] body { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
+  html[data-staff-dock] { scroll-padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
   html[data-sd-partie] .sd { display: none; }
   html[data-sd-partie][data-staff-dock] body { padding-bottom: 0; }
   /* Défilement vers le bas : le bouton se replie hors de l'écran (il revient en remontant ou en bas de page) */
   html[data-defil="bas"] .sd:not([data-open="1"]) { transform: translateY(calc(100% + 24px)); }
-  .sd-fab { position: relative; display: grid; place-items: center; width: 52px; height: 52px; padding: 0; border-radius: 50%;
+  .sd-fab { position: relative; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 50%;
     border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer;
     box-shadow: 0 6px 18px rgba(0, 0, 0, .35); }
   .sd-fab[aria-expanded="true"] { background: var(--surface-2); border-color: var(--sand); }

@@ -41,6 +41,8 @@ const INIT = () => {
     const limite = (k) => (seuil.plafond?.[k] ?? seuil[k]);
     const hors = K.filter((k) => r[k] > limite(k) * TOL); // bloquant
     if (r.polices_ko > CFG.polices.ko * TOL) hors.push(`polices ${r.polices_ko} Ko / ${CFG.polices.ko}`);
+    // Page introuvable (404, mauvais HG_ROOT) : 0 Ko et 0 requête passeraient sinon pour un budget respecté
+    if (r.requetes < 5 || r.ko < 50) hors.push('page non chargée (moins de 5 requêtes ou 50 Ko)');
     r.objectif = K.filter((k) => r[k] > seuil[k]);        // à améliorer (affiché seulement)
     r.ok = !hors.length;
     check(r.ok, `${pg} : LCP ${r.lcp_ms} ms / ${seuil.lcp_ms} · ${r.ko} Ko / ${seuil.ko} · ${r.requetes} requêtes / ${seuil.requetes} · CLS ${r.cls} / ${seuil.cls}`

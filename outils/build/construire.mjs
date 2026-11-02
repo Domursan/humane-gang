@@ -8,8 +8,9 @@
 //   site partagent leurs morceaux communs (splitting), les imports dynamiques restent des morceaux séparés.
 //   Sorties dans _site/assets/_b/ (sous /assets/ pour que le service worker les traite comme du code).
 // - Imports calculés (import(variable), import(`./${id}.js`)) : leur cible reste chargée par son adresse d'origine.
-//   Tout module ES (cibles comprises) est aussi une entrée, et son fichier d'origine dans _site/ devient un relais vers
-//   la version regroupée : une seule instance de chaque module par page (les états partagés restent uniques).
+//   Ces cibles, et tout module nommé par son adresse absolue dans le site ou les tests, sont aussi des entrées, et leur
+//   fichier d'origine dans _site/ devient un relais vers la version regroupée : une seule instance de chaque module par
+//   page (les états partagés restent uniques). Les autres modules ne sont que dans les morceaux (moins de requêtes).
 // - import.meta.url est remplacé par l'adresse d'origine du fichier : les URL relatives (feuilles, images) restent justes.
 // - Chemins relatifs des littéraux « ./x.js » et « ../x.js » ramenés à des chemins absolus du site : un module
 //   regroupé n'a plus son adresse d'origine, et le chemin doit rester juste pour les imports calculés.
@@ -156,13 +157,32 @@ for (const f of fichiersJs) {
 }
 dire(`Imports calculés : ${cibles.size} module(s) relayé(s)`);
 
-// Tout module ES devient aussi une entrée, et son fichier d'origine un relais : un module chargé par son adresse
-// d'origine (import('/assets/…/x.js') depuis une page, un test…) est alors la même instance que le code regroupé,
-// et non une seconde copie avec ses propres états (ex. les codes de triche de l'arcade).
-const modules = fichiersJs.filter((f) => !classiques.has('/' + relSrc(f)) && relSrc(f) !== 'sw.js'
-  && /^\s*(import|export)\b/m.test(readFileSync(f, 'utf8')));
+// Modules nommés par leur adresse absolue (« /assets/…/x.js ») hors des imports statiques : dans le site (pages, JS, JSON)
+// et dans les tests (import('/assets/…') exécuté dans la page). Ils deviennent aussi des entrées, et leur fichier d'origine
+// un relais : un module chargé par son adresse d'origine est alors la même instance que le code regroupé, et non une
+// seconde copie avec ses propres états (ex. les codes de triche de l'arcade).
+// Les autres modules ne sont PAS des entrées : faire de chaque module une entrée découpait le code commun en un morceau
+// par module (≈ 60 petits fichiers par page, autant de requêtes). Leur fichier d'origine reste la copie du source, que
+// rien ne charge (tests/controles/check-build.cjs signale tout module d'origine non relais chargé par une page).
+const modules = new Set(fichiersJs.filter((f) => !classiques.has('/' + relSrc(f)) && relSrc(f) !== 'sw.js'
+  && /^\s*(import|export)\b/m.test(readFileSync(f, 'utf8'))));
+const parAdresse = new Set();
+{
+  const TESTS = join(RACINE, 'tests');
+  const textes = [
+    ...tousFichiers.filter((f) => /\.(m?js|html|json)$/.test(f) && !relSrc(f).startsWith('assets/vendor/')),
+    ...(existsSync(TESTS) ? parcourir(TESTS).filter((f) => /\.(c?js|mjs)$/.test(f) && !/[\\/](node_modules|shots)[\\/]/.test(f)) : []),
+  ];
+  for (const f of textes) {
+    for (const m of readFileSync(f, 'utf8').matchAll(/(['"`])(\/assets\/[\w./-]+?\.m?js)\1/g)) {
+      const abs = join(SRC, m[2].slice(1));
+      if (modules.has(abs)) parAdresse.add(abs);
+    }
+  }
+}
+dire(`Modules chargés par leur adresse (site, tests) : ${parAdresse.size} relayé(s) en plus`);
 
-const toutesEntrees = [...new Set([...entrees, ...cibles, ...modules])];
+const toutesEntrees = [...new Set([...entrees, ...cibles, ...parAdresse])];
 const resultat = await esbuild.build({
   absWorkingDir: RACINE,
   entryPoints: toutesEntrees,
@@ -174,7 +194,9 @@ const resultat = await esbuild.build({
   format: 'esm',
   splitting: true,
   minify: true,
-  keepNames: true,
+  // Noms de fonctions non gardés : le site ne lit jamais fn.name ni constructor.name (les erreurs remontées gardent
+  // fichier, ligne et colonne). Les garder ajoutait ≈ 15 Ko par page (aides __name autour de chaque fonction).
+  keepNames: false,
   write: true,
   metafile: true,
   logLevel: 'warning',
@@ -196,7 +218,7 @@ const morceaux = parcourir(join(OUT, 'assets', '_b', 'chunks')).length;
 dire(`JS regroupé : ${toutesEntrees.length} entrée(s), ${morceaux} morceau(x) partagé(s)`);
 
 // Relais : le fichier d'origine d'un module renvoie vers la version regroupée (même instance de module).
-for (const origine of new Set([...entrees, ...cibles, ...modules])) {
+for (const origine of toutesEntrees) {
   const url = adresseSortie.get(origine);
   if (!url) throw new Error(`Pas de sortie pour le module ${relSrc(origine)}`);
   writeFileSync(join(OUT, relSrc(origine)),

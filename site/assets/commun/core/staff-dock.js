@@ -2,7 +2,7 @@
 /*
  * Rôle : donne aux admins et au Staff un accès direct à cinq sections du panel (Assistance, Boîte à idées, Bot Discord,
  * Drops de cartes, Événement de cartes). Chacun choisit les siens (« Choisir mes raccourcis »). Seuls les raccourcis que
- * la personne peut ouvrir sont proposés : le droit vient de canSection (admin/perms.js), comme dans le panel.
+ * la personne peut ouvrir sont proposés : le droit vient de canSection (droits-sections.js), comme dans le panel.
  * Pas affiché sur /pages/admin/admin.html, ni quand l'admin regarde le site « comme un membre » (view-as.js).
  *   Ordinateur (à partir de 720 px) : barre verticale fixe à gauche, étroite, icônes toujours visibles ; le nom de chaque
  *   raccourci sort en bulle à droite de l'icône au survol ou au focus clavier. Le contenu est décalé (html[data-staff-dock] body).
@@ -14,13 +14,13 @@
  * Styles : assets/commun/staff-dock.css, chargée par ce module (les membres simples ne la chargent jamais).
  * Page : toutes les pages (init.js appelle startStaffDock avec le profil connecté). Pas /pages/admin/admin.html.
  * Dépendances : supabase.js (comptages), pages-access.js (page courante), perms.js (droits en cache, canPanel),
- *   admin/perms.js (canSection, mêmes droits que le panel), view-as.js (vue « comme un membre »).
+ *   droits-sections.js (canSection, mêmes droits que le panel), view-as.js (vue « comme un membre »).
  * Exporte : startStaffDock.
  */
 import { sb } from './supabase.js';
 import { currentPageSlug } from './pages-access.js';
 import { getCachedPerms, canPanel } from './perms.js';
-import { canSection } from '../../espaces/admin/perms.js';
+import { canSection } from './droits-sections.js'; // droits seuls, sans les lieux du panel (admin/perms.js)
 import { viewAsActive } from './view-as.js';
 
 /* ---------- Constantes ---------- */

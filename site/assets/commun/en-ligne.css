@@ -85,13 +85,14 @@
 
 /* ---------- Téléphone : bouton flottant et liste ---------- */
 @media (max-width: 719.98px) {
-  .ol { position: fixed; right: max(12px, env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 54;
+  .ol { position: fixed; right: max(8px, env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 54;
     transition: transform .2s ease; }
   html[data-ol-partie] .ol { display: none; }
-  html[data-en-ligne]:not([data-ol-partie]) body { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  html[data-en-ligne]:not([data-ol-partie]) body { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
+  html[data-en-ligne]:not([data-ol-partie]) { scroll-padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
   /* Défilement vers le bas : le bouton se replie hors de l'écran (il revient en remontant ou en bas de page) */
   html[data-defil="bas"] .ol:not([data-open="1"]) { transform: translateY(calc(100% + 24px)); }
-  .ol-fab { display: grid; }
+  .ol-fab { display: grid; width: 44px; height: 44px; }
   .ol-corps { display: none; position: absolute; right: 0; bottom: calc(100% + 10px); width: min(300px, calc(100vw - 24px));
     max-height: min(420px, 70dvh); overflow-y: auto; padding: 12px; border-radius: 16px; background: var(--surface);
     border: 1px solid var(--border-strong, var(--border)); box-shadow: 0 12px 32px rgba(0, 0, 0, .35); }

@@ -5,14 +5,15 @@
 // Mise à jour : relecture toutes les 20 s quand la Boutique est affichée, compte à rebours chaque seconde.
 // Règles propres à chaque enchère (migration 097) affichées aux membres ; le Staff « cartes » les règle ici même
 // (« Régler cette enchère », formulaire partagé enchere-regles.js).
-// Lot en panier (migration 215) : l'encart et la vue montrent le lot (enchere-lot.js) ; à la fin, le gagnant voit ce
+// Lot en panier (migration 215) : l'encart et la vue montrent le lot (enchere-lot.js, importé à la demande) ; à la fin, le gagnant voit ce
 // qu'il a reçu (auction.remise). Le Staff qui a créé l'enchère ne peut pas enchérir dessus (me.createur).
 // RPC : hg_auction_current (clôt aussi les enchères échues), hg_auction_bid, hg_auction_update.
 // Exporte : initEnchere(ctx), drawEnchere(). ctx = { app, visible: () => boolean, refresh: async () => {} }.
 import { sb, esc, toast, errMsg, avatarHtml } from '../../commun/core.js';
 import { cardHtml, fmtP } from './cartes-ui.js';
 import { rulesFieldsHtml, readRules, rulesSummary } from './enchere-regles.js';
-import { ensureLotCss, lotTeaserHtml, lotItemsHtml } from './enchere-lot.js';
+// enchere-lot.js (et les décors de booster-themes.js, ≈ 50 Ko) : chargé seulement pour une enchère de lot (loadEnchere).
+let LOT = null;
 
 let C = null;
 const E = { data: null, detail: false, busy: false, err: '', amount: '', timer: null, tick: null, edit: false };
@@ -53,7 +54,7 @@ function teaserHtml(x) {
     : x.winner ? `Remportée par ${esc(x.winner)} pour ${esc(fmtP(x.price))}` : 'Terminée sans offre';
   if (x.lot) {
     const topTxt = x.status === 'close' ? '' : x.top ? `${fmtP(x.top.amount)} · ${x.top.pseudo || 'membre'}` : 'aucune offre';
-    return lotTeaserHtml(x.lot, { etatHtml: state, top: topTxt, bouton: x.status === 'ouverte' ? 'Voir l’enchère' : 'Voir' });
+    return LOT.lotTeaserHtml(x.lot, { etatHtml: state, top: topTxt, bouton: x.status === 'ouverte' ? 'Voir l’enchère' : 'Voir' });
   }
   return `<section class="card c2-auc-teaser" aria-labelledby="c2-auc-t">
       <div class="c2-auc-mini">${cardHtml(x.card || {}, { size: 'sm' })}</div>
@@ -101,7 +102,7 @@ function detailHtml(x) {
   return `<section class="c2-auc${x.lot ? ' enp-auc' : ''}" aria-labelledby="c2-auc-h">
       <button type="button" class="c2-back" data-c2="auc-close"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Boutique</button>
       <div class="c2-auc-title"><div><p class="eyebrow">Enchère de la semaine</p><h2 id="c2-auc-h" class="c2-auc-name">${esc(x.lot ? x.lot.nom : x.card?.name || '')}</h2></div><span class="pill pill-sand">${x.lot ? 'Lot' : 'Unique'}</span></div>
-      ${x.lot ? `${lotItemsHtml(x.lot)}${boitesLotHtml(x, left)}` : `<div class="c2-auc-top">
+      ${x.lot ? `${LOT.lotItemsHtml(x.lot)}${boitesLotHtml(x, left)}` : `<div class="c2-auc-top">
         <div class="c2-auc-card">${cardHtml(x.card || {}, { size: 'md', serial: x.status === 'close' && x.winner ? 1 : null })}</div>
         <div class="c2-auc-boxes">
           <div class="card c2-auc-box"><p class="small muted">${open() ? 'Fin dans' : x.status === 'prevue' ? 'Ouverture' : 'Terminée'}</p>
@@ -196,9 +197,9 @@ export function drawEnchere() {
   const el = document.getElementById('cartes-enchere');
   if (!el || !C) return;
   const x = a();
-  if (!x) { el.innerHTML = ''; el.hidden = true; return; }
+  if (!x || (x.lot && !LOT)) { el.innerHTML = ''; el.hidden = true; return; } // lot : module pas (encore) chargé
   el.hidden = false;
-  if (x.lot) ensureLotCss();
+  if (x.lot) LOT.ensureLotCss();
   el.innerHTML = E.detail ? detailHtml(x) : teaserHtml(x);
   const shop = el.parentElement?.querySelector('.shop');
   if (shop) shop.hidden = E.detail;
@@ -210,6 +211,7 @@ export async function loadEnchere() {
     const { data, error } = await sb.rpc('hg_auction_current');
     if (error) throw error;
     E.data = data || null;
+    if (a()?.lot && !LOT) LOT = await import('./enchere-lot.js').catch(() => null); // avant le dessin : rendu synchrone ensuite
   } catch (e) {
     console.warn('[enchère]', e?.message || e);
     E.data = null;

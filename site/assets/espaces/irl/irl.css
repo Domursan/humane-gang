@@ -7,6 +7,9 @@
 .sec-title { font-family: var(--font-display); font-weight: 400; font-size: 26px; }
 /* Place réservée pendant le chargement de la prochaine sortie : à peu près la hauteur de la carte « rien de calé » (évite un décalage) */
 .irl-loading { color: var(--muted); min-height: 285px; }
+/* Pendant ce chargement, la section réserve aussi la hauteur d'un écran (vide sous la carte) : « Sorties passées », posée
+   en bas de l'écran, était sinon repoussée d'un coup à l'arrivée des données (décalage de mise en page sur un téléphone lent). */
+.irl-section:has(> #next > .irl-loading) { min-height: 100vh; }
 .ev-title { font-size: 20px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
 
 /* Méta (date, lieu, organisateur) */

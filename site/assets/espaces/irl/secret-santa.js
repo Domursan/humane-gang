@@ -4,7 +4,7 @@
 // la liste de souhaits de la cible et ce qu'il faut savoir sur elle, la messagerie anonyme, son envoi,
 // l'avancement global, puis la révélation des paires.
 // Dépendances : core.js (Supabase, LOGO_SRC, notifications), ss-card.js (cartes), profile-fields.js (infos de la cible),
-// ui-confirm.js, ss-pairs.js (paires), reglages-valeurs-lot3.js (limite de souhaits), utils.js (liens sûrs).
+// ui-confirm.js, ss-pairs.js (paires), reglages/valeurs-lot3.js (limite de souhaits), utils.js (liens sûrs).
 // Tables et RPC : hg_ss_editions, hg_ss_participants, hg_ss_wishes, hg_ss_progress, hg_members, hg_ss_my_target,
 // hg_ss_target_info, hg_ss_reveal, hg_open_santa. N'exporte rien.
 import { sb, initPage, toast, errMsg, esc, $, fmtDate, fmtDateTime, daysUntil, avatarHtml, notify, LOGO_SRC, isGodMode, godTag, lireLocal, ecrireLocal } from '../../commun/core.js';
@@ -14,7 +14,7 @@ import { confirmBox } from '../../commun/ui-confirm.js';
 import { svg } from '../../commun/icons.js';
 import { safeUrl } from '../../commun/utils.js';
 import { pairsHtml, peopleByPseudo } from './ss-pairs.js';
-import { chargerReglagesLot3, reglage } from '../admin/reglages-valeurs-lot3.js';
+import { chargerReglagesLot3, reglage } from '../../commun/reglages/valeurs-lot3.js';
 
 // me = personne connectée (la page exige un membre). Les réglages du lot 3 sont chargés avant le premier rendu.
 const me = await initPage({ auth: 'member' });

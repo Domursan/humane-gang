@@ -6,11 +6,16 @@
  *   sont rechargés (la tuile de la page Jeux passe au vert), ainsi que les séries (pastille « joué aujourd'hui »).
  *   Les sons suivent la préférence « Sons des jeux » (sons-jeux.js) ; sans mouvement (préférence « effets » coupée ou
  *   mouvement réduit), le résultat s'affiche directement et les sons restent, comme dans les duels.
- * Dépendances : core.js (motionAllowed), sons-jeux.js (jouerSonJeu), paillettes.js (paillSym), ./classement-jeux.js (chargé à la demande).
+ * Dépendances : core.js (motionAllowed), sons-jeux.js (jouerSonJeu, importé au premier geste), paillettes.js (paillSym), ./classement-jeux.js (chargé à la demande).
  * Exporte : sonJour, pointsDeGain, rejoue, secouer, enCascade, compteur, finDePartie.
  */
 import { motionAllowed } from '../../commun/core.js';
-import { jouerSonJeu } from '../../commun/sons-jeux.js';
+// sons-jeux.js (≈ 20 Ko) : importé au premier geste dans la page (ou au premier son), pas au chargement : l'accueil montre
+// le jeu du jour sans qu'on y joue forcément. Après ce geste, les sons partent aussitôt (module déjà là).
+let SONS = null;
+let sonsP = null;
+const chargerSons = () => (sonsP ??= import('../../commun/sons-jeux.js').then((m) => { SONS = m; }, () => { sonsP = null; }));
+['pointerdown', 'keydown'].forEach((t) => document.addEventListener(t, chargerSons, { capture: true, passive: true, once: true }));
 import { paillSym } from '../../commun/paillettes.js';
 
 const nf = new Intl.NumberFormat('fr-CH');
@@ -56,7 +61,10 @@ html[data-fx="off"] [class*="fxj-"] { animation: none !important; }`;
  * Joue un son des jeux quotidiens.
  * @param {string} code code de la maquette (F1…, G1…, D1…, C1…, M1…, P1…, Q1…)
  */
-export const sonJour = (code) => jouerSonJeu('quotidien', code);
+export const sonJour = (code) => {
+  if (SONS) SONS.jouerSonJeu('quotidien', code);
+  else chargerSons().then(() => SONS?.jouerSonJeu('quotidien', code));
+};
 
 /**
  * Points sur 10 d'une partie d'après les Paillettes gagnées (migration 179 : 200 à 10 points, −15 par point manquant).

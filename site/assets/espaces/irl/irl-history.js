@@ -1,14 +1,14 @@
 // ===== Humane Gang — IRL : historique des rencontres, rencontres passées, « Qui était là ? », carte (module de /pages/irl/irl.html) =====
 // Module monté par irl.js (mountHistory). Il gère la vue « Historique » : frise, filtres, statistiques, carte des lieux,
 // et les dialogues « Ajouter une rencontre passée » et « Qui était là ? ».
-// Dépendances : core.js, photos.js (envoi d'images), image-compress.js, utils.js, reglages-valeurs-lot3.js (options photo).
+// Dépendances : core.js, photos.js (envoi d'images), image-compress.js, utils.js, reglages/valeurs-lot3.js (options photo).
 // Services externes : Leaflet et tuiles OpenStreetMap (carte), Nominatim (position des lieux), chargés à la demande.
 // Tables : hg_events, hg_event_rsvps, hg_photos. N'exporte que mountHistory et norm (normalisation de texte).
 import { sb, toast, errMsg, esc, $, $$, fmtDate, avatarHtml, isGodMode, godLimit, godTag } from '../../commun/core.js';
 import { uploadImage, removeObjects, uuid, uploadAlbumPhoto, insertPhotoRow } from './photos.js';
 import { prepareImage } from '../../commun/image-compress.js';
 import { pad } from '../../commun/utils.js';
-import { optionsPhoto } from '../admin/reglages-valeurs-lot3.js';
+import { optionsPhoto } from '../../commun/reglages/valeurs-lot3.js';
 import { lireQuota, restants, notePhotos } from '../../commun/eco-quota.js';
 
 /* ---------- Constantes : carte, cache des lieux, formats de date ---------- */

@@ -2,7 +2,7 @@
 // Page des sorties : prochaine sortie en grand, sorties à venir, sondages de dates, sorties passées avec leur album photo,
 // et l'historique (irl-history.js, monté ici). Réponses (je viens, peut-être, pas dispo), votes, photos et ZIP.
 // Dépendances : core.js, photos.js (envoi, albums, visionneuse), reactions.js, image-compress.js, ics.js (agenda),
-// irl-history.js (historique), admin-ghosts.js (fantômes, admin), ui-confirm.js, reglages-valeurs-lot3.js (délais, bornes).
+// irl-history.js (historique), admin-ghosts.js (fantômes, admin, chargé à la demande), ui-confirm.js, reglages/valeurs-lot3.js (délais, bornes).
 // Tables : hg_members, hg_events, hg_event_rsvps, hg_event_dates, hg_event_date_votes, hg_photos. N'exporte rien.
 import { sb, initPage, toast, errMsg, esc, $, $$, fmtDateTime, daysUntil, avatarHtml, notify, isGodMode, godTag } from '../../commun/core.js';
 import { uploadImage, removeObjects, signedUrls, openLightbox, uuid, thumbHtml, downloadAlbum, gridPath, uploadAlbumPhoto, insertPhotoRow, selectPhotos } from './photos.js';
@@ -10,11 +10,10 @@ import { loadReactions } from '../../commun/reactions.js';
 import { prepareImage } from '../../commun/image-compress.js';
 import { addToCalendar } from './ics.js';
 import { mountHistory } from './irl-history.js';
-import { ghostDirectory } from '../admin/admin-ghosts.js';
 import { confirmBox } from '../../commun/ui-confirm.js';
 import { svg } from '../../commun/icons.js';
 import { pluralCount, pad } from '../../commun/utils.js';
-import { chargerReglagesLot3, delaiPassee, bornesSondage } from '../admin/reglages-valeurs-lot3.js';
+import { chargerReglagesLot3, delaiPassee, bornesSondage } from '../../commun/reglages/valeurs-lot3.js';
 import { lireQuota, restants, messagePhotos, messageSortie } from '../../commun/eco-quota.js';
 import { loadSortieCards, sortieCardHtml, onSortieCardClick } from './irl-carte.js';
 import { setCompteurs } from '../../commun/core/badges-compteur.js';
@@ -68,18 +67,22 @@ async function load() {
     const ids = (r.data || []).filter((e) => new Date(e.starts_at) <= Date.now()).map((e) => e.id);
     return ids.length ? selectPhotos((cols) => sb.from('hg_photos').select(cols).in('event_id', ids).order('created_at', { ascending: true })) : { data: [], error: r.error || null };
   });
-  const [m, ev, rs, dt, vt, ph] = await Promise.all([
+  // Fantômes (admin) : module et lecture lancés avec les autres requêtes, pas après (sinon un aller-retour de plus
+  // retarde le premier rendu, et la liste repousse le bas de la page une fois affichée).
+  const ghostsQ = isAdmin ? import('../admin/admin-ghosts.js').then((g) => g.ghostDirectory()) : null;
+  const [m, ev, rs, dt, vt, ph, ghosts] = await Promise.all([
     sb.rpc('hg_members'),
     evQ,
     sb.from('hg_event_rsvps').select('*'),
     sb.from('hg_event_dates').select('*').order('proposed_at', { ascending: true }),
     sb.from('hg_event_date_votes').select('*'),
     phQ,
+    ghostsQ,
   ]);
   const err = [m, ev, rs, dt, vt, ph].find((r) => r.error)?.error;
   if (err) throw err;
   S.members = new Map((m.data || []).map((x) => [x.id, x]));
-  if (isAdmin) for (const [id, g] of await (await import('../admin/admin-ghosts.js')).ghostDirectory()) S.members.set(id, g); // l'admin voit les fantômes, pas les membres
+  if (ghosts) for (const [id, g] of ghosts) S.members.set(id, g); // l'admin voit les fantômes, pas les membres
   S.events = ev.data || [];
   S.rsvps = rs.data || [];
   S.dates = dt.data || [];

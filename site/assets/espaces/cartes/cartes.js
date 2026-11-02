@@ -26,7 +26,16 @@ import { isOffline, startOfflinePage, saveOffline, cacheCardImages, offlineAllow
 import { openProof, proofCss } from '../accueil/quest-proofs.js';
 import { defiHtml, claimDefi } from './cartes-defi.js';
 import { boosterStyleClass } from './booster-styles.js';
-import { themeDecor, playOpeningFx } from './booster-themes.js';
+// Décors des cartouches à thème (booster-themes.js, ≈ 45 Ko) : importés seulement si un type de booster porte un thème
+// (cart--theme-…), avant le premier dessin (loadTypes). Sans eux, themeDecor rend null (logo à l'écran) et pas d'animation.
+let THEMES = null;
+const themeDecor = (cls) => THEMES?.themeDecor(cls) ?? null;
+const playOpeningFx = (...args) => THEMES?.playOpeningFx(...args);
+/** Importe booster-themes.js si l'un des types en a besoin (une seule fois ; jamais d'erreur). */
+async function chargerThemes(types) {
+  if (THEMES || !(types || []).some((t) => boosterStyleClass(t?.style).startsWith('cart--theme-'))) return;
+  THEMES = await import('./booster-themes.js').catch(() => null);
+}
 import { onShelf, openNow, saleBadgeHtml, saleLimitHtml, closedBoxHtml, closedRowHtml, discountHtml } from './cartes-saisons.js';
 // Succès « Pentakill » (F9, migration 101) : contrôle serveur après un booster de 5 cartes, bannière à la fin de la révélation.
 import { pentakillCheck, showPentakill } from './cartes-pentakill.js';
@@ -470,6 +479,7 @@ async function loadTypes(retry = true) {
     if (error) throw error;
     const list = Array.isArray(data?.types) ? data.types : [];
     S.types = list.length ? [...list].sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0)) : null;
+    await chargerThemes(S.types);
     S.weekEndsAt = data?.week_ends_at ?? null;
     S.typesErr = false;
   } catch (e) {

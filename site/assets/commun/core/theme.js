@@ -113,14 +113,21 @@ const LOGO_DEFAUT = new URL('../../images/marque/logo-1600.webp', import.meta.ur
 const LOGO_PETIT = new URL('../../images/marque/logo-192.webp', import.meta.url).href;
 const LOGO_PETIT_SRCSET = `${new URL('../../images/marque/logo-96.webp', import.meta.url).href} 96w, ${LOGO_PETIT} 192w`;
 
+/* Logo de thème du site : adresse complète du site, même origine que la page, ou chemin relatif, sans suffixe de taille (le groupe 1 est l'adresse sans « .webp ») */
+const LOGO_THEME_RE = /^((?:https:\/\/(?:www\.)?humane-gang\.com)?\/assets\/images\/themes\/[a-z0-9]+(?:-[a-z]+)*)\.webp$/;
+
 /**
  * Attributs de l'image d'un logo affiché en petit. Pour le logo par défaut : version réduite et srcset.
- * Pour un logo de thème ou personnalisé : son adresse telle quelle, sans srcset (on ne connaît pas ses tailles).
+ * Pour un logo de thème hébergé sur le site (/assets/images/themes/<nom>.webp) : ses versions <nom>-96 et <nom>-192, comme le logo par défaut.
+ * Pour tout autre logo (hébergé ailleurs) : son adresse telle quelle, sans srcset (on ne connaît pas ses tailles).
  * @param {string} [logo] Logo à afficher (logo courant par défaut).
  * @returns {{src: string, srcset: string}} src, et srcset (vide si absent).
  */
 export function logoAttrs(logo = currentLogo()) {
-  return logo === LOGO_DEFAUT ? { src: LOGO_PETIT, srcset: LOGO_PETIT_SRCSET } : { src: logo, srcset: '' };
+  if (logo === LOGO_DEFAUT) return { src: LOGO_PETIT, srcset: LOGO_PETIT_SRCSET };
+  const m = typeof logo === 'string' && logo.replace(location.origin, '').match(LOGO_THEME_RE);
+  if (m) return { src: `${m[1]}-192.webp`, srcset: `${m[1]}-96.webp 96w, ${m[1]}-192.webp 192w` };
+  return { src: logo, srcset: '' };
 }
 
 /* ---------- Démarrage (avant tout appel réseau) ---------- */

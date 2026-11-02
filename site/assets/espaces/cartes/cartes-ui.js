@@ -6,7 +6,7 @@
 // les générations des membres (setGenerations, generationOf, generationLabel : idée C8),
 // le HTML d'une carte (cardHtml), le dos de carte (cardBackHtml) et le format des Paillettes (fmtP).
 import { paillSym } from '../../commun/paillettes.js';
-import { esc, currentLogo } from '../../commun/core.js';
+import { esc, currentLogo, logoAttrs } from '../../commun/core.js';
 
 /* ---------- Raretés et familles : listes de référence et libellés ---------- */
 // Ordre de RARITIES = du plus commun au plus rare (l'ordre compte pour le rang).
@@ -198,9 +198,10 @@ export function cardHtml(card, opts = {}) {
 /* ---------- Dos de carte et format des Paillettes ---------- */
 /** Dos de carte (booster pas encore retourné) : trame rouge, médaillon arc-en-ciel au logo, bandeau noir. */
 export function cardBackHtml(size = 'md') {
+  const logo = logoAttrs(); // logo par défaut ou de thème du site : versions 96 / 192 px (affiché à 59-69 px)
   return `<div class="hgc hgc-back hgc-${size}" aria-hidden="true"><span class="hgc-frame">`
     + '<span class="hgc-layer hgc-out"></span><span class="hgc-layer hgc-mid"></span>'
-    + `<span class="hgc-layer hgc-in"><span class="hgc-medal"><span class="hgc-medal-in"><img class="hgc-back-logo" src="${esc(currentLogo())}" alt=""></span></span>`
+    + `<span class="hgc-layer hgc-in"><span class="hgc-medal"><span class="hgc-medal-in"><img class="hgc-back-logo" src="${esc(logo.src)}"${logo.srcset ? ` srcset="${esc(logo.srcset)}" sizes="72px"` : ''} alt=""></span></span>`
     + '<span class="hgc-band-back">Humane Gang</span></span></span></div>';
 }
 

@@ -1,20 +1,19 @@
 // ===== Humane Gang — Historique, la frise des souvenirs (/pages/irl/historique.html) =====
 // Frise chronologique : éditions du Secret Santa (avec « qui a offert à qui »), sorties IRL passées avec leurs photos,
 // et « moments cultes » ajoutés à la main (avec image, réactions, modification et suppression).
-// Dépendances : core.js, photos.js (images), image-compress.js, reactions.js, admin-ghosts.js (fantômes, admin),
-// ui-confirm.js, ss-pairs.js (paires), reglages-valeurs-lot3.js (délai avant qu'un événement soit « passé »).
+// Dépendances : core.js, photos.js (images), image-compress.js, reactions.js, admin-ghosts.js (fantômes, admin, chargé à la demande),
+// ui-confirm.js, ss-pairs.js (paires), reglages/valeurs-lot3.js (délai avant qu'un événement soit « passé »).
 // Tables et RPC : hg_members, hg_ss_editions, hg_ss_progress, hg_events, hg_event_rsvps, hg_photos, hg_moments.
 // N'exporte rien.
 import { sb, initPage, toast, errMsg, esc, $, $$, fmtDate, avatarHtml, godLimit, godTag } from '../../commun/core.js';
 import { uploadImage, removeObjects, signedUrls, openLightbox, uuid, thumbHtml, gridPath, selectPhotos } from './photos.js';
 import { prepareImage } from '../../commun/image-compress.js';
 import { loadReactions, reactionBarHtml } from '../../commun/reactions.js';
-import { ghostDirectory } from '../admin/admin-ghosts.js';
 import { confirmBox } from '../../commun/ui-confirm.js';
 import { svg } from '../../commun/icons.js';
 import { pluralCount } from '../../commun/utils.js';
 import { fetchPairs, peopleByPseudo, pairsHtml } from './ss-pairs.js';
-import { chargerReglagesLot3, delaiPassee } from '../admin/reglages-valeurs-lot3.js';
+import { chargerReglagesLot3, delaiPassee } from '../../commun/reglages/valeurs-lot3.js';
 import { lireQuota, restants, messageSouvenir } from '../../commun/eco-quota.js';
 import { reportButtonHtml, hiddenNoteHtml } from '../../commun/report.js'; // A6 : « Signaler » un moment
 
@@ -55,16 +54,19 @@ const dayDate = (d) => new Date(`${d}T12:00:00`); // date SQL → midi local (é
  */
 async function load() {
   const pastLimit = new Date(Date.now() - delaiPassee()).toISOString();
-  const [m, ed, ev, mo] = await Promise.all([
+  // Fantômes (admin) : module et lecture lancés avec les autres requêtes, pas après (un aller-retour de moins).
+  const ghostsQ = me?.is_admin ? import('../admin/admin-ghosts.js').then((g) => g.ghostDirectory()) : null;
+  const [m, ed, ev, mo, ghosts] = await Promise.all([
     sb.rpc('hg_members'),
     sb.from('hg_ss_editions').select('*').in('status', ['revelation', 'termine']).order('year', { ascending: false }),
     sb.from('hg_events').select('id,title,location,starts_at').not('starts_at', 'is', null).lt('starts_at', pastLimit).order('starts_at', { ascending: false }),
     sb.from('hg_moments').select('*').order('happened_on', { ascending: false }),
+    ghostsQ,
   ]);
   const err = [m, ed, ev, mo].find((r) => r.error)?.error;
   if (err) throw err;
   S.members = new Map((m.data || []).map((x) => [x.id, x]));
-  if (me?.is_admin) for (const [id, g] of await (await import('../admin/admin-ghosts.js')).ghostDirectory()) S.members.set(id, g); // l'admin voit les fantômes, pas les membres
+  if (ghosts) for (const [id, g] of ghosts) S.members.set(id, g); // l'admin voit les fantômes, pas les membres
   S.editions = ed.data || [];
   S.events = ev.data || [];
   S.moments = mo.data || [];

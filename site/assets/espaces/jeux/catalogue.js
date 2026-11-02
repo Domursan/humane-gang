@@ -114,7 +114,7 @@ export const CARTES = [
     icone: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>' },
   { id: 'uno', image: `${IMG}uno.webp`, titre: 'Uno', texte: 'Vide ta main avant les autres.', section: 'speciaux', href: '/pages/jeux/uno.html', page: 'uno', couleur: 'var(--rose)',
     icone: '<rect x="4" y="5" width="10" height="15" rx="2" transform="rotate(-10 9 12)"/><rect x="10" y="4" width="10" height="15" rx="2" transform="rotate(8 15 11)"/>' },
-  // Nouveaux jeux de plateau en développement (admins seulement)
+  // Jeux de plateau ajoutés ensuite (accès selon leur page, ouverts aux membres depuis novembre 2026)
   { id: 'nj-blackjack', image: `${IMG}blackjack.webp`, titre: 'Blackjack', texte: 'Contre la banque, à qui s’approche de 21.', section: 'speciaux', href: '/pages/jeux/blackjack.html', page: 'blackjack', couleur: 'var(--sage)',
     icone: '<rect x="3" y="5" width="11" height="15" rx="2"/><rect x="10" y="3" width="11" height="15" rx="2"/><path d="M14 9l2 3-2 3-2-3z"/>' },
   { id: 'nj-poker', image: `${IMG}poker.webp`, titre: 'Poker', texte: 'Texas Hold’em, en jetons.', section: 'speciaux', href: '/pages/jeux/poker.html', page: 'poker', couleur: 'var(--rust)',
@@ -123,7 +123,7 @@ export const CARTES = [
     icone: '<path d="M12 2l8 4.5v9L12 20l-8-4.5v-9z"/><path d="M12 2v18M4 6.5l16 9M20 6.5l-16 9"/>' },
   { id: 'nj-pictionary', image: `${IMG}pictionary.webp`, titre: 'Pictionary', texte: 'Dessine, les autres devinent.', section: 'speciaux', href: '/pages/jeux/pictionary.html', page: 'pictionary', couleur: 'var(--plum)',
     icone: '<path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/>' },
-  // Jeux de plateau (migrations 125 à 130) : pages en mode admin au lancement
+  // Jeux de plateau (migrations 125 à 130) : pages en mode admin au lancement, ouvertes aux membres depuis novembre 2026
   { id: 'cluedo', titre: 'Cluedo', texte: 'Qui a tué le Docteur Lenoir ? Mène l’enquête.', section: 'speciaux', href: '/pages/jeux/cluedo.html', page: 'cluedo', image: `${IMG}cluedo.webp` },
   { id: 'shadow-hunters', titre: 'Shadow Hunters', texte: 'Hunters, Shadows ou Neutres : qui est qui ?', section: 'speciaux', href: '/pages/jeux/shadow-hunters.html', page: 'shadow-hunters', image: `${IMG}shadow-hunter.webp` },
   { id: 'destins', titre: 'Destins', texte: 'Fais tourner la roue de la vie.', section: 'speciaux', href: '/pages/jeux/destins.html', page: 'destins', image: `${IMG}destins.webp` },
