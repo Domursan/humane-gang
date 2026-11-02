@@ -7,6 +7,8 @@
  *   (à droite sur ordinateur, en tiroir sur téléphone). Mise en page : assets/espaces/plateaux/blackjack.css.
  *   Les zones sont reconstruites seulement quand leur contenu change (le focus et le curseur restent en place).
  *   Effets visuels (« à toi », cartes qui glissent, carte retournée, jetons, gagnant) : ./effets.js, après chaque rendu.
+ *   Spectateur (migration 214) : ../../vues/spectateur.js (barre, message), panneau « Tu regardes : tu ne peux ni miser ni jouer » ;
+ *   la carte cachée de la banque reste « ?? » pour lui comme pour les joueurs (vue du serveur).
  *   Fin de partie (BJ1) : avantFin garde le tapis le temps que les jetons rejoignent mon siège ou la banque. Le serveur règle la banque
  *   et termine la partie dans la même opération : la table montre encore la carte cachée, jamais le total de la banque.
  * Dépendances : commun/tour-signal.js (creerSignalTour), core.js (esc, initials, toast), ../../api.js (plat, erreurTexte), ../../vues/commun.js (bandeauHtml,
@@ -19,6 +21,7 @@ import { plat, erreurTexte } from '../../api.js';
 import { bandeauHtml, brancherChrono, journalHtml, envoyer, moiJoueur, joueurDe, quitterPartie } from '../../vues/commun.js';
 import { boutonQuitter } from '../../../../commun/quitter.js';
 import { creerChat, tiroirChat } from '../../vues/chat.js';
+import { brancherSpectateur } from '../../vues/spectateur.js';
 import { creerSignalTour } from '../../../../commun/tour-signal.js';
 import { tapisHtml, valeurCarte } from './plateau.js';
 import { creerEffets } from './effets.js';
@@ -92,6 +95,7 @@ export function creer(root, ctx) {
     tiroirChatZone: q('[data-tiroir-chat]'), annonce: q('[data-annonce]'),
   };
   refs.code.textContent = `Code ${code}`;
+  const spect = brancherSpectateur({ barre: q('.bj-barre'), quitter: refs.quitter, naviguer: ctx.naviguer });
 
   let etat = null;
   let occupe = false;
@@ -277,6 +281,12 @@ export function creer(root, ctx) {
   /** Contenu du panneau selon la phase et mon rôle. */
   function contenuPanneau() {
     if (jeAiSorti()) return '<h2 id="bj-action-titre" class="bj-titre" tabindex="-1">Tu regardes la suite</h2>';
+    // Spectateur (migration 214) : qui joue, et ce qu'il ne peut pas faire.
+    if (spect.spectateur() && etat.partie?.statut === 'en_cours' && (phase() === 'mise' || phase() === 'jeu')) {
+      const verbe = phase() === 'mise' ? 'miser' : 'jouer';
+      const quoi = phase() === 'mise' ? 'Les mises sont en cours.' : `${esc(acteurPseudo())} décide de sa main.`;
+      return `<h2 id="bj-action-titre" class="bj-titre" tabindex="-1">C'est à ${esc(acteurPseudo())} de ${verbe}</h2><p class="bj-note">${quoi} Tu regardes : tu ne peux ni miser ni jouer.</p>`;
+    }
     if (!monId()) return `<h2 id="bj-action-titre" class="bj-titre" tabindex="-1">La partie continue</h2><p class="bj-note">${esc(acteurPseudo())} joue.</p>`;
     if (etat.partie?.statut !== 'en_cours' || phase() === 'fin') return '<h2 id="bj-action-titre" class="bj-titre" tabindex="-1">Partie terminée</h2>';
     if (phase() === 'mise') {
@@ -294,7 +304,7 @@ export function creer(root, ctx) {
   function rendrePanneau(force = false) {
     if (finie || (occupe && !force)) return;
     const h = maMain();
-    const cle = JSON.stringify([phase(), jeu().actif, jeu().main, monId(), monTour(), jeAiSorti(), etat?.partie?.statut,
+    const cle = JSON.stringify([phase(), jeu().actif, jeu().main, monId(), monTour(), jeAiSorti(), etat?.partie?.statut, spect.spectateur(),
       jetonsMoi(), (h?.cartes || []).join(','), mesMains().map((m) => `${m.statut}:${m.mise}`).join('|'), !!peutAgir()]);
     if (!force && cles.panneau === cle) return;
     cles.panneau = cle;
@@ -382,6 +392,7 @@ export function creer(root, ctx) {
       etat = e;
       rendreBandeau();
       rendreAlerte();
+      spect.maj(e);
       rendreTapis();
       rendrePanneau();
       rendreDerniere();

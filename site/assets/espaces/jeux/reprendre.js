@@ -6,10 +6,13 @@
  * Chargement : le squelette n'apparaît que si le membre avait des parties à sa dernière visite (mémoire de cet appareil), sinon la page
  * sauterait pour tous les membres sans partie. Erreur : un message et « Réessayer ». Une relecture ratée garde la liste déjà affichée.
  * Le temps restant d'un duel défile chaque seconde tant que la barre est visible.
- * Dépendances : core.js (sb, esc). loup-garou/ui.js (libellePhase) et nom-de-code/api.js (EQUIPES) sont chargés seulement si une partie de ces jeux est listée.
+ * Uno, un robot tient ma place (parti, migration 211) : « un robot joue pour toi depuis 4 min », étiquette Robot, « Reprendre ma place », ligne mise en avant.
+ * Dépendances : core.js (sb, esc), commun/robot-place.js (depuisTexte). loup-garou/ui.js (libellePhase) et nom-de-code/api.js (EQUIPES) sont chargés
+ *   seulement si une partie de ces jeux est listée.
  * Exporte : creerReprise.
  */
 import { sb, esc } from '../../commun/core.js';
+import { depuisTexte } from '../../commun/robot-place.js';
 
 /** Lignes montrées avant « Voir mes N autres parties ». */
 const PLAFOND = { bureau: 6, telephone: 3 };
@@ -52,10 +55,13 @@ function morceaux(p, textes) {
       : [textes.phase ? textes.phase(p) : statutTexte(p), `${Number(p.vivants || 0).toLocaleString('fr-CH')} en vie sur ${Number(p.nb_joueurs || 0).toLocaleString('fr-CH')}`];
     return [...debut, p.mode === 'mj' ? 'meneur humain' : 'meneur automatique'];
   }
-  const m = [statutTexte(p), pluriel(p.inscrits, 'joueur')];
+  const m = [statutTexte(p)];
+  if (robotTient(p)) m.push(`un robot joue pour toi depuis ${depuisTexte(p.robot_depuis)}`);
+  else m.push(pluriel(p.inscrits, 'joueur'));
   if (p.espace === 'uno') {
     if (p.mes_cartes != null && p.statut !== 'attente') m.push(`il te reste ${pluriel(p.mes_cartes, 'carte')}`);
-    if (p.a_toi) m.push('c’est ton tour');
+    if (robotTient(p)) { /* ni « ton tour » ni le tour d'un autre : le robot joue */ }
+    else if (p.a_toi) m.push('c’est ton tour');
     else if (p.tour_pseudo) m.push(`c’est au tour de ${p.tour_pseudo}`);
   } else if (p.espace === 'ndc') {
     const equipe = textes.equipes?.[p.tour_equipe];
@@ -64,13 +70,18 @@ function morceaux(p, textes) {
   return m;
 }
 
+/** Un robot tient ma place dans cette partie (Uno en cours, parti). */
+const robotTient = (p) => p.espace === 'uno' && !!p.robot_depuis && p.statut === 'en_cours';
+
 /** Une ligne de la barre. */
 function ligneHtml(p, textes) {
   const nom = esc(p.nom), sous = p.espace === 'duel' ? sousDuel(p) : esc([p.nom_jeu, ...morceaux(p, textes)].join(' · '));
   const image = `/assets/images/jeux/petit/${encodeURIComponent(IMAGE[p.jeu] || p.jeu)}.webp`;
-  return `<li class="rp-ligne${p.a_toi ? ' is-tour' : ''}"><img class="rp-vig" src="${esc(image)}" alt="" width="48" height="48" loading="lazy" decoding="async">
-    <div class="rp-txt"><strong>${nom}${p.a_toi ? ' <span class="rp-etiquette">À toi</span>' : ''}</strong><span class="rp-sous">${sous}</span></div>
-    <a class="btn ${p.a_toi ? 'btn-sand' : 'btn-ghost'} rp-bouton" href="${esc(urlPartie(p))}">Reprendre<span class="visually-hidden"> ${nom}</span></a></li>`;
+  const robot = robotTient(p);
+  const etiquette = robot ? ' <span class="rp-etiquette rb-rp">Robot</span>' : p.a_toi ? ' <span class="rp-etiquette">À toi</span>' : '';
+  return `<li class="rp-ligne${p.a_toi || robot ? ' is-tour' : ''}"><img class="rp-vig" src="${esc(image)}" alt="" width="48" height="48" loading="lazy" decoding="async">
+    <div class="rp-txt"><strong>${nom}${etiquette}</strong><span class="rp-sous">${sous}</span></div>
+    <a class="btn ${p.a_toi || robot ? 'btn-sand' : 'btn-ghost'} rp-bouton" href="${esc(urlPartie(p))}">${robot ? 'Reprendre ma place' : 'Reprendre'}<span class="visually-hidden"> ${nom}</span></a></li>`;
 }
 
 const teteHtml = (n) => `<div class="rp-tete"><h2 class="rp-titre" id="rp-titre">Reprendre ma partie</h2>${n

@@ -1,6 +1,7 @@
 // ===== Humane Gang — Uno : créer une partie (#creer) =====
 /*
- * Rôle : formulaire de création (nom, places, visibilité, invités, durée du tour, mode, variantes, annonce Discord)
+ * Rôle : formulaire de création (nom, places, visibilité, invités, spectateurs admis (partie publique, migration 214),
+ * durée du tour, mode, variantes, annonce Discord)
  * avec le résumé « Ta partie » qui se met à jour à chaque réglage. « Créer la partie » envoie les réglages au serveur
  * (uno.creer). Si l'annonce Discord est demandée, elle part sans bloquer ; ensuite on ouvre la salle d'attente.
  * Dépendances : core.js (esc, notify, getProfile), uno/api.js (uno, erreurTexte).
@@ -59,6 +60,7 @@ function lire(form) {
     nb_places: Number(fd.get('nb_places')) || 8,
     visibilite: fd.get('visibilite') || 'publique',
     invites: fd.has('invites'),
+    spectateurs: fd.has('spectateurs'),
     t_tour: Number(fd.get('t_tour')) || 30,
     mode: fd.get('mode') || 'manche',
     variantes: Object.fromEntries(VARIANTES.map((v) => [v.id, fd.has(`v-${v.id}`)])),
@@ -119,6 +121,7 @@ export async function afficher(root, { naviguer }) {
               ${segments('t_tour', 'Durée d\'un tour', DUREES.map((d) => ({ valeur: d, libelle: `${d} s` })), 30)}
               ${segments('mode', 'Mode', MODES, 'manche')}
               ${interrupteur('invites', 'Invités acceptés', 'Des joueurs sans compte peuvent rejoindre.', true)}
+              <div data-sp-reglage>${interrupteur('spectateurs', 'Spectateurs admis', 'Les membres peuvent regarder la partie sans jouer. Ils ne voient aucune main.', true)}</div>
               ${interrupteur('discord', 'Annonce sur Discord', 'Publie la partie dans le salon des joueurs.', false)}
             </div>
           </section>
@@ -160,7 +163,13 @@ export async function afficher(root, { naviguer }) {
   /** Affiche ou efface le message d'erreur du formulaire. */
   const erreur = (msg) => { erreurEl.textContent = msg; erreurEl.hidden = !msg; };
 
-  const majTout = () => majResume(root, lire(form), pseudo);
+  // Spectateurs (migration 214) : seulement pour une partie publique.
+  const reglageSpect = root.querySelector('[data-sp-reglage]');
+  const majTout = () => {
+    const p = lire(form);
+    reglageSpect.hidden = p.visibilite === 'privee';
+    majResume(root, p, pseudo);
+  };
   curseur.addEventListener('input', () => { sortie.textContent = curseur.value; });
   form.addEventListener('input', majTout);
   form.addEventListener('change', majTout);
@@ -185,6 +194,7 @@ export async function afficher(root, { naviguer }) {
         nb_places: p.nb_places,
         visibilite: p.visibilite,
         invites: p.invites,
+        spectateurs: p.spectateurs,   // sans effet tant que la partie est privée
         t_tour: p.t_tour,
         mode: p.mode,
         variantes: p.variantes,

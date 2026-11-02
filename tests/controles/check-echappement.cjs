@@ -40,6 +40,7 @@ const LISTE_BLANCHE = [
   { fichier: 'espaces/admin/cartes/boosters.js', expr: 'deco.body', raison: 'décor SVG fixe (themeDecor)' },
   { fichier: 'espaces/admin/visual-pick.js', expr: 'deco.body', raison: 'décor SVG fixe (themeDecor)' },
   { fichier: 'espaces/cartes/cartes.js', expr: 'deco.body', raison: 'décor SVG fixe (themeDecor)' },
+  { fichier: 'espaces/cartes/enchere-lot.js', expr: 'deco.body', raison: 'décor SVG fixe (themeDecor)' },
   { fichier: 'espaces/admin/admin-bot.js', expr: 'def.title', raison: 'grpHead() échappe son titre (esc(title))' },
   { fichier: 'espaces/admin/admin-saisons.js', expr: 't.name', raison: 'opt() échappe son libellé' },
   { fichier: 'espaces/admin/admin-saisons.js', expr: 'k.name', raison: 'opt() échappe son libellé' },

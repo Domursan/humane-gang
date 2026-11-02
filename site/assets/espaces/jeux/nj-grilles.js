@@ -20,6 +20,15 @@ import { paillSym } from '../../commun/paillettes.js';
 import { loadCss, boardHtml, copyText } from './devine.js';
 import { boutonReponses } from '../../commun/core/admin-reponses.js';
 import { finDePartie, pointsDeGain } from './effets-jour.js';
+import { serieHtml, jokerHtml } from './serie-jeux.js'; // série commune et joker payant (migrations 206 et 207)
+// Grilles passées pour l'honneur (idée 13, migration 213) : #<onglet>-AAAA-MM-JJ, sans Paillettes, classement ni série.
+import { jourVoulu, sousTitreHonneur, retourHtml, modeHonneur, monterArchives, suivreJour } from './archives-jeux.js';
+
+/** Grilles passées : onglet de la page Jeux et ce que montre la réponse dans la liste. */
+const ARCHIVES = {
+  connexions: { onglet: 'connexions', unite: 'thèmes' }, motscroises: { onglet: 'mots-croises', unite: 'grille' },
+  motmele: { onglet: 'mot-mele', unite: 'thème' }, anagramme: { onglet: 'anagramme', unite: 'mots' }, nerdle: { onglet: 'nerdle', unite: 'calcul' },
+};
 
 /**
  * Durée affichée : « 1:05 », ou « 1:02:05 » au-delà d'une heure.
@@ -116,7 +125,7 @@ function pastillesHtml(st, cfg, esc) {
   if (!st.grille) return '';
   const fini = !!st.partie?.fini;
   const liste = [...(cfg.pills?.(st) || [])];
-  if (!fini) liste.push(['Jusqu’à', `${Number(st.gain) || 0} ${paillSym()}`]);
+  if (!fini && !st.honneur) liste.push(['Jusqu’à', `${Number(st.gain) || 0} ${paillSym()}`]);
   if (st.partie?.debut) liste.push(['Chrono', { html: `<span data-chrono>${fini ? esc(formatDuree(st.partie.secondes)) : '0:00'}</span>` }]);
   return liste.map(([l, v]) => `<span class="pill ng-pill">${esc(l)} <strong>${typeof v === 'object' ? v.html : esc(v)}</strong></span>`).join('');
 }
@@ -134,11 +143,25 @@ function pastillesHtml(st, cfg, esc) {
  * @param {{sb: object, me: object, toast: Function, esc: Function}} ctx Contexte des modules d'onglet.
  * @param {object} cfg Configuration du jeu.
  */
-export async function monterGrille(panel, ctx, cfg) {
+export async function monterGrille(zone, ctx, cfg) {
   loadCss('jeux-devine');
   loadCss('jeux-grilles');
   const esc = ctx.esc;
-  const e = { st: null, err: null, busy: false, msg: '', ui: {}, fin: null, retard: 0 };
+  // jour : grille passée jouée pour l'honneur (null = grille du jour).
+  const e = { st: null, err: null, busy: false, msg: '', ui: {}, fin: null, retard: 0, jour: jourVoulu(ctx.sub) };
+  const ar = ARCHIVES[cfg.jeu] || { onglet: cfg.jeu };
+  // Le jeu se dessine dans panel ; les grilles passées dessous, dans leur propre bloc.
+  const panel = document.createElement('div');
+  const blocArchives = document.createElement('div');
+  zone.append(panel, blocArchives);
+  const liste = monterArchives(blocArchives, { sb: ctx.sb, esc, jeu: `nj_${cfg.jeu}`, lien: (d) => `#${ar.onglet}-${d}`, code: cfg.titre,
+    titre: 'Grilles passées', unite: ar.unite, essais: null, actuel: e.jour });
+  suivreJour(zone, ctx, () => e.jour, (j) => {
+    for (const k of Object.keys(e.ui)) delete e.ui[k];
+    Object.assign(e, { jour: j, busy: false, msg: '', fin: null });
+    charger();
+    liste.rafraichir(j);
+  });
   let minuteur = null;
   const env = {
     ctx,
@@ -161,8 +184,16 @@ export async function monterGrille(panel, ctx, cfg) {
 
   /** Lit l'état du jour puis dessine. */
   async function charger() {
+    const jour = e.jour;
     try {
-      e.st = await lireEtat(ctx, cfg.jeu);
+      let st;
+      if (jour) {
+        const { data, error } = await ctx.sb.rpc('hg_jeux_honneur_etat', { p_jeu: `nj_${cfg.jeu}`, p_day: jour });
+        if (error) throw error;
+        st = data || {};
+      } else st = await lireEtat(ctx, cfg.jeu);
+      if (e.jour !== jour) return;
+      e.st = st;
       e.err = null;
     } catch (err) { e.err = err?.message || String(err); }
     dessiner();
@@ -178,9 +209,13 @@ export async function monterGrille(panel, ctx, cfg) {
     e.retard = 0;
     const avant = JSON.parse(JSON.stringify(e.st)); // copie : l'état d'avant l'essai, pour comparer avec la réponse
     let res = null, refus = null;
+    const jour = e.jour;
     try {
-      const { data, error } = await ctx.sb.rpc('hg_nj_grille_essai', { p_jeu: cfg.jeu, p });
+      const { data, error } = jour
+        ? await ctx.sb.rpc('hg_jeux_honneur_essai', { p_jeu: `nj_${cfg.jeu}`, p_day: jour, p })
+        : await ctx.sb.rpc('hg_nj_grille_essai', { p_jeu: cfg.jeu, p });
       if (error) throw error;
+      if (e.jour !== jour) { e.busy = false; return null; }
       res = data?.resultat || {};
       const apres = data.etat;
       // Animation sur l'ancien dessin (tuiles qui sautent, etc.) avant de montrer le nouvel état.
@@ -198,6 +233,7 @@ export async function monterGrille(panel, ctx, cfg) {
     }
     e.busy = false;
     dessiner(focusSel);
+    if (jour && e.fin) liste.rafraichir();
     if (refus) { try { cfg.refus?.({ err: refus, p, panel, env }); } catch (x) { console.warn('[grilles] refus', x); } return res; }
     let ms = 0;
     try { ms = Number(cfg.apresRendu?.({ res, avant, apres: e.st, panel, env })) || 0; } catch (x) { console.warn('[grilles] animation', x); }
@@ -218,7 +254,7 @@ export async function monterGrille(panel, ctx, cfg) {
   /** Branche finDePartie sur la carte de fin dessinée : points, gain (dans la ligne « crédités »), effets si animer. */
   function habillerFin(carte, animer) {
     const p = e.st?.partie;
-    if (!p) return;
+    if (!p || e.jour) return; // grille passée : ni points, ni Paillettes, ni série
     const gain = Number(p.reward) || 0;
     finDePartie(carte, { points: p.points ?? p.score ?? pointsDeGain(gain), gain: gain || null, animer, cibleGain: gain ? carte.querySelector('[data-gain]') : null });
   }
@@ -239,9 +275,9 @@ export async function monterGrille(panel, ctx, cfg) {
     return `<section class="ng-fin${gagne ? ' is-win' : ''}" aria-label="Fin de partie">
       <p class="ng-fin-t">${esc(texte)}</p>
       <p class="ng-fin-s">${esc(stats)}</p>
-      <p class="ng-reward">${p.reward ? `<span data-gain>+${esc(p.reward)} ${paillSym()}</span> crédités` : 'Aucune Paillette cette fois'}</p>
+      <p class="ng-reward">${st.honneur ? (st.du_jour ? 'Ta partie du jour même.' : 'Grille passée, jouée pour l’honneur : sans Paillettes.') : p.reward ? `<span data-gain>+${esc(p.reward)} ${paillSym()}</span> crédités` : 'Aucune Paillette cette fois'}</p>
       ${cfg.copie ? '<div class="ng-actions"><button type="button" class="btn btn-sand" data-act="copier">Copier le résultat</button></div>' : ''}
-      <h3 class="ng-label">Classement du jour</h3>${classementJourHtml(st.board?.jour || [], ctx.me?.id, esc)}
+      ${st.honneur ? '' : `<h3 class="ng-label">Classement du jour</h3>${classementJourHtml(st.board?.jour || [], ctx.me?.id, esc)}`}
     </section>`;
   }
 
@@ -253,16 +289,22 @@ export async function monterGrille(panel, ctx, cfg) {
     if (!st) return;
     const jour = !!st.grille;
     const fini = !!st.partie?.fini;
-    const head = `<div class="ng-head"><div class="ng-head-t"><p class="ng-kicker">GRILLE DU JOUR${st.numero ? ` · N°${esc(st.numero)}` : ''}</p>
-      <h2 class="ng-title">${esc(cfg.titre)}</h2></div><div class="ng-pills">${pastillesHtml(st, cfg, esc)}</div></div>`;
+    const honneur = !!e.jour;
+    modeHonneur(zone, honneur, 'Grilles passées');
+    const head = honneur
+      ? `<div class="ng-head"><div class="ng-head-t"><p class="ng-kicker">GRILLE PASSÉE · N°${esc(st.numero)}</p>
+      <h2 class="ng-title">${esc(cfg.titre)}</h2><p class="small muted">${esc(sousTitreHonneur(`Grille n°${st.numero}`, e.jour))}</p></div>
+      <div class="ng-pills">${retourHtml(`#${ar.onglet}`)}${pastillesHtml(st, cfg, esc)}</div></div>`
+      : `<div class="ng-head"><div class="ng-head-t"><p class="ng-kicker">GRILLE DU JOUR${st.numero ? ` · N°${esc(st.numero)}` : ''}</p>
+      <h2 class="ng-title">${esc(cfg.titre)}</h2></div><div class="ng-pills">${serieHtml(`nj_${cfg.jeu}`)}${pastillesHtml(st, cfg, esc)}</div>${jokerHtml(`nj_${cfg.jeu}`)}</div>`;
     const main = jour
       ? `<section class="card ng-jeu" aria-label="${esc(cfg.titre)}">${cfg.corps(st, e.ui, esc)}${fini ? finHtml(st) : ''}<p class="ng-live" role="status" aria-live="polite">${esc(e.msg)}</p></section>`
       : '<div class="card ng-vide"><p>Pas de grille aujourd’hui, reviens demain.</p></div>';
     const regles = `<section class="card ng-regles" aria-labelledby="ng-regles-h"><h2 id="ng-regles-h" class="jd-h2">Règles en bref</h2>
       <ul class="ng-rules">${cfg.regles.map((r) => `<li>${esc(r)}</li>`).join('')}</ul></section>`;
-    const semaine = `<section class="card ng-board" aria-labelledby="ng-board-h"><h2 id="ng-board-h" class="jd-h2">Classement de la semaine</h2>${boardHtml(st.board?.semaine || [], ctx.me?.id, esc)}</section>`;
+    const semaine = honneur ? '' : `<section class="card ng-board" aria-labelledby="ng-board-h"><h2 id="ng-board-h" class="jd-h2">Classement de la semaine</h2>${boardHtml(st.board?.semaine || [], ctx.me?.id, esc)}</section>`;
     panel.innerHTML = `<div class="ng ng-${cfg.jeu}">${head}<div class="ng-main">${main}</div><aside class="ng-aside">${regles}${semaine}</aside></div>`;
-    boutonReponses(panel.querySelector('.ng-head'), 'njg', () => cfg.jeu);
+    if (!honneur) boutonReponses(panel.querySelector('.ng-head'), 'njg', () => cfg.jeu);
     if (jour) cfg.lier?.(panel.querySelector('.ng-jeu'), st, e.ui, env);
     if (fini) {
       const carte = panel.querySelector('.ng-fin');

@@ -52,3 +52,41 @@
   .shw-dlg-inner { padding: 18px; }
 }
 @media (prefers-reduced-motion: reduce) { .shw-skel { animation: none; } }
+
+/* ----- Vitrine en image (idée 58, cartes-vitrine-image.js) : bouton, fenêtre d'aperçu ----- */
+.shw-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.shw-img { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; }
+.vi-dlg { width: min(560px, calc(100vw - 24px)); }
+.vi-apercu { width: 100%; aspect-ratio: 1080 / 1350; overflow: hidden; border-radius: var(--radius-sm); border: 1px solid var(--border); container-type: inline-size; }
+.vi-echelle { width: 1080px; transform-origin: 0 0; }
+.vi-actions { flex-wrap: wrap; }
+.vi-actions .btn { min-height: 44px; }
+@media (min-width: 821px) { .vi-partager { display: none; } }
+@media (max-width: 600px) { .vi-actions .btn { flex: 1 1 100%; } .vi-actions .btn-primary { order: -1; } .vi-actions [data-cancel] { order: 2; } }
+
+/* L'image elle-même : 1080 × 1350, couleurs du thème actif, polices du site. */
+.vimg { position: relative; box-sizing: border-box; width: 1080px; height: 1350px; padding: 64px 64px 48px; overflow: hidden;
+  display: flex; flex-direction: column; gap: 34px; background: var(--bg); color: var(--text); font-family: var(--font-body); }
+.vimg-arc { position: absolute; inset: 0 0 auto; height: 12px;
+  background: linear-gradient(90deg, var(--rb-1) 0 16.66%, var(--rb-2) 0 33.33%, var(--rb-3) 0 50%, var(--rb-4) 0 66.66%, var(--rb-5) 0 83.33%, var(--rb-6) 0); }
+.vimg-tete { display: flex; align-items: center; gap: 24px; }
+.vimg-logo { width: 88px; height: 88px; object-fit: contain; image-rendering: pixelated; }
+.vimg-club { margin: 0 0 6px; font: 400 18px var(--font-pixel); letter-spacing: 2px; color: var(--sand); }
+.vimg-nom { margin: 0; font: 400 64px/1.05 var(--font-display); }
+.vimg-chiffres { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.vimg-chiffres li { display: grid; gap: 2px; padding: 14px 16px; border: 2px solid var(--border-strong); border-radius: 14px; background: var(--surface); }
+.vimg-chiffres b { font: 400 40px var(--font-display); }
+.vimg-chiffres span { font-size: 18px; color: var(--muted); }
+.vimg-sec { display: grid; gap: 14px; }
+.vimg-h { margin: 0; font: 400 16px var(--font-pixel); letter-spacing: 2px; color: var(--muted); text-transform: uppercase; }
+.vimg-grandes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; justify-items: center; }
+.vimg-grandes .vimg-c { width: 280px; container-type: inline-size; }
+.vimg-petites { display: grid; grid-template-columns: repeat(5, 1fr); gap: 20px; justify-items: center; }
+.vimg-petites .vimg-c { width: 160px; container-type: inline-size; }
+.vimg .hgc { --w: 100cqw; width: 100%; }
+.vimg-series { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 32px; }
+.vimg-series li { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; }
+.vimg-sn { font-size: 20px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vimg-sv { font: 400 16px var(--font-pixel); color: var(--muted); }
+.vimg-series .progress { grid-column: 1 / -1; height: 14px; }
+.vimg-pied { margin-top: auto; font: 400 16px var(--font-pixel); letter-spacing: 1px; color: var(--muted); }

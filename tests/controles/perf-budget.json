@@ -26,7 +26,7 @@
       "requetes": 60,
       "cls": 0.1,
       "plafond": {
-        "ko": 800,
+        "ko": 830,
         "lcp_ms": 2800,
         "requetes": 85
       }

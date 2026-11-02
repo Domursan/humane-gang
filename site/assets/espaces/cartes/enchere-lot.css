@@ -1,0 +1,69 @@
+/* ===== Humane Gang — lot d'une enchère du Staff (migration 215) : formulaire de l'admin (.enp-form, .enp-quand…), pile de
+   l'encart de la Boutique (.enp-pile) et liste du lot (.enp-items). Chargée par enchere-lot.js (ensureLotCss). Jetons de base.css ;
+   formes reprises de admin-give.css (.gv-*), cartes-idees.css (.c2-auc*) et admin-visual-pick.css (.vp-cart). ===== */
+
+/* Admin : formulaire « Nouvelle enchère » */
+.enp-panier { min-width: 0; }
+.enp-quand { margin: 0; padding: 12px 14px 14px; border: 1px solid var(--border); border-radius: 12px; display: grid; gap: 8px; min-width: 0; }
+.enp-quand legend { padding: 0 6px; font-weight: 700; }
+.enp-quand .field { margin: 0; }
+.enp-quand input { min-height: 44px; font-size: 16px; }
+.enp-defaut { margin: 0; line-height: 1.4; }
+.enp-err { margin: 6px 0 0; line-height: 1.35; }
+.enp-regles { border: 1px solid var(--border); border-radius: 12px; padding: 0 14px; }
+.enp-regles > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; }
+.enp-regles[open] { padding-bottom: 14px; }
+.enp-apercu { display: grid; gap: 8px; }
+.enp-ap-t { margin: 0; font-family: var(--font-pixel); font-weight: 400; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.enp-ap-cadre { padding: 14px; border: 1px dashed var(--border-strong); border-radius: 14px; background: var(--bg); }
+.enp-form-err { margin: 0; }
+.enp-note { margin: 0 0 10px; }
+.enp-lot-ligne { margin: 2px 0; line-height: 1.4; }
+
+/* Lot en pile (encart de la Boutique et aperçu) */
+.enp-pile { position: relative; width: 112px; height: 132px; flex: none; }
+.enp-p { position: absolute; display: block; }
+.enp-p1 { left: 0; top: 0; z-index: 2; transform: rotate(-6deg); }
+.enp-p1 .hgc { --w: 80px; }
+.enp-p2 { right: 0; bottom: 0; z-index: 3; }
+.enp-p3 { right: 2px; top: 0; z-index: 1; }
+.enp-cart { --s: .26; position: relative; display: block; flex: none; width: calc(220px * var(--s)); height: calc(290px * var(--s)); }
+.enp-cart .cart-box { position: absolute; left: 0; top: 0; width: 220px; height: 290px; margin: 0; transform: scale(var(--s)); transform-origin: 0 0; }
+.enp-etoile { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 26px; color: var(--sand); border: 2px solid var(--sand); border-radius: 50%; background: var(--surface); }
+.enp-teaser { align-items: center; }
+.enp-contenu { line-height: 1.4; }
+
+/* Membre : contenu du lot */
+.enp-lot { display: grid; gap: 8px; }
+.enp-items { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+.enp-item { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); }
+.enp-vis { width: 56px; height: 76px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.enp-vis .hgc { --w: 54px; flex: none; }
+.enp-txt { display: grid; gap: 2px; min-width: 0; }
+.enp-txt strong { font-size: 15px; line-height: 1.25; overflow-wrap: anywhere; }
+.enp-txt span { font-size: 13px; color: var(--muted); line-height: 1.3; }
+.enp-pile-n { width: 42px; height: 58px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid var(--sand); border-radius: 8px; box-shadow: 3px 3px 0 var(--sand); color: var(--sand); font-family: var(--font-display); font-size: 13px; }
+.enp-boxes { grid-template-columns: 1fr 1fr; }
+.enp-gagne { display: grid; gap: 8px; }
+.enp-gagne p { margin: 0; }
+.enp-recu { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+
+@media (max-width: 600px) {
+  /* Téléphone : deux colonnes compactes, pour garder l'offre près du haut de l'écran */
+  .enp-items { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .enp-item { grid-template-columns: 40px minmax(0, 1fr); gap: 8px; padding: 6px 8px; align-items: center; }
+  .enp-vis { width: 40px; height: 56px; }
+  .enp-vis .hgc { --w: 40px; }
+  .enp-vis .enp-cart { --s: .17; }
+  .enp-vis .enp-etoile { width: 34px; height: 34px; font-size: 20px; }
+  .enp-pile-n { width: 32px; height: 44px; box-shadow: 2px 2px 0 var(--sand); font-size: 12px; }
+  .enp-txt strong { font-size: 13px; }
+  .enp-txt span { font-size: 12px; }
+  .enp-pile { width: 96px; height: 116px; }
+  .enp-p1 .hgc { --w: 70px; }
+  .enp-cart { --s: .22; }
+}
+@media (max-width: 420px) {
+  .enp-teaser { align-items: flex-start; }
+  .enp-boxes .c2-auc-big { font-size: 20px; }
+}

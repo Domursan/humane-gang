@@ -67,6 +67,11 @@ begin
     v_inv := t_invariants(v_id);
     if v_inv is not null then raise exception 'ÉCHEC invariant (% joueurs, pas %) : %', n, v_pas, v_inv; end if;
     u := p.tour; un := (right(u::text, 2))::int;
+    -- Place tenue par le robot (3 tours manqués, migration 211) : le joueur revient avant de jouer.
+    if (select parti from hg_uno_joueurs where partie = v_id and user_id = u) then
+      perform t_callu(u, format('hg_uno_reprendre(%L)', v_code));
+      continue;
+    end if;
     -- Absent simulé : chrono écoulé, un autre joueur demande d'avancer.
     if p_absents and random() < 0.05 then
       update hg_uno_parties set tour_fin = now() - interval '1 second' where id = v_id;

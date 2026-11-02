@@ -2,7 +2,7 @@
 // Faux Supabase : fixtures/fake-sb-cartes.mjs, scénario c2 (enchère ouverte, « Le gobelet du RDV n° 1 », meilleure offre
 // 1300 d'Alice, plafond 4100). Contrôles : encart en tête de la Boutique, vue détaillée (carte, « Fin dans », meilleure
 // offre, minimum 1350, 4 dernières offres), offre trop basse refusée sans appel, offre valide envoyée puis affichée comme
-// mienne, retour à la Boutique ; 360 px sans défilement ; admin : liste, planification (vendredi 18 h par défaut).
+// mienne, retour à la Boutique ; 360 px sans défilement ; admin : liste, planification d’un lot (vendredi 18 h par défaut).
 // Lancer : node tests/parcours/cartes/parcours-c11.cjs
 const { ROOT, check, finish, openPage, adminSection, hscroll, log, sleep, chromium } = require('../../lib/harness.cjs');
 const txt = (p, sel) => p.textContent(sel).then((t) => (t || '').replace(/\s+/g, ' ').trim()).catch(() => '');
@@ -45,11 +45,17 @@ const txt = (p, sel) => p.textContent(sel).then((t) => (t || '').replace(/\s+/g,
   check(/Le gobelet du RDV n° 1/.test(await txt(p, '#acd-encheres')) && /Ouverte/.test(await txt(p, '#acd-encheres')), 'admin : enchère en cours listée');
   const start = await p.inputValue('#au-start');
   check(new Date(start).getDay() === 5 && /T18:00$/.test(start), `admin : début proposé vendredi 18 h (${start})`);
+  // Lot en panier (migration 215) : la carte unique C14 seule, nommée ; confirmation dans la fenêtre du give.
+  await p.waitForSelector('#au-panier [data-vp-card="C14"]', { timeout: 5000 });
+  await p.click('#au-panier [data-vp-card="C14"]');
+  await p.fill('#au-motif', 'Le gobelet du RDV n° 2');
   await p.click('#acd-auc-form button[type=submit]');
+  await p.waitForSelector('dialog.gv-confirm[open] [data-gv-ok]', { timeout: 5000 }).catch(() => {});
+  await p.click('dialog.gv-confirm[open] [data-gv-ok]').catch(() => {});
   await sleep(500);
   const c = (await log(p)).find((l) => l[1] === 'hg_auction_create');
   // Les règles partent en chaînes (readRules, enchere-regles.js) : le serveur les lit comme entiers.
-  check(c && c[2].p.card_id === 'C14' && Number(c[2].p.min_bid) === 500 && Number(c[2].p.step) === 50, 'admin : hg_auction_create (carte unique C14, 500 / 50)');
+  check(c && c[2].p.lignes?.[0]?.card === 'C14' && c[2].p.nom === 'Le gobelet du RDV n° 2' && Number(c[2].p.min_bid) === 500 && Number(c[2].p.step) === 50, 'admin : hg_auction_create (lot : carte unique C14, 500 / 50)');
   check(!p.errs.length, 'admin : aucune erreur JS' + (p.errs.length ? ' (' + p.errs.join(' | ') + ')' : ''));
   await browser.close();
   finish();

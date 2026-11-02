@@ -248,7 +248,7 @@ Parcours du panel (`tests/parcours/admin/`) :
 | `parcours-admin-arcade.cjs` | Arcade des pages 404 : classement, effacement d'un score |
 | `parcours-admin-gestion.cjs` | La Fabrique de cartes › Gestion globale |
 | `parcours-admin-give-panier.cjs` | Le give en panier : don mélangé, lots, brillance, dépassement, garde-fou, journal, 390 px |
-| `parcours-admin-quick.cjs` | Actions rapides du plateau : Give, Nouvelle enchère, Lancer un drop (petites fenêtres) |
+| `parcours-admin-quick.cjs` | Actions rapides du plateau : Give, Nouvelle enchère (lot en panier), Lancer un drop (petites fenêtres) |
 | `parcours-staff.cjs` | Section Staff (administrateur), Staff restreint, membre simple redirigé |
 
 Un test ne vérifie que ce que le faux client sait simuler (`tests/fixtures/`). Une RPC absente du faux renvoie `null` sans erreur.

@@ -6,7 +6,6 @@ html[data-mode="daltonien"] .page-msg { --msg-ss: var(--ss-fg); }
 /* Mode clair : le sable n'est jamais du texte sur fond clair, on l'assombrit */
 html[data-mode="clair"] .page-msg { --msg-help-ink: color-mix(in srgb, var(--sand) 50%, #000); }
 .page-msg .site-footer { margin-top: 32px; }
-.msg-head { padding-bottom: 20px; }
 .msg-loading { display: flex; align-items: center; gap: 12px; color: var(--muted); padding: 24px 0; }
 .msg-spinner { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--border-strong); border-top-color: var(--esp);
   animation: msg-spin .9s linear infinite; display: inline-block; flex: none; }
@@ -167,7 +166,7 @@ html[data-mode="clair"] .page-msg { --msg-help-ink: color-mix(in srgb, var(--san
 
 /* ---------- Mobile : liste OU fil ---------- */
 @media (max-width: 760px) {
-  .msg-head { padding: 28px 0 16px; align-items: center; }
+  .msg-head { align-items: center; } /* haut et bas : marges de page communes (.page-head, base.css), seuil 600 px */
   .msg-head .page-title { font-size: 36px; }
   .msg-app { grid-template-columns: minmax(0, 1fr); border-radius: 14px; }
   /* Liste : même cadre que sur ordinateur (hauteur fixe, défilement dans la liste) : la place est réservée au chargement */
@@ -218,6 +217,53 @@ html[data-mode="clair"] .msg-av-badge.is-support { color: #FFFFFF; }
 .msg-support-more { display: inline-block; margin-top: 4px; font-size: 13px; font-weight: 700; color: var(--msg-help-ink); }
 .msg-support-msg[open] summary { display: none; }
 @media (max-width: 760px) { .msg-support-sum { margin: 8px 10px 0; max-height: 32vh; } }
+
+/* ---------- Réactions sur les messages (idée 66, migration 204) ----------
+   Bureau : bouton au survol de la bulle ; téléphone : appui long sur la bulle. Palette de six émojis, puces sous la bulle. */
+.msg-row .msg-line { position: relative; }
+.msg-row.is-pick { position: relative; z-index: 3; }
+.msg-react-add { flex: none; display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; opacity: 0; }
+.msg-line:hover .msg-react-add, .msg-row.is-survol .msg-react-add, .msg-react-add:focus-visible, .msg-react-add[aria-expanded="true"] { opacity: 1; color: var(--text); background: var(--surface-2); }
+.msg-reacts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; position: relative; }
+.msg-reacts:empty { display: none; }
+.msg-row.is-mine .msg-reacts { justify-content: flex-end; }
+.msg-react { font: inherit; display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0 10px; border: 2px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--text); font-size: 14px; cursor: pointer; }
+.msg-react span { font-family: var(--font-pixel); font-size: 12px; }
+.msg-react[aria-pressed="true"] { border-color: var(--esp); background: var(--surface-2); box-shadow: 2px 2px 0 var(--esp); }
+.msg-react-pick { position: absolute; z-index: 5; bottom: calc(100% - 4px); display: flex; gap: 2px; padding: 4px; border: 2px solid #08080B; border-radius: 999px; background: var(--surface); box-shadow: 4px 4px 0 var(--esp); }
+.msg-react-pick.is-bas { bottom: auto; top: calc(100% - 4px); } /* première bulle du fil : la palette s'ouvre dessous */
+.msg-row.is-other .msg-react-pick { left: 0; }
+.msg-row.is-mine .msg-react-pick { right: 0; }
+.msg-react-pick button { width: 44px; height: 44px; padding: 0; border: 0; border-radius: 999px; background: transparent; font-size: 22px; cursor: pointer; }
+.msg-react-pick button[aria-pressed="true"] { background: var(--surface-2); box-shadow: inset 0 0 0 2px var(--esp); }
+.msg-react-qui { position: absolute; z-index: 5; top: calc(100% + 6px); left: 0; width: max-content; max-width: 260px; padding: 8px 12px; border: 2px solid var(--border-strong); border-radius: 10px; background: var(--surface); font-size: 13px; line-height: 1.4; box-shadow: 0 8px 24px rgba(0, 0, 0, .4); }
+.msg-row.is-mine .msg-react-qui { left: auto; right: 0; }
+@media (max-width: 760px) {
+  .msg-react-add { display: none; } /* au téléphone : appui long sur la bulle */
+  .msg-react { min-height: 44px; padding: 0 12px; }
+}
+
+/* ---------- Recherche dans les messages (idée 67, migration 203) ---------- */
+.msg-cherche { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 4px; padding: 10px 10px 0; background: var(--surface); }
+.msg-cherche .msg-icon-btn[hidden] { display: none; }
+.msg-cherche-ic { position: absolute; left: 22px; top: 22px; color: var(--muted); pointer-events: none; }
+.msg-cherche input, .msg-cherche-fil input { flex: 1; min-width: 0; min-height: 44px; border: 2px solid var(--border-strong); border-radius: 999px; background: var(--surface-2); color: var(--text); font: 16px var(--font-body); }
+.msg-cherche input { padding: 0 12px 0 40px; }
+.msg-cherche-fil input { padding: 0 12px; }
+.msg-cherche input::-webkit-search-cancel-button, .msg-cherche-fil input::-webkit-search-cancel-button { display: none; } /* la croix du site suffit */
+.msg-cherche input:focus-visible, .msg-cherche-fil input:focus-visible { outline: 2px solid var(--esp); outline-offset: 1px; }
+.msg-res-info { padding: 10px 6px; font-size: 14px; color: var(--muted); list-style: none; }
+.msg-res-info .msg-spinner { display: inline-block; vertical-align: middle; }
+.msg-res .msg-res-txt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 14px; line-height: 1.4; color: var(--muted); white-space: normal; text-align: left; }
+.msg-res .msg-res-txt b { color: var(--text); font-weight: 700; }
+.msg-conv[aria-current="true"] .msg-res-txt, .msg-conv[aria-current="true"] .msg-res-txt b { color: var(--esp-text); }
+mark.msg-mark { background: var(--sand); color: #08080B; border-radius: 3px; padding: 0 2px; }
+html[data-mode="clair"] mark.msg-mark { background: color-mix(in srgb, var(--sand) 30%, #FFFFFF); } /* sable du mode clair trop sombre sous du texte noir */
+.msg-cherche-fil { display: flex; align-items: center; gap: 4px; padding: 8px 12px; border-bottom: 2px solid var(--border); background: var(--surface); min-width: 0; }
+.msg-cherche-nb { flex: none; padding: 0 6px; font-family: var(--font-pixel); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.msg-cherche-nb:empty { display: none; }
+.msg-row.is-trouve .msg-bubble { outline: 3px solid var(--sand); outline-offset: 3px; }
+@media (max-width: 760px) { .msg-cherche-fil { padding: 6px 8px; gap: 2px; } } /* boutons gardés à 44 px (cibles tactiles) */
 
 /* ---------- Mouvement réduit ou effets coupés : rien ne bouge ---------- */
 @media (prefers-reduced-motion: reduce) {

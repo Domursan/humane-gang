@@ -4,12 +4,14 @@
  * (format PREFIXE-1234 ; « 1234 » ou « prefixe 1234 » sont acceptés), Mes stats, « Mes parties en cours »,
  * « Parties publiques » (rafraîchies toutes les 15 s) et un lien « Règles » qui déplie un court résumé.
  * Chaque bloc charge ses données à part : une erreur n'empêche pas les autres.
- * Dépendances : core.js (esc), plateaux/api.js (plat, contenus, erreurTexte, jeu, JEUX).
+ * « En direct » (Blackjack, Monopoly, Destins ; migration 214) : parties publiques en cours à regarder, bouton « Regarder ».
+ * Dépendances : core.js (esc), plateaux/api.js (plat, contenus, erreurTexte, jeu, JEUX), commun/spectateurs.js.
  * Exporte : afficher.
  */
 import { esc } from '../../../commun/core.js';
 import { brancherRejoindre, chargerBloc, suivrePubliques } from '../../../commun/jeux-accueil.js';
 import { plat, contenus, erreurTexte, jeu } from '../api.js';
+import { JEUX_SPECTATEURS, compteurHtml, sousTitreDirect } from '../../../commun/spectateurs.js';
 
 /** Intervalle de rafraîchissement des parties publiques (ms). */
 const INTERVALLE_PUBLIQUES = 15000;
@@ -129,6 +131,18 @@ function htmlPubliques(liste) {
     </li>`).join('')}</ul>`;
 }
 
+/** Bloc « En direct » (migration 214) : parties publiques en cours qui admettent les spectateurs. */
+function htmlDirect(liste, image) {
+  if (!liste.length) return '<p class="plat-aide">Aucune partie publique en cours. Les parties privées ne se regardent pas.</p>';
+  const J = jeu();
+  return `<ul class="sp-liste">${liste.map((d) => `<li class="sp-ligne">
+      ${image ? `<img class="sp-vig" src="/assets/images/jeux/${esc(image)}.webp" alt="" width="40" height="40">` : ''}
+      <div class="sp-txt"><strong>${esc(d.nom)}</strong><span class="sp-sous">${esc(sousTitreDirect(d, J.id))}</span></div>
+      ${compteurHtml(d.spectateurs)}
+      <a class="btn btn-ghost sp-bouton" href="#partie/${encodeURIComponent(d.code)}">Regarder<span class="visually-hidden"> ${esc(d.nom)}</span></a>
+    </li>`).join('')}</ul>`;
+}
+
 /**
  * Affiche l'accueil du jeu de la page dans root. Renvoie la fonction de nettoyage.
  * @param {HTMLElement} root zone d'affichage (#app).
@@ -140,6 +154,7 @@ export async function afficher(root) {
   const nomJeu = c?.nom || J.nom;
   const image = IMAGE[J.id];
   const regles = REGLES[J.id] || [];
+  const direct = JEUX_SPECTATEURS.includes(J.id);
 
   root.innerHTML = `<div class="plat-accueil">
     <header class="plat-accueil-tete">
@@ -179,6 +194,10 @@ export async function afficher(root) {
         <h2 id="plat-pub-titre">Parties publiques</h2>
         <div data-pub aria-live="polite"><p class="plat-aide">Chargement…</p></div>
       </section>
+      ${direct ? `<section class="card plat-carte sp-direct" aria-labelledby="sp-plat-titre">
+        <h2 id="sp-plat-titre">En direct</h2>
+        <div data-direct><p class="plat-aide">Chargement…</p></div>
+      </section>` : ''}
 
       <section class="card plat-carte plat-regles" aria-labelledby="plat-regles-titre">
         <div class="plat-regles-tete">
@@ -225,8 +244,14 @@ export async function afficher(root) {
     rendre: (liste) => htmlPubliques(Array.isArray(liste) ? liste : []), intervalle: INTERVALLE_PUBLIQUES,
     messageErreur: alerte, erreurTexte, actif: () => actif });
 
+  // En direct (migration 214) : parties publiques en cours à regarder, rafraîchies comme les publiques.
+  const arretDirect = direct ? suivrePubliques({ zone: root.querySelector('[data-direct]'), charger: () => plat.enDirect(),
+    rendre: (liste) => htmlDirect(Array.isArray(liste) ? liste : [], image), intervalle: INTERVALLE_PUBLIQUES,
+    messageErreur: alerte, erreurTexte, actif: () => actif }) : () => {};
+
   return () => {
     actif = false;
     arretPubliques();
+    arretDirect();
   };
 }

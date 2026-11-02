@@ -11,6 +11,7 @@
 import { avatarHtml, errMsg, motionAllowed } from '../../commun/core.js';
 import { sonJour, rejoue, secouer, finDePartie } from './effets-jour.js';
 import { boutonReponses } from '../../commun/core/admin-reponses.js';
+import { serieHtml, jokerHtml } from './serie-jeux.js'; // série commune et joker payant (migrations 206 et 207), onglet seulement
 
 /* ---------- Constantes ---------- */
 const nf = new Intl.NumberFormat('fr-CH');
@@ -51,9 +52,10 @@ export async function mountDaily(el, { sb, esc, toast, compact = false, meId = n
   /** Réponse lisible. */
   const lisible = (r) => (Array.isArray(r) ? r.map(txtChoix).join(', ') : (['choix_unique', 'vrai_faux'].includes(S.d.question.type) ? txtChoix(r) : String(r ?? '')));
 
-  /** En-tête de la carte : pastille et flamme de la série. */
+  /** En-tête de la carte : pastille et flamme de la série (onglet : pastille commune des jeux du jour, serie-jeux.js). */
   const tete = () => {
     const n = Number(S.d?.streak?.current) || 0;
+    if (!compact) return `<div class="qdj-top"><span class="qdj-tag">Question du jour</span>${serieHtml('quiz_jour')}</div>`;
     return `<div class="qdj-top"><span class="qdj-tag">Question du jour</span>
       <span class="qdj-serie" aria-label="Série : ${esc(jours(n))}">${FLAMME}<span>${esc(jours(n))}</span></span></div>`;
   };
@@ -119,21 +121,28 @@ export async function mountDaily(el, { sb, esc, toast, compact = false, meId = n
     </section>`;
   }
 
-  /** Carte « Ta semaine » : 7 cases (OK, J = joker, ? = aujourd'hui, vide = à venir, — = manqué). */
+  /**
+   * Carte « Ta semaine » : 7 cases (OK, J = joker gratuit, J✦ = joker payé, ? = aujourd'hui, vide = à venir, — = manqué).
+   * Onglet seulement : encart « Sauver ma série » (joker payant, serie-jeux.js) quand la série vient de casser.
+   */
   function carteSemaine() {
     const st = S.d?.streak;
     if (!st?.week) return '';
-    const libelle = { ok: 'répondu', joker: 'joker utilisé', today: 'aujourd’hui, pas encore répondu', future: 'à venir', miss: 'manqué' };
+    const libelle = { ok: 'répondu', joker: 'joker gratuit utilisé', paye: 'joker payé', today: 'aujourd’hui, pas encore répondu', future: 'à venir', miss: 'manqué' };
     const cases = st.week.map((w, i) => {
-      const t = { ok: 'OK', joker: 'J', today: '?', future: '', miss: '–' }[w.state] ?? '';
-      return `<li class="qdj-day is-${esc(w.state)}"><span class="qdj-box" aria-hidden="true">${t}</span><span class="qdj-dl" aria-hidden="true">${LETTRES[i]}</span>
-        <span class="visually-hidden">${esc(JOUR_LONG.format(dateDe(w.day)))} : ${libelle[w.state] || ''}</span></li>`;
+      const paye = w.state === 'joker' && w.paye === true;
+      const t = paye ? 'J✦' : ({ ok: 'OK', joker: 'J', today: '?', future: '', miss: '–' }[w.state] ?? '');
+      return `<li class="qdj-day is-${esc(w.state)}${paye ? ' is-paye' : ''}"><span class="qdj-box" aria-hidden="true">${t}</span><span class="qdj-dl" aria-hidden="true">${LETTRES[i]}</span>
+        <span class="visually-hidden">${esc(JOUR_LONG.format(dateDe(w.day)))} : ${libelle[paye ? 'paye' : w.state] || ''}</span></li>`;
     }).join('');
-    const jokSemaine = st.week.filter((w) => w.state === 'joker').map((w) => JOUR_LONG.format(dateDe(w.day)));
-    const note = jokSemaine.length ? `J = joker utilisé ${esc(jokSemaine[0])} : ta série continue.` : 'Un joker par semaine : un jour d’oubli ne casse pas ta série.';
+    const jokSemaine = st.week.filter((w) => w.state === 'joker' && !w.paye).map((w) => JOUR_LONG.format(dateDe(w.day)));
+    const payeSemaine = st.week.filter((w) => w.state === 'joker' && w.paye === true).map((w) => JOUR_LONG.format(dateDe(w.day)));
+    const note = payeSemaine.length ? `J✦ = joker payé ${esc(payeSemaine[0])} : ta série continue.`
+      : jokSemaine.length ? `J = joker${compact ? '' : ' gratuit'} utilisé ${esc(jokSemaine[0])} : ta série continue.` : 'Un joker par semaine : un jour d’oubli ne casse pas ta série.';
     return `<section class="card qdj-week" aria-labelledby="qdj-week-h">
-      <div class="qdj-between"><h2 class="qdj-h2" id="qdj-week-h">Ta semaine</h2><span class="small muted">${st.joker_left ? '1 joker restant' : 'Joker utilisé'}</span></div>
+      <div class="qdj-between"><h2 class="qdj-h2" id="qdj-week-h">Ta semaine</h2><span class="small muted">${st.joker_left ? '1 joker restant' : (payeSemaine.length && jokSemaine.length ? 'Jokers utilisés' : 'Joker utilisé')}</span></div>
       <ol class="qdj-days">${cases}</ol>
+      ${compact ? '' : jokerHtml('quiz_jour', 'semaine', { jokerGratuit: jokSemaine[0] || '' })}
       <p class="small muted">${note}</p>
     </section>`;
   }
@@ -259,4 +268,11 @@ export async function mountDaily(el, { sb, esc, toast, compact = false, meId = n
   S.d = t.value.data || {};
   if (b.status === 'fulfilled' && !b.value.error) S.board = b.value.data;
   dessine();
+  // Joker payant de la Question du jour (serie-jeux.js) : « Ta semaine » est relue pour montrer le jour racheté.
+  if (!compact) {
+    document.addEventListener('jeux:serie', async (e) => {
+      if (e.detail?.cle !== 'quiz_jour' || !el.isConnected) return;
+      try { const r = await sb.rpc('hg_quiz_daily_today'); if (!r.error && r.data) { S.d = { ...S.d, streak: r.data.streak }; dessine(); } } catch { /* semaine inchangée */ }
+    });
+  }
 }

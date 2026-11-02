@@ -237,7 +237,8 @@ const entier = (t) => Number(String(t).replace(/\D/g, '')) || 0;
   deb = (await log(p)).filter((e) => e[0] === 'rpc' && e[1] === 'hg_nj_solo_debut');
   check(deb.length === 1 && deb[0][2].p_jeu === '2048', '2048 : hg_nj_solo_debut au premier coup (une seule fois)');
   check((await p.locator('.sol-tuile[data-rang]').count()) >= 2, '2048 : tuiles de rareté (classe data-rang)');
-  // Glissement au doigt (souris) : seuil de 30 px, la page ne défile pas
+  // Glissement au doigt (souris) : seuil de 30 px, la page ne défile pas (le focus du plateau a pu la décaler avant)
+  const scrollAvant = await p.evaluate(() => window.scrollY);
   const box = await p.locator('#g-plateau').boundingBox();
   const y = box.y + box.height / 2;
   await p.mouse.move(box.x + box.width * 0.8, y);
@@ -245,7 +246,7 @@ const entier = (t) => Number(String(t).replace(/\D/g, '')) || 0;
   await p.mouse.move(box.x + box.width * 0.2, y, { steps: 8 });
   await p.mouse.up();
   await sleep(300);
-  check((await p.evaluate(() => window.scrollY)) === 0, 'glissement : la page ne défile pas');
+  check((await p.evaluate(() => window.scrollY)) === scrollAvant, 'glissement : la page ne défile pas');
   // Terminer et enregistrer
   const affiche = entier(await p.locator('#g-score').innerText());
   await p.click('#g-finir');

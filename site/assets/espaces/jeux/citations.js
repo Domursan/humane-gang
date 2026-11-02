@@ -16,6 +16,7 @@ import { avatarHtml, errMsg, motionAllowed } from '../../commun/core.js';
 import { chargerCss, nf } from './commun.js';
 import { sonJour, rejoue, secouer, finDePartie } from './effets-jour.js';
 import { boutonReponses } from '../../commun/core/admin-reponses.js';
+import { serieHtml, jokerHtml } from './serie-jeux.js'; // série commune et joker payant (migrations 206 et 207)
 
 /* ---------- Constantes ---------- */
 const DIFF = { facile: 'Facile', moyen: 'Moyen', difficile: 'Difficile', expert: 'Expert' };
@@ -38,9 +39,10 @@ export async function mount(panel, ctx) {
   chargerCss('citations');
   C = { panel, ctx, list: [], cur: null, membres: null, busy: false };
   panel.innerHTML = `<div class="jg cit">
-    <header>
-      <h2 class="jg-title">Qui a dit ça ?</h2>
-      <p class="small muted jg-sub">Une phrase culte du Discord : retrouve qui l’a dite. Une seule réponse par citation.</p>
+    <header class="sj-tete">
+      <div><h2 class="jg-title">Qui a dit ça ?</h2>
+      <p class="small muted jg-sub">Une phrase culte du Discord : retrouve qui l’a dite. Une seule réponse par citation.</p></div>
+      ${serieHtml('citations')}${jokerHtml('citations')}
     </header>
     <div id="cit-consent"></div>
     <div class="jg-grid2">

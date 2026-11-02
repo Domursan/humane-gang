@@ -25,6 +25,7 @@ const EXCEPTIONS = {
   'mairie/menu': 'Menu et pied de page : libellés de tous les menus et de leurs entrées (≈ 1 650 px), en blocs côte à côte',
   'mairie/textes': 'Textes et intro : groupe « Page d’accueil » replié, puis textes des pages, intro et visite (≈ 1 550 px) ; à répartir en pages plus tard',
   'mairie/entretien': 'Entretien : quotas, une ligne par tâche planifiée (≈ 1 460 px avec la fixture, davantage avec les 15 tâches réelles), purge ; maquette validée',
+  'ventes/encheres': 'Enchères du Staff : formulaire du lot composé comme un give (Paillettes, cartes, boosters), règles, puis liste (≈ 1 500 px) ; maquette validée (migration 215)',
 };
 
 // Arbre attendu : lieu -> [titre de groupe (null : sans titre), [pages]] (dans l'ordre de LIEUX, admin/perms.js).

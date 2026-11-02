@@ -53,9 +53,9 @@
 .cal-sk-ligne { width: 70%; height: 18px; }
 .cal-error { color: var(--rose); }
 
-/* Téléphone : grille compacte avec pastilles ; la liste du jour s'affiche dessous. */
-@media (max-width: 760px) {
-  .cal-head { padding: 28px 0 16px; }
+/* Téléphone (600 px, seuil commun des pages, idée 71) : grille compacte avec pastilles ; la liste du jour s'affiche dessous.
+   Haut et bas de l'en-tête : marges de page communes (.page-head, base.css). */
+@media (max-width: 600px) {
   .cal-today { display: none; }
   .cal-dow, .cal-row { gap: 3px; }
   .cal-grid { gap: 4px; }
@@ -64,6 +64,39 @@
   .cal-num { font-size: 13px; }
   .cal-dots { display: flex; }
   .cal-ttls { display: none; }
+}
+
+/* Téléphone : le mois en liste des jours qui ont quelque chose (idée 70). Liste par défaut, choix Liste / Grille retenu sur
+   l'appareil, jours passés repliés, aujourd'hui toujours affiché. Au-dessus de 600 px, la grille seule : le choix n'apparaît pas. */
+.cal-vue { display: none; }
+@media (max-width: 600px) {
+  .cal-vue { display: inline-flex; gap: 0; margin-left: 4px; }
+  .cal-vue-btn { min-height: 48px; padding: 0 12px; gap: 6px; border-radius: 0; border: 2px solid var(--esp); font-size: 14px; }
+  .cal-vue-btn:first-child { border-radius: 10px 0 0 10px; }
+  .cal-vue-btn:last-child { border-radius: 0 10px 10px 0; border-left: 0; }
+  .cal-vue-btn[aria-pressed="true"] { background: var(--esp); color: #08080B; }
+  .cal-liste { margin-bottom: 16px; }
+  .cal-passes { width: 100%; min-height: 44px; margin-bottom: 10px; border-style: dashed; }
+  .cal-jours { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .cal-jour { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 2px solid var(--border); border-radius: 10px; background: var(--surface); }
+  .cal-jour.is-today { border-color: var(--esp); box-shadow: 4px 4px 0 var(--esp); }
+  .cal-jour.is-passe { border-style: dashed; background: transparent; }
+  .cal-jour-date { flex: none; width: 52px; margin: 0; display: flex; flex-direction: column; align-items: center; padding: 6px 0; border: 2px solid var(--border-strong); border-radius: 6px; background: var(--surface-2); font-weight: 400; }
+  .cal-jour.is-today .cal-jour-date { background: var(--esp); border-color: #000; color: #08080B; }
+  .cal-jour-dow { font-family: var(--font-pixel); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+  .cal-jour-num { font-family: var(--font-pixel); font-size: 24px; line-height: 1.1; }
+  .cal-jour-corps { flex: 1; min-width: 0; }
+  .cal-jour-corps .cal-list { gap: 8px; }
+  .cal-jour .cal-item { padding: 10px; }
+  .cal-jour .cal-item-act { width: 100%; }
+  .cal-jour-auj { margin: 0 0 6px; font-family: var(--font-pixel); font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: var(--esp-ink); }
+  .cal-jour-rien { margin: 0; padding: 10px 0 0; }
+  .cal-jour-sk .cal-jour-date { height: 60px; border: 0; }
+  .cal-jour-sk .cal-jour-corps { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; }
+  .cal-liste-vide { padding: 20px; border: 2px dashed var(--border-strong); border-radius: 10px; }
+  .cal-liste-vide p { margin: 0 0 6px; }
+  .cal-liste-vide p:last-child { margin: 0; }
+  .cal-liste .cal-error { padding: 0 0 12px; }
 }
 
 /* Liste du jour */

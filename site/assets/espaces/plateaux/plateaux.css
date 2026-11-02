@@ -318,3 +318,8 @@ body.plat-risk { --plat-teinte: #3B2A18; --plat-or: #D8A75E; }
   .plat-app *, .plat-app *::before, .plat-app *::after { animation: none !important; transition: none !important; }
 }
 body.plat-calme .plat-app *, body.plat-calme .plat-app *::before, body.plat-calme .plat-app *::after { animation: none !important; transition: none !important; }
+
+/* Chat : panneaux Table / Spectateurs (migration 214) ; compteur de spectateurs dans la barre des tables */
+.plat-chat-panneau { display: flex; flex-direction: column; gap: 8px; }
+.plat-chat-panneau[hidden] { display: none; }
+.bj-barre .sp-nb, .ds-barre .sp-nb { margin-left: auto; }

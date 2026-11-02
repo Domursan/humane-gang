@@ -3,8 +3,8 @@
  * Rôle : un seul bouton (même icône, même allure) et une seule fenêtre (ui-confirm.js, annuler = « Rester ») pour partir d'une
  *   table. Le mot et la phrase suivent ce que fait le serveur, cas par cas ; rien n'est promis que le SQL ne fasse pas :
  *   salle : hg_uno_quitter, hg_plat_quitter, hg_ndc_quitter (l'hôte passe au premier membre par place, sinon annulée), hg_lg_quitter
- *   (hôte : annulée pour tous) ; duels : hg_duel_quitter, hg_duel__terminer ; Nom de code : hg_ndc__depart ; Uno : hg_uno__exclure_en_jeu ;
- *   plateaux : hg_plat_quitter (sans retour depuis la migration 198).
+ *   (hôte : annulée pour tous) ; duels : hg_duel_quitter, hg_duel__terminer ; Nom de code : hg_ndc__depart ; Uno : hg_uno__partir (un robot
+ *   tient la place jusqu'au retour, migration 211 ; un invité ne revient pas) ; plateaux : hg_plat_quitter (sans retour depuis la migration 198).
  * Page : salles d'attente et tables de Uno, duels, plateaux, Nom de code, Loup-Garou.
  * Dépendances : core.js (esc), ui-confirm.js (confirmBox).
  * Exporte : boutonQuitter, libelleQuitter, DEPART, departSalle, departDefi, departDuel, departNomDeCode, confirmerDepart,
@@ -37,9 +37,12 @@ export const DEPART = {
   salle: { titre: 'Quitter la salle ?', texte: 'Tu peux revenir avec le code tant que la partie n’a pas commencé et qu’il reste une place.', ok: 'Quitter la salle' },
   hoteSeul: { titre: 'Annuler la partie ?', texte: 'Aucun autre membre ne peut devenir hôte : la partie est annulée.', ok: 'Annuler la partie' },
   hoteLoupGarou: { titre: 'Annuler la partie ?', texte: 'La partie est annulée pour tout le monde.', ok: 'Annuler la partie' },
-  uno: { titre: 'Quitter la table ?', texte: 'Tes cartes repartent sous la pioche, tu ne peux plus revenir dans cette partie et tu ne reçois pas de Paillettes.', ok: 'Quitter la table' },
+  uno: { titre: 'Quitter la table ?', texte: 'Un robot joue ta main jusqu’à ton retour. Reviens avant la fin de la partie pour la reprendre. Si tu n’es pas revenu à la fin, tu ne reçois pas de Paillettes.', ok: 'Quitter la table' },
+  unoInvite: { titre: 'Quitter la table ?', texte: 'Un robot joue ta main jusqu’à la fin de la partie. Sans compte, tu ne peux pas revenir à cette table.', ok: 'Quitter la table' },
   plateau: { titre: 'Quitter la partie ?', texte: 'Le jeu joue pour toi jusqu’à la fin et tu ne reçois pas de Paillettes.', ok: 'Quitter la partie' },
   poker: { titre: 'Quitter la partie ?', texte: 'Tes jetons restent à la table, le jeu joue pour toi jusqu’à la fin et tu ne reçois pas de Paillettes.', ok: 'Quitter la partie' },
+  // Spectateur (hg_spect_arreter, migration 214) : rien ne se perd, le bouton n'est pas rouge.
+  spectateur: { titre: 'Arrêter de regarder ?', texte: 'Tu quittes la table des spectateurs. Tu peux revenir tant que la partie est en cours.', ok: 'Arrêter de regarder', danger: false },
 };
 
 /**
@@ -130,9 +133,9 @@ export function sortieInvite(root, classe, page, quoi = 'la partie') {
 
 /**
  * Ouvre la fenêtre de départ ; annuler se dit « Rester » partout.
- * @param {{titre: string, texte: string, ok: string}} cas
+ * @param {{titre: string, texte: string, ok: string, danger?: boolean}} cas danger = false : bouton de confirmation non rouge.
  * @returns {Promise<boolean>} vrai si le joueur confirme.
  */
 export function confirmerDepart(cas) {
-  return confirmBox(cas.titre, cas.texte, { ok: cas.ok, cancel: 'Rester', danger: true });
+  return confirmBox(cas.titre, cas.texte, { ok: cas.ok, cancel: 'Rester', danger: cas.danger !== false });
 }

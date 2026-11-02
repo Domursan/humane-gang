@@ -7,7 +7,8 @@
 // Dépendances : core.js (Supabase, toast), icons.js (icône corbeille), admin/ui/list.js et admin/ui/thread.js
 // (liste et fil), admin/shell.js (boutons d'en-tête), ui-confirm.js (confirmation de suppression).
 // RPC seulement (aucun accès direct aux tables) : hg_staff_directory, hg_admin_conversations, hg_admin_read_conversation,
-// hg_admin_conversation_info, hg_admin_message_remove.
+// hg_admin_conversation_info, hg_admin_message_remove ; hg_admin_message_reactions (migration 204, journalisée aussi) :
+// réactions en lecture seule sous chaque bulle, avec le vrai membre (« (Santa) » pour le Santa).
 // Exporte : mountMessagesSection (zone de lecture), listMessages (colonne 2), openMessages (affichage à chaque visite).
 import { sb, toast, errMsg, esc, $ } from '../../commun/core.js';
 import { svg } from '../../commun/icons.js';
@@ -37,7 +38,7 @@ function check(res) { if (res.error) throw res.error; return res.data; }
 /* ---------- État de la section ---------- */
 // État de la section (partagé entre la liste, la lecture et les visites successives)
 const M = {
-  convs: [], pseudo: new Map(), sel: null, conv: null, msgs: [], lastId: 0, more: false,
+  convs: [], pseudo: new Map(), sel: null, conv: null, msgs: [], lastId: 0, more: false, reacts: [],
   list: null, reader: null, thread: null, mounted: false, token: 0,
   convTok: 0, convsPending: null,
 };
@@ -110,6 +111,25 @@ function senderName(m, conv) {
   const name = M.pseudo.get(m.sender_id) || 'Membre inconnu';
   return conv?.kind === 'santa' && m.sender_id === conv.santa_id ? `${name} (Santa)` : name;
 }
+// Ordre des réactions, le même que la palette des membres (messages.js).
+const REACTIONS = ['❤️', '😂', '👍', '😮', '🔥', '🎉'];
+const listeFr = new Intl.ListFormat('fr', { type: 'conjunction' });
+/**
+ * Puces des réactions d'un message, en lecture seule (même rendu que côté membre) : émoji, nombre, et qui a réagi
+ * (bulle d'aide et texte pour les lecteurs d'écran). Le Santa est nommé, suffixé « (Santa) ».
+ * @param {number|string} id identifiant du message
+ * @returns {string} HTML (vide sans réaction)
+ */
+function reactsHtml(id) {
+  const rows = M.reacts.filter((r) => Number(r.message_id) === Number(id));
+  if (!rows.length) return '';
+  const who = (r) => (M.conv?.kind === 'santa' && r.user_id === M.conv.santa_id ? `${r.pseudo} (Santa)` : r.pseudo);
+  return `<ul class="msg-reacts amsg-reacts" aria-label="Réactions">${REACTIONS.filter((e) => rows.some((r) => r.emoji === e)).map((e) => {
+    const qui = listeFr.format(rows.filter((r) => r.emoji === e).map(who));
+    const n = rows.filter((r) => r.emoji === e).length;
+    return `<li class="msg-react" title="${esc(qui)}">${esc(e)}<span aria-hidden="true">${n}</span><span class="visually-hidden"> : ${esc(qui)}</span></li>`;
+  }).join('')}</ul>`;
+}
 /** Messages de la conversation ouverte au format attendu par createThread. */
 function toMessages() {
   return M.msgs.map((m) => ({
@@ -152,7 +172,7 @@ function paintReader() {
   const host = $('#amsg-thread', M.reader);
   M.thread = createThread(host, {
     messages: toMessages(), composer: false, label: 'Messages de la conversation',
-    rowAction: (m) => `<button class="btn btn-ghost btn-sm amsg-del" type="button" data-row-act="${esc(m.id)}" aria-label="Supprimer le message de ${esc(m.author?.pseudo || '')} du ${esc(fmt(m.at))}">${TRASH}<span>Supprimer</span></button>`,
+    rowAction: (m) => `${reactsHtml(m.id)}<button class="btn btn-ghost btn-sm amsg-del" type="button" data-row-act="${esc(m.id)}" aria-label="Supprimer le message de ${esc(m.author?.pseudo || '')} du ${esc(fmt(m.at))}">${TRASH}<span>Supprimer</span></button>`,
     onRowAction: (m, b) => del(m, b),
   });
   if (!M.msgs.length) host.insertAdjacentHTML('afterbegin', '<div class="empty">Aucun message dans cette conversation.</div>');
@@ -168,18 +188,22 @@ async function openConv(id) {
   const token = ++M.token;
   M.sel = id;
   M.conv = M.convs.find((c) => c.id === id) || null;
-  M.msgs = []; M.lastId = 0; M.more = false;
+  M.msgs = []; M.lastId = 0; M.more = false; M.reacts = [];
   M.list?.select(id);
   if (M.reader) M.reader.innerHTML = '<div class="empty">Chargement des messages…</div>';
   try {
-    const [conv, msgs] = await Promise.all([
+    const [conv, msgs, reacts] = await Promise.all([
       // En-tête par RPC : le Staff n'a plus d'accès direct aux tables de la messagerie (migration 073).
       sb.rpc('hg_admin_conversation_info', { p_conv: id }).then((r) => ({ data: r.data?.[0] ?? null, error: r.error })),
       fetchMessages(id, 0),
+      // Réactions (migration 204) : lecture journalisée elle aussi, une fois par ouverture ; un échec n'empêche pas la lecture.
+      sb.rpc('hg_admin_message_reactions', { p_conv: id }).then((r) => { if (r.error) throw r.error; return r.data; })
+        .catch((e) => { console.warn('[admin-messages] réactions', e); return []; }),
     ]);
     if (token !== M.token) return;
     M.conv = { ...(M.conv || {}), ...(check(conv) || {}) };
     M.msgs = msgs;
+    M.reacts = Array.isArray(reacts) ? reacts : [];
     M.lastId = msgs.length ? msgs[msgs.length - 1].id : 0;
     M.more = msgs.length === PAGE;
     paintReader();

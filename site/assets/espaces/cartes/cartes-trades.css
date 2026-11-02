@@ -233,3 +233,61 @@
 @media (prefers-reduced-motion: reduce) { .trd-tab:hover { transform: none !important; } }
 html[data-fx="off"] .trd-tab { transition: none; }
 html[data-fx="off"] .trd-tab:hover { transform: none !important; }
+
+/* Idée 33 · Enchères entre membres (onglet « Enchères » des Échanges, cartes-encheres.js ; fenêtre « Mettre aux enchères ») : CSS validé de la maquette du lot 7 */
+.en-tete { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.en-tete > div { flex: 1 1 320px; min-width: 0; }
+.en-tete .btn { min-height: 44px; }
+.en-titre { margin: 0 0 4px; font-size: 20px; }
+.en-tete p { margin: 0; line-height: 1.4; }
+.en-semaine { display: grid; gap: 4px; margin: 0 0 12px; padding: 12px 16px; text-decoration: none; color: var(--text); border-color: var(--sand); }
+.en-semaine-txt { font-size: 14px; }
+.en-semaine-lien { font-size: 14px; font-weight: 700; color: var(--sand); text-decoration: underline; text-underline-offset: 3px; }
+.en-liste { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+.en-ligne { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; padding: 12px; }
+.en-ligne.is-chaud { border-color: var(--sand); }
+.en-mini .hgc { --w: 84px; }
+.en-info { display: grid; gap: 4px; min-width: 0; }
+.en-nom { font-size: 16px; overflow-wrap: anywhere; }
+.en-prix { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.en-reste { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.en-reste svg { width: 16px; height: 16px; flex: none; }
+.en-reste.is-chaud { color: var(--sand); font-weight: 700; }
+.en-voir { grid-column: 1 / -1; min-height: 44px; justify-content: center; }
+.en-auc { display: grid; gap: 14px; }
+.en-chrono.is-chaud { color: #FBD32D; }
+.en-prolonge { margin: 4px 0 0; font-size: 13px; line-height: 1.35; color: var(--text); }
+.en-rapides { display: flex; gap: 8px; }
+.en-rapide { min-height: 44px; min-width: 64px; font-variant-numeric: tabular-nums; }
+.en-auc .c2-auc-row input { flex: 1; min-width: 0; min-height: 44px; font-size: 16px; }
+.en-done { padding: 14px 16px; line-height: 1.45; }
+.en-done.is-gagne { border-color: var(--sand); }
+.en-dlg { width: min(520px, calc(100vw - 32px)); }
+.en-dlg-carte { display: flex; gap: 12px; align-items: center; }
+.en-dlg-carte .hgc { --w: 84px; flex: none; }
+.en-dlg-carte p { margin: 4px 0 0; line-height: 1.4; }
+.en-durees { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; border: 0; }
+.en-durees legend { margin-bottom: 6px; font-weight: 700; font-size: 14px; }
+.en-duree { position: relative; }
+.en-duree input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.en-duree span { display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border: 1px solid var(--border-strong); border-radius: 999px; font-weight: 700; font-size: 14px; }
+.en-duree input:checked + span { background: var(--sand); color: #121212; border-color: #000; box-shadow: 2px 2px 0 #000; }
+.en-duree input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.en-dlg input[type="number"] { min-height: 44px; font-size: 16px; }
+.en-dlg-regle { margin: 0; line-height: 1.4; }
+.en-filtres { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.en-filtre { min-height: 44px; }
+.en-filtre[aria-pressed="true"] { background: var(--sand); color: #121212; border-color: #000; }
+.en-hist .en-ligne { grid-template-columns: auto minmax(0, 1fr) auto; }
+.en-droite { display: grid; gap: 2px; justify-items: end; text-align: right; font-variant-numeric: tabular-nums; }
+.en-statut { justify-self: start; display: inline-flex; align-items: center; min-height: 22px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border-strong); font-size: 12px; font-weight: 800; }
+.en-statut.is-gagne { background: #159946; color: #fff; border-color: #000; }
+@media (max-width: 760px) {
+  .en-liste { grid-template-columns: minmax(0, 1fr); }
+  .en-mini .hgc, .en-dlg-carte .hgc { --w: 72px; }
+  .en-rapides .en-rapide { flex: 1; }
+  .en-hist .en-ligne { grid-template-columns: auto minmax(0, 1fr); }
+  .en-hist .en-droite { grid-column: 2; justify-items: start; text-align: left; }
+}
+html[data-mode="clair"] .en-duree input:checked + span, html[data-mode="clair"] .en-filtre[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
+.en-statut.is-gagne { background: #2FD16B; color: #000; }

@@ -15,6 +15,8 @@
  * choisi occupe toute la largeur ; le tableau de bord et chaque jeu portent leur titre. L'Arène n'est plus ici (/pages/cartes/cartes.html#arene) :
  * l'ancienne adresse /pages/jeux/jeux.html#bataille y redirige.
  * Un lien « Tous les jeux » ramène à la vue de départ depuis un jeu.
+ * Vue « Mes stats » (/pages/jeux/jeux.html#mes-stats, module mes-stats.js, idée 18) : mes chiffres des jeux du jour, ouverte
+ * depuis « Ma carte » ; un panneau sans onglet, absent du tableau de bord.
  * Ancres de section (menu « Jeux » de l'en-tête) : /pages/jeux/jeux.html#quotidien, #flash, #multi, #speciaux (id de SECTIONS)
  * ouvrent la vue de départ, remettent filtres et recherche à zéro et font défiler jusqu'à la section.
  * Accessibilité : motif ARIA des onglets, flèches (gauche/droite et haut/bas), Début et Fin, un seul onglet dans
@@ -34,6 +36,8 @@ import { getCachedProfile } from '../../commun/core/profile.js';
 import { viewAsActive } from '../../commun/core/view-as.js';
 import { setCompteurs } from '../../commun/core/badges-compteur.js';
 import { creerReprise } from './reprendre.js';
+import { creerEnDirect } from './en-direct.js'; // parties à regarder en spectateur (migration 214)
+import { chargerSeries, seriesJeux } from './serie-jeux.js'; // séries des jeux du jour (migration 206)
 
 /* ---------- Ancienne adresse de l'Arène : elle vit dans la page Cartes ---------- */
 if (location.hash === '#bataille') location.replace('/pages/cartes/cartes.html#arene');
@@ -60,9 +64,12 @@ const adminVrai = () => !viewAsActive() && !!getCachedProfile()?.is_admin;
 const JEUX = GROUPES.flatMap(([g]) => ONGLETS.filter((o, i, a) => o && ID_RE.test(o.id) && o.id !== HUB && o.id !== TOUS && o.module && (!o.admin || adminVrai()) && (!o.page || (canAccess(o.page) && !!pageLabel(o.page)))
   && a.findIndex((x) => x.id === o.id) === i && (GROUPES.some(([k]) => k === o.rythme) ? o.rythme : 'jour') === g)
   .map((o) => ({ ...o, rythme: GROUPES.some(([k]) => k === o.rythme) ? o.rythme : 'jour' })));
-/** Tous les onglets : la vue de départ, le tableau de bord puis les jeux. */
+/** Identifiant réservé à la vue « Mes stats » (idée 18) : un panneau sans onglet, pas un jeu (absent du tableau de bord). */
+const MES_STATS = 'mes-stats';
+/** Tous les onglets : la vue de départ, le tableau de bord, la vue « Mes stats » puis les jeux. */
 const LISTE = [{ id: TOUS, titre: 'Tous les jeux', icone: ICONE_DEF, catalogue: true },
-  { id: HUB, titre: 'Les missions quotidiennes', icone: ICONE_HUB, hub: true }, ...JEUX];
+  { id: HUB, titre: 'Les missions quotidiennes', icone: ICONE_HUB, hub: true },
+  { id: MES_STATS, titre: 'Mes stats', module: './mes-stats.js', vue: true }, ...JEUX];
 /** Dossier des modules (les chemins de onglets.js lui sont relatifs). */
 const BASE = new URL('./', import.meta.url);
 /** Contexte passé aux modules. sub : choix propre à un jeu tiré de l'adresse (null si aucun). */
@@ -78,7 +85,9 @@ const app = $('#app');
 const retour = $('#jeux-retour');
 /** Barre « Reprendre ma partie » (reprendre.js) : vue de départ seulement, pas sur un filtre. */
 const reprise = creerReprise(me?.id);
-const majReprise = () => reprise.afficher(S.cur === TOUS && !S.filtre);
+/** Bloc « En direct » (en-direct.js, migration 214) : mêmes moments que la barre, seulement s'il y a des parties à regarder. */
+const direct = creerEnDirect();
+const majReprise = () => { reprise.afficher(S.cur === TOUS && !S.filtre); direct.afficher(S.cur === TOUS && !S.filtre); };
 
 /* ---------- Outils ---------- */
 /** SVG d'icône (trait, 24 × 24). */
@@ -126,9 +135,10 @@ function construire() {
     h += `<span class="jeux-tabs-grp" aria-hidden="true">${esc(label)}</span>${jeux.map(tabHtml).join('')}`;
   }
   tablist.innerHTML = h;
+  // Une vue sans onglet (« Mes stats ») est nommée par son propre titre (id ms-h, posé par le module)
   panels.innerHTML = LISTE.map((o) => `<section class="jeux-panel" role="tabpanel" id="jeux-panel-${o.id}"
-      aria-labelledby="jeux-tab-${o.id}" tabindex="0" data-id="${o.id}" hidden></section>`).join('');
-  document.querySelector('.jeux-layout').before(reprise.zone);
+      aria-labelledby="${o.vue ? 'ms-h' : `jeux-tab-${o.id}`}" tabindex="0" data-id="${o.id}" hidden></section>`).join('');
+  document.querySelector('.jeux-layout').before(direct.zone, reprise.zone); // « Reprendre ma partie » reste juste au-dessus de la liste
   // Orientation annoncée selon la mise en page (colonne à gauche sur grand écran)
   const mq = matchMedia('(min-width: 1024px)');
   const orient = () => tablist.setAttribute('aria-orientation', mq.matches ? 'vertical' : 'horizontal');
@@ -175,7 +185,9 @@ function monterHub(panel) {
 
 /** Demande à chaque jeu son résumé du jour (en parallèle) et met à jour le tableau de bord et les onglets. */
 async function rafraichirHub() {
-  await Promise.all(JEUX.map(async (o) => {
+  // Séries des jeux du jour (serie-jeux.js, migration 206) : la flamme de « Ton programme du jour »
+  const series = chargerSeries(true).catch(() => null);
+  await Promise.all([series, ...JEUX.map(async (o) => {
     try {
       const m = await importer(o);
       const r = typeof m.resume === 'function' ? await m.resume(CTX) : null;
@@ -184,7 +196,7 @@ async function rafraichirHub() {
       console.warn('[jeux] résumé', o.id, e);
       S.resumes.set(o.id, { etat: 'info', texte: 'Indisponible pour le moment', badge: '' });
     }
-  }));
+  })]);
   peindreHub();
 }
 
@@ -194,7 +206,9 @@ function peindreHub() {
   const faits = BONUS.filter((c) => S.resumes.get(c.onglet || c.id)?.etat === 'fait').length;
   const descr = new Map(CARTES.map((c) => [c.onglet || c.id, c.texte]));
   const gain = JEUX.reduce((t, o) => t + (Number(S.resumes.get(o.id)?.gain) || 0), 0);
-  const serie = Math.max(0, ...JEUX.map((o) => Number(S.resumes.get(o.id)?.serie) || 0));
+  // Flamme : la plus longue série en cours parmi tous les jeux du jour (hg_jeux_series), ou celle d'un résumé
+  const serie = Math.max(0, ...JEUX.map((o) => Number(S.resumes.get(o.id)?.serie) || 0),
+    ...Object.values(seriesJeux()?.jeux || {}).map((x) => Number(x?.n) || 0));
   for (const o of JEUX) {
     const r = S.resumes.get(o.id);
     const sub = document.querySelector(`[data-sub="${o.id}"]`);
@@ -453,7 +467,7 @@ function choisir(id, { focus = false, adresse = true, sub = undefined, section =
   }
   for (const p of panels.querySelectorAll('[role="tabpanel"]')) p.hidden = p.dataset.id !== o.id;
   majReprise();
-  if (o.catalogue && avant !== o.id) reprise.relire(); // à l'arrivée sur la vue de départ, jamais depuis un jeu ouvert directement
+  if (o.catalogue && avant !== o.id) { reprise.relire(); direct.relire(); } // à l'arrivée sur la vue de départ, jamais depuis un jeu ouvert directement
   if (adresse && lireAdresse().id !== o.id) history.replaceState(null, '', `#${o.id}`);
   document.title = `${o.catalogue ? 'Jeux' : `${o.titre} · Jeux`} · Humane Gang`;
   if (retour) retour.hidden = !!o.catalogue;

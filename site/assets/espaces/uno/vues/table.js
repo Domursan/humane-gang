@@ -18,20 +18,31 @@
  * un éventail compressé sur 2 rangées (un appui fait remonter la carte, un second la joue) et le chat s'ouvre en volet.
  * La mise en page est dans assets/espaces/uno/table.css ; ici, seulement le contenu et les actions.
  * Une seule action à la fois (anti double clic). Après chaque action : ctx.suivi.rafraichir().
- * Dépendances : core.js (esc, avatarHtml, toast), uno/api.js (uno, erreurTexte), uno/cartes.js (carteHtml, dosHtml, nomCarte, COULEURS),
- *   uno/effets.js, ./chat.js (creerChat), commun/tour-signal.js, uno.css (.uno-btn, .uno-roue, .uno-roue-voile, .uno-invite-tag).
+ * Place tenue par un robot (migration 211) : un joueur parti (Quitter, ou 3 tours manqués) garde sa place, le robot joue sa main en 3 s.
+ *   Son siège est grisé avec une pastille et l'étiquette « robot » ; un message sous la barre dit qui est parti. Quitter confirmé :
+ *   retour à l'accueil du Uno. À l'ouverture de la table, si le robot tient ma place, elle est reprise d'elle-même (hg_uno_reprendre) et
+ *   le message résume ce que le robot a joué ; si ma place passe au robot pendant que la table est ouverte (3 tours manqués),
+ *   un bouton « Reprendre ma place » attend un geste de ma part. Tant que le robot tient ma place, aucune carte n'est jouable.
+ * Spectateur (migration 214, etat.moi.spectateur) : mêmes sièges que les joueurs (nombre de cartes, places tenues par le robot),
+ *   aucune main ; message « Tu regardes en spectateur » sous la barre, bouton « Arrêter de regarder », chat des spectateurs seul.
+ *   Un joueur voit le compteur de spectateurs dans la barre et lit leur chat dans l'onglet « Spectateurs » (sans y écrire).
+ * Dépendances : core.js (esc, avatarHtml, toast), uno/api.js (uno, erreurTexte, estInvite), uno/cartes.js (carteHtml, dosHtml, nomCarte, COULEURS),
+ *   uno/effets.js, ./chat.js (creerChat), commun/tour-signal.js, commun/robot-place.js (ICONE_ROBOT), commun/spectateurs.js,
+ *   uno.css (.uno-btn, .uno-roue, .uno-roue-voile, .uno-invite-tag).
  * Exporte : creer(root, ctx) -> { maj(etat), conclure(etat), message(msg), detruire() }.
  *   conclure : dernier état avant l'écran de fin ; joue le dernier coup et rend une promesse tenue quand il est fini.
  *   ctx = { code, naviguer, moi, suivi } ; suivi = retour de suivrePartie (rafraichir, secondesRestantes, etat, decalage).
  */
 import { esc, avatarHtml, toast } from '../../../commun/core.js';
-import { uno, erreurTexte } from '../api.js';
+import { uno, erreurTexte, estInvite } from '../api.js';
 import { carteHtml, dosHtml, nomCarte, COULEURS, ICONE_PASSE } from '../cartes.js';
 import { creerEffets, mouvementReduit, son, rejouer, presse, boite } from '../effets.js';
 import { creerChat } from './chat.js';
 import { boutonReponses } from '../../../commun/core/admin-reponses.js';
 import { boutonQuitter, DEPART, ACTION_EN_COURS, confirmerDepart, tableLibre } from '../../../commun/quitter.js';
 import { creerSignalTour } from '../../../commun/tour-signal.js';
+import { ICONE_ROBOT } from '../../../commun/robot-place.js';
+import { compteurBarreHtml, messageSpectateurHtml, boutonArreterHtml, ongletsChatHtml, brancherOnglets } from '../../../commun/spectateurs.js';
 
 const RAYON = 16;
 const CIRCONFERENCE = 2 * Math.PI * RAYON;
@@ -65,6 +76,10 @@ const nbCartes = (n) => (n === 1 ? '1 carte' : `${n ?? 0} cartes`);
 /** Chrono « 0:18 », ou un tiret quand il n'y a pas de tour en cours. */
 const chrono = (s) => (s == null ? '–' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
 const ligneJournal = (j) => `<li class="uno-journal-ligne">${esc(j.texte)}</li>`;
+/** « Bruno », « Bruno et Chloé », « Bruno, Chloé et David » (texte déjà échappé). */
+const listeNoms = (noms) => (noms.length <= 1 ? noms.join('') : `${noms.slice(0, -1).join(', ')} et ${noms[noms.length - 1]}`);
+/** Bloc de message sous la barre (même forme que le message d'hôte des salles, base.css .hote-msg). HTML déjà échappé. */
+const blocRobot = (html, moi = false) => `<div class="hote-msg rb-msg${moi ? ' is-moi' : ''}" role="status">${ICONE_ROBOT}${html}</div>`;
 const lireTri = () => { try { return localStorage.getItem(CLE_TRI) === 'valeur' ? 'valeur' : 'couleur'; } catch { return 'couleur'; } };
 const garderTri = (t) => { try { localStorage.setItem(CLE_TRI, t); } catch { /* stockage indisponible */ } };
 
@@ -115,9 +130,12 @@ function squelette(idChat) {
       <span class="uno-chrono-texte" data-chrono>–</span>
       <span class="visually-hidden" aria-live="polite" data-chrono-annonce></span>
     </div>
+    <span class="sp-barre-zone" data-sp-barre></span>
     <button type="button" class="btn btn-ghost uno-bouton-chat" data-chat-bouton aria-controls="${idChat}" aria-expanded="true">${ICONE_CHAT}<span class="uno-chat-libelle">Masquer le chat</span></button>
     ${boutonQuitter('Quitter la table', { attrs: 'data-quitter' })}
   </header>
+  <div class="sp-zone" data-sp-zone hidden></div>
+  <div class="uno-robot-zone" data-robot hidden></div>
 
   <div class="uno-corps">
     <section class="uno-plateau" aria-label="Table de jeu">
@@ -211,15 +229,46 @@ export function creer(root, ctx) {
   const refs = {
     titre: q('[data-nom]'), nom: q('[data-nom]'), code: q('[data-code]'), sens: q('[data-sens]'), sensBloc: q('[data-sens-bloc]'),
     anneau: q('[data-anneau]'), chrono: q('[data-chrono]'), chronoAnnonce: q('[data-chrono-annonce]'),
-    chatBouton: q('[data-chat-bouton]'), chatFermer: q('[data-chat-fermer]'), quitter: q('[data-quitter]'),
+    chatBouton: q('[data-chat-bouton]'), chatFermer: q('[data-chat-fermer]'), quitter: q('[data-quitter]'), robot: q('[data-robot]'),
     sieges: q('[data-sieges]'), couleur: q('[data-couleur]'), cumul: q('[data-cumul]'), fleches: q('[data-fleches]'),
     pioche: q('[data-pioche]'), bulle: q('[data-bulle]'), piocheNb: q('[data-pioche-nb]'), dessus: q('[data-dessus]'),
     dernier: q('[data-dernier]'), annonce: q('[data-annonce]'), tapis: q('.uno-tapis'),
     moi: q('[data-moi]'), defi: q('[data-defi]'), main: q('[data-main]'), indice: q('[data-indice]'), aideTel: q('[data-aide-tel]'),
     passer: q('[data-passer]'), uno: q('[data-uno]'), contrer: q('[data-contrer]'),
     journal: q('[data-journal]'), annonceTour: q('[data-annonce-tour]'),
+    spBarre: q('[data-sp-barre]'), spZone: q('[data-sp-zone]'),
   };
-  const chat = creerChat(q('[data-chat]'), { code, moi: ctx.moi });
+  // Chats (migration 214), montés au premier état : un spectateur n'a que le chat des spectateurs ; un joueur a celui de la
+  // table et, si la partie admet des spectateurs, l'onglet « Spectateurs » en lecture (fermé au départ).
+  let chat = null;
+  let chatSpect = null;
+  let onglets = null;
+  const msgsAvant = [];
+  function monterChats(e) {
+    const zone = q('[data-chat]');
+    if (e.moi?.spectateur) {
+      el.classList.add('est-spectateur');
+      q('.uno-chat-titre').textContent = 'Chat des spectateurs';
+      q('.uno-chat').setAttribute('aria-label', 'Chat des spectateurs');
+      chat = creerChat(zone, { code, moi: ctx.moi, spect: true });
+      refs.quitter.insertAdjacentHTML('afterend', boutonArreterHtml());
+      q('[data-sp-arreter]').addEventListener('click', arreterDeRegarder);
+    } else if (e.spectateurs?.admis) {
+      const id = `uno-sp-${code}`;
+      const titre = q('.uno-chat-titre');
+      titre.textContent = 'Chats de la partie';
+      titre.classList.add('visually-hidden');
+      q('.uno-chat-tete').insertAdjacentHTML('afterbegin', ongletsChatHtml(id));
+      zone.innerHTML = `<div id="${esc(id)}-table" role="tabpanel" aria-labelledby="${esc(id)}-t"></div><div id="${esc(id)}-spect" role="tabpanel" aria-labelledby="${esc(id)}-s" hidden></div>`;
+      chat = creerChat(zone.firstElementChild, { code, moi: ctx.moi });
+      chatSpect = creerChat(zone.lastElementChild, { code, moi: ctx.moi, spect: true, lecture: true });
+      onglets = brancherOnglets(q('.uno-chat'), id);
+    } else {
+      chat = creerChat(zone, { code, moi: ctx.moi });
+    }
+    msgsAvant.splice(0).forEach((m) => { chat.ajouter(m); chatSpect?.ajouter(m); });
+  }
+  const estSpectateur = () => !!etat?.moi?.spectateur;
   const signal = creerSignalTour();
   const fx = creerEffets({ table: el, plateau: q('.uno-plateau'), pile: q('.uno-pile'), ovale: q('.uno-ovale'), onde: q('[data-onde]') });
 
@@ -243,6 +292,9 @@ export function creer(root, ctx) {
   let serie = 0;                     // numéro de la suite d'effets en cours
   const pauses = new Set();          // attentes de la suite d'effets en cours
   const annulations = new Set();     // promesses à tenir quand les effets sont annulés
+  let premierEtat = true;            // le premier état reçu : une table qu'on vient d'ouvrir
+  let repriseLancee = false;         // hg_uno_reprendre demandé (table ouverte avec ma place tenue par le robot)
+  let retour = null;                 // réponse de hg_uno_reprendre ({ tours, resume }) : message « Tu as repris ta place », jusqu'à mon prochain coup
 
   /* ---------- Lecture de l'état ---------- */
 
@@ -250,7 +302,9 @@ export function creer(root, ctx) {
   const moiJoueur = () => etat?.joueurs?.find((j) => j.user_id === monId()) || null;
   const joueurPar = (uid) => etat?.joueurs?.find((j) => j.user_id === uid) || null;
   const monTour = () => !!etat?.partie && etat.partie.statut === 'en_cours' && etat.partie.tour != null && etat.partie.tour === monId();
-  const peutPiocher = () => !!etat && monTour() && !etat.partie.a_pioche && !etat.partie.defi && !occupe;
+  /** Un robot tient ma place : rien n'est jouable tant que je ne l'ai pas reprise. */
+  const absent = () => !!etat?.moi?.parti;
+  const peutPiocher = () => !!etat && monTour() && !etat.partie.a_pioche && !etat.partie.defi && !occupe && !absent();
   const aucunCoup = () => !(etat?.main || []).some((c) => c.jouable);
   /** Millisecondes avant de pouvoir contrer (délai de grâce), 0 si c'est déjà possible. */
   const graceRestante = () => {
@@ -289,17 +343,27 @@ export function creer(root, ctx) {
     refs.nom.textContent = p.nom || 'Partie';
     refs.code.textContent = p.code || code;
     refs.quitter.hidden = !moiJoueur();
-    refs.quitter.disabled = !!moiJoueur()?.exclu;
+    refs.quitter.disabled = !!moiJoueur()?.exclu || absent();
     const antihoraire = p.sens === -1;
     refs.sens.textContent = antihoraire ? 'Sens antihoraire' : 'Sens horaire';
     refs.sensBloc.classList.toggle('inverse', antihoraire);
+    rendreSpectateurs();
+  }
+
+  /** Spectateurs (migration 214) : le spectateur lit son message sous la barre, un joueur voit le compteur dans la barre. */
+  function rendreSpectateurs() {
+    const nb = etat.spectateurs?.nb || 0;
+    refs.spZone.hidden = !estSpectateur();
+    ecritHtml(refs.spZone, estSpectateur() ? messageSpectateurHtml(nb) : '');
+    ecritHtml(refs.spBarre, !estSpectateur() && etat.spectateurs?.admis ? compteurBarreHtml(nb) : '');
+    onglets?.nb(nb);
   }
 
   /** Partie fixe d'un siège (le reste est peint par peindreSiege, sans recréer le nœud : ses animations survivent). */
   function siege(j, pos, n) {
     return `<li class="uno-siege${n > 6 ? ' uno-serre' : ''}"
         style="--x:${pos.x.toFixed(1)}%;--y:${pos.y.toFixed(1)}%" data-joueur="${esc(j.user_id)}">
-      <span class="uno-siege-photo">${avatar(j, n > 6 ? 44 : 56)}<span data-badge></span>
+      <span class="uno-siege-photo">${avatar(j, n > 6 ? 44 : 56)}<span data-badge></span><span data-pastille></span>
         <span class="uno-tampon" aria-hidden="true">${ICONE_BLOQUE}</span></span>
       <span class="uno-siege-infos">
         <span class="uno-siege-nom"><strong style="color:${couleurJoueur(j)}">${esc(j.pseudo || '?')}</strong>${j.invite ? ' <span class="uno-invite-tag">invité</span>' : ''}</span>
@@ -315,13 +379,16 @@ export function creer(root, ctx) {
     if (!li) return;
     const tour = etat.partie.tour === j.user_id && etat.partie.statut === 'en_cours';
     const nb = nbAffiche(j);
+    const robot = !!j.parti && !j.exclu;
     li.classList.toggle('est-tour', tour);
     li.classList.toggle('exclu', !!j.exclu);
+    li.classList.toggle('is-robot', robot);
     ecritHtml(li.querySelector('.uno-mini-dos'), '<span></span>'.repeat(Math.min(nb, 3)));
     ecritTexte(li.querySelector('[data-nb]'), nbCartes(nb));
     ecritHtml(li.querySelector('[data-badge]'), j.uno ? '<span class="uno-badge-siege">UNO</span>' : '');
-    ecritHtml(li.querySelector('.uno-etiquettes'), `${tour ? '<span class="uno-joue">Joue</span>' : ''}${j.exclu ? '<span class="uno-tag">exclu</span>' : ''}`);
-    ecritHtml(li.querySelector('[data-lecteur]'), `${tour ? '<span class="visually-hidden">, à son tour</span>' : ''}${j.uno ? '<span class="visually-hidden">, a dit UNO</span>' : ''}`);
+    ecritHtml(li.querySelector('[data-pastille]'), robot ? `<span class="rb-pastille" title="Robot">${ICONE_ROBOT}</span>` : '');
+    ecritHtml(li.querySelector('.uno-etiquettes'), `${tour ? '<span class="uno-joue">Joue</span>' : ''}${j.exclu ? '<span class="uno-tag">exclu</span>' : ''}${robot ? '<span class="uno-tag rb-tag">robot</span>' : ''}`);
+    ecritHtml(li.querySelector('[data-lecteur]'), `${robot ? '<span class="visually-hidden">, un robot joue à sa place</span>' : ''}${tour ? '<span class="visually-hidden">, à son tour</span>' : ''}${j.uno ? '<span class="visually-hidden">, a dit UNO</span>' : ''}`);
   }
 
   let cleSieges = '';
@@ -479,7 +546,7 @@ export function creer(root, ctx) {
 
   /** Ma main : les cartes sont suivies par identifiant, celles qui restent glissent à leur nouvelle place. */
   function rendreMain() {
-    const cartes = trier((etat.main || []).filter((c) => c.id !== poseLocale?.carte.id), tri);
+    const cartes = trier((etat.main || []).filter((c) => c.id !== poseLocale?.carte.id).map((c) => (absent() && c.jouable ? { ...c, jouable: false } : c)), tri);
     const ids = cartes.map((c) => c.id);
     for (const id of [...enVol]) if (!ids.includes(id)) enVol.delete(id);
     mainAvant = new Set(ids);
@@ -488,7 +555,9 @@ export function creer(root, ctx) {
     el.querySelectorAll('[data-tri]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tri === tri)));
     const zone = refs.main;
     if (etat.moi?.joue === false || !cartes.length) {
-      ecritHtml(zone, `<p class="uno-vide">${etat.moi?.joue === false ? 'Tu suis la partie sans y jouer.' : 'Aucune carte en main.'}</p>`);
+      const vide = estSpectateur() ? 'Tu regardes la partie. Les mains restent cachées : tu vois le nombre de cartes de chacun, comme les joueurs.'
+        : (etat.moi?.joue === false ? 'Tu suis la partie sans y jouer.' : 'Aucune carte en main.');
+      ecritHtml(zone, `<p class="uno-vide">${vide}</p>`);
       zone.style.height = '';
     } else {
       htmlPeint.delete(zone);
@@ -518,11 +587,11 @@ export function creer(root, ctx) {
   function rendreCommandes() {
     const p = etat.partie;
     const m = moiJoueur();
-    const passer = monTour() && p.a_pioche;
+    const passer = monTour() && p.a_pioche && !absent();
     refs.passer.hidden = !passer;
     refs.passer.disabled = occupe;
     refs.passer.classList.toggle('oblige', passer && aucunCoup());
-    const peutUno = !!m && m.nb_cartes === 1 && !m.uno && p.statut === 'en_cours';
+    const peutUno = !!m && m.nb_cartes === 1 && !m.uno && p.statut === 'en_cours' && !absent();
     refs.uno.disabled = !peutUno || occupe;
     refs.uno.classList.toggle('actif', peutUno && !occupe);
     refs.uno.title = peutUno ? 'Dis UNO avant qu\'on te contre !' : 'Disponible juste après avoir posé ton avant-dernière carte';
@@ -532,7 +601,7 @@ export function creer(root, ctx) {
   /** Bouton Contre-UNO : rouge et pulsant, avec le nom de la cible ; grisé pendant les 3 secondes de grâce. */
   function peindreContre() {
     const p = etat.partie;
-    const contrable = p.uno_attente && p.uno_attente !== monId() && etat.moi?.joue !== false ? joueurPar(p.uno_attente) : null;
+    const contrable = p.uno_attente && p.uno_attente !== monId() && etat.moi?.joue !== false && !absent() ? joueurPar(p.uno_attente) : null;
     refs.contrer.hidden = !contrable;
     if (!contrable) { refs.contrer.dataset.cible = ''; return; }
     const reste = graceRestante();
@@ -546,7 +615,7 @@ export function creer(root, ctx) {
 
   function rendreDefi() {
     const d = etat.partie.defi;
-    const pour = !!d && d.cible === monId();
+    const pour = !!d && d.cible === monId() && !absent();
     refs.defi.hidden = !pour;
     if (!pour) { ecritHtml(refs.defi, ''); return; }
     const poseur = joueurPar(d.poseur);
@@ -557,6 +626,29 @@ export function creer(root, ctx) {
         <button type="button" class="btn btn-primary" data-cle="defi-accepter" data-defi="non">Accepter (+4)</button>
       </div>`);
     refs.defi.querySelectorAll('button').forEach((b) => { b.disabled = occupe; });
+  }
+
+  /** Messages du robot : ma place (reprise d'elle-même, à reprendre, reprise) puis les places des autres tenues par un robot. */
+  function rendreRobot() {
+    const moi = moiJoueur();
+    let html = '';
+    if (moi?.parti && !moi.exclu) {
+      html += repriseLancee
+        ? blocRobot('<p>Tu reprends ta place…</p>', true)
+        : blocRobot('<p>Tu as manqué 3 tours : un robot joue ta main. Reprends ta place pour rejouer toi-même.</p>'
+          + '<button type="button" class="btn btn-sand uno-robot-reprendre" data-reprendre>Reprendre ma place</button>', true);
+    } else if (retour) {
+      html += blocRobot(`<p>Tu as repris ta place. ${retour.resume ? `Pendant ton absence, le robot a ${esc(retour.resume)}.` : 'Le robot n’a pas eu à jouer pour toi.'}</p>`, true);
+    }
+    const partis = autres().filter((j) => j.parti && !j.exclu);
+    if (partis.length) {
+      const noms = listeNoms(partis.map((j) => esc(j.pseudo || '?')));
+      html += blocRobot(partis.length > 1
+        ? `<p>${noms} sont partis : un robot joue leurs mains. Ils peuvent les reprendre tant que la partie n’est pas finie.</p>`
+        : `<p>${noms} est parti : un robot joue sa main. ${noms} peut la reprendre tant que la partie n’est pas finie.</p>`);
+    }
+    ecritHtml(refs.robot, html);
+    refs.robot.hidden = !html;
   }
 
   /** Le journal ne s'ajoute qu'en tête : seules les nouvelles lignes sont annoncées (aria-relevant=additions). */
@@ -1002,7 +1094,7 @@ export function creer(root, ctx) {
 
   function rendreTout(cle = null) {
     if (!etat?.partie) return;
-    rendreBarre(); rendreSieges(); rendreCentre(); rendreMoi(); rendreMain();
+    rendreBarre(); rendreRobot(); rendreSieges(); rendreCentre(); rendreMoi(); rendreMain();
     rendreCommandes(); rendreDefi(); rendreJournal();
     if (cle) restaurerFocus(cle);
   }
@@ -1094,6 +1186,7 @@ export function creer(root, ctx) {
   async function agir(fn, avant = null) {
     if (occupe || poseNonConfirmee()) return;
     occupe = true;
+    retour = null;                      // mon premier coup après mon retour : le résumé du robot a été lu
     const cle = focusCle();
     let pose = null;
     try {
@@ -1114,14 +1207,31 @@ export function creer(root, ctx) {
     }
   }
 
-  function choisirCouleur(carte, retour) {
+  /** Reprend ma place tenue par le robot ; le message de retour résume ce qu'il a joué. */
+  async function reprendre() {
+    if (repriseLancee) return;
+    repriseLancee = true;
+    rendreRobot();
+    try {
+      const r = await avecDelai(uno.reprendre(code));
+      retour = r || {};
+    } catch (e) {
+      toast(erreurTexte(e), 'error');
+    } finally {
+      repriseLancee = false;
+      await suivi.rafraichir();
+      if (etat?.partie) rendreTout();
+    }
+  }
+
+  function choisirCouleur(carte, bouton) {
     const roue = COULEURS_ROUE.map(([c, nom, classe]) =>
       `<button type="button" class="${classe}" data-couleur-choix="${c}"><span>${nom}</span></button>`).join('');
     const v = ouvrirVoile(`
       <h2 id="uno-voile-titre">Choisis la couleur</h2>
       <div class="uno-roue">${roue}<div class="centre">${carteHtml({ couleur: 'k', valeur: 'joker' }, { taille: 's' })}</div></div>
       <p>Touche un quart du cercle · <span data-roue-temps>${chrono(suivi.secondesRestantes())}</span> pour choisir</p>
-      <button type="button" class="btn btn-ghost" data-annuler>Annuler</button>`, retour, 'Choisis la couleur');
+      <button type="button" class="btn btn-ghost" data-annuler>Annuler</button>`, bouton, 'Choisis la couleur');
     son('UN6');
     if (!mouvementReduit()) {
       v.querySelector('.uno-roue').animate([{ transform: 'scale(.6) rotate(-90deg)', opacity: 0 }, { transform: 'scale(1) rotate(0)', opacity: 1 }],
@@ -1134,7 +1244,7 @@ export function creer(root, ctx) {
     }));
   }
 
-  function choisirCible(carte, retour) {
+  function choisirCible(carte, bouton) {
     const cibles = autres().filter((j) => !j.exclu);
     if (!cibles.length) { agir(() => uno.jouer(code, carte.id), () => lancerPose(carte)); return; }
     const liste = cibles.map((j) => `<li><button type="button" class="uno-cible" data-cible="${esc(j.user_id)}">
@@ -1144,7 +1254,7 @@ export function creer(root, ctx) {
     const v = ouvrirVoile(`
       <h2 id="uno-voile-titre">Avec qui échanger ta main ?</h2>
       <ul class="uno-cibles">${liste}</ul>
-      <button type="button" class="btn btn-ghost" data-annuler>Annuler</button>`, retour, 'Avec qui échanger ta main ?');
+      <button type="button" class="btn btn-ghost" data-annuler>Annuler</button>`, bouton, 'Avec qui échanger ta main ?');
     v.querySelectorAll('[data-cible]').forEach((b) => b.addEventListener('click', () => {
       const cible = b.dataset.cible;
       fermerVoile();
@@ -1165,9 +1275,27 @@ export function creer(root, ctx) {
   refs.pioche.addEventListener('click', () => { if (peutPiocher()) { presse(refs.pioche); agir(() => uno.piocher(code)); } });
   refs.passer.addEventListener('click', () => agir(() => uno.passer(code)));
   refs.quitter.addEventListener('click', async () => {
-    if (!await confirmerDepart(DEPART.uno)) return;
+    const invite = estInvite();
+    if (!await confirmerDepart(invite ? DEPART.unoInvite : DEPART.uno)) return;
     if (!await tableLibre(() => occupe || poseNonConfirmee())) { toast(ACTION_EN_COURS, 'error'); return; }
-    agir(() => uno.quitter(code));
+    let parti = false;
+    await agir(async () => { await uno.quitter(code); parti = true; });
+    // Un robot tient ma place : retour à l'accueil du Uno, d'où je reprendrai ma partie. L'invité a son propre écran de sortie.
+    if (parti && !invite) ctx.naviguer('');
+  });
+  /** Spectateur : « Arrêter de regarder » efface sa ligne (hg_spect_arreter) et revient à l'accueil du Uno. */
+  async function arreterDeRegarder() {
+    if (!await confirmerDepart(DEPART.spectateur)) return;
+    try {
+      await uno.arreterDeRegarder(etat?.partie?.id);
+    } catch (e) {
+      toast(erreurTexte(e), 'error');
+      return;
+    }
+    ctx.naviguer('');
+  }
+  refs.robot.addEventListener('click', (ev) => {
+    if (ev.target.closest('[data-reprendre]')) reprendre();
   });
   refs.uno.addEventListener('click', () => { presse(refs.uno); agir(() => uno.direUno(code)); });
   refs.contrer.addEventListener('click', () => {
@@ -1232,6 +1360,11 @@ export function creer(root, ctx) {
     const vivant = !!avant && lignes.length > 0 && !document.hidden && fraiche(lignes[lignes.length - 1], e);
     const plan = vivant ? planifier(avant, e, lignes) : [];
     etat = e;
+    if (!chat) monterChats(e);
+    // Table ouverte alors qu'un robot tient ma place : je la reprends sans attendre (venir ici est déjà un geste).
+    // Si ma place passe au robot pendant que la table est ouverte (3 tours manqués), rendreRobot propose un bouton.
+    if (premierEtat && e.moi?.parti && e.partie.statut === 'en_cours' && !moiJoueur()?.exclu) reprendre();
+    premierEtat = false;
     // Ma carte en vol reste en l'air tant que le serveur ne l'a pas prise, ou si cet état la confirme.
     const garderPose = !!poseLocale && (poseNonConfirmee() || plan.some((s) => s.t === 'pose' && s.carte.id === poseLocale.carte.id));
     if (plan.length) {
@@ -1248,6 +1381,7 @@ export function creer(root, ctx) {
     if (manche) pile.length = 0;  // nouvelle donne : la défausse repart de sa première carte
     rendreTout(focusCle());
     chat.maj(e);
+    chatSpect?.maj(e);
     annoncerTour();
     signal.maj(monTour());
     lastS = undefined;
@@ -1271,7 +1405,9 @@ export function creer(root, ctx) {
     },
     /** Message du chat (ancien ou nouveau). */
     message(msg) {
+      if (!chat) { msgsAvant.push(msg); return; }
       chat.ajouter(msg);
+      chatSpect?.ajouter(msg);
     },
     /** Arrête le chrono, les effets, et retire la table de la page. */
     detruire() {
@@ -1284,7 +1420,8 @@ export function creer(root, ctx) {
       arreterPlan();
       fx.detruire();
       fermerVoile(true);
-      chat.detruire();
+      chat?.detruire();
+      chatSpect?.detruire();
       el.remove();
     },
   };

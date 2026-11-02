@@ -98,7 +98,7 @@ const tradeItems = [{ trade_id: 'T-exp', copy_id: 1, side: 'from' }];
   const rang = entetes.indexOf('Cartes · carte de ma liste proposée');
   check(rang > 0 && entetes[rang - 1] === 'Cartes · souhaits et cadeaux', 'préférence : ligne après « Cartes · souhaits et cadeaux »');
   check(await c.isChecked('[data-key="carte_proposee.site"]'), 'préférence : activée par défaut');
-  check(await c.$$eval('.np-site', (l) => l.length === 1 && /Sur le site/.test(l[0].textContent)), 'préférence : une seule case « Sur le site »');
+  check(await c.$eval('[data-key="carte_proposee.site"]', (i) => { const l = i.closest('[role=row]')?.querySelectorAll('input') || []; return l.length === 1; }), 'préférence : une seule case « Sur le site »');
   check(await hscroll(c) === 0, 'préférence, 360 px : pas de défilement horizontal');
   await c.uncheck('[data-key="carte_proposee.site"]');
   await c.click('#np-form button[type=submit]');

@@ -63,3 +63,9 @@
 .amsg-reader-head .amsg-audit { margin: 0; padding: 0; border: 0; background: none; flex-basis: 100%; font-size: 13px; }
 #messages-root .ui-msg .amsg-del { align-self: flex-start; margin-top: 2px; }
 #messages-root .amsg-thread { margin-top: 12px; }
+
+/* Réactions (migration 204), en lecture seule : même rendu que les puces de la page Messages (messages.css, non chargée ici) */
+.amsg-reacts { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.amsg-reacts .msg-react { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0 10px; border: 2px solid var(--border-strong);
+  border-radius: 999px; background: var(--surface); color: var(--text); font-size: 14px; cursor: default; }
+.amsg-reacts .msg-react > span[aria-hidden] { font-family: var(--font-pixel); font-size: 12px; }

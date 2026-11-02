@@ -4,6 +4,10 @@
 // Utilisé par Gestion globale (admin-gestion.js), la fenêtre Give du plateau (quick.js) et le tiroir de don (cartes/bulk.js).
 // Écriture : RPC hg_cards_admin_give_panier (migration 196), tout ou rien, une ligne au journal et une ligne groupée au fil.
 // Les cartes limitées peuvent dépasser leur maximum : le panier et la confirmation l'annoncent, la base continue les numéros.
+// Option lot (enchères du Staff, migration 215 ; admin/cartes/auctions.js et la fenêtre « Nouvelle enchère » de quick.js) :
+// le même panier compose le lot d'une enchère. Pas d'étape Membres, « dans le lot » au lieu de « par membre », nom du lot à
+// la place du motif, récapitulatif « Le gagnant recevra… », pas de bouton Donner ; lire() rend le lot, confirmerLot() ouvre
+// la confirmation de l'enchère. Les cartes que bloque() refuse (unique déjà attribuée) sont grisées.
 // Exporte : creerGive, MAX_MEMBRES.
 // Dépendances : core.js (sb, esc, errMsg), cartes-ui.js (RARITIES, FAMILIES, rarityLabel, familyLabel, cardHtml),
 // admin/visual-pick.js (sélecteurs), admin/cartes/helpers.js (check, nf). Styles : admin-give.css, admin-quick.css.
@@ -38,19 +42,22 @@ function ensureCss() {
  * @param {object} o
  *   membres : [{ id, pseudo }] (actifs) ; cards : cartes actives (avec set_name) ; sets : séries ; restants : Map de chargerRestants ;
  *   types : boosters (null = lecture échouée, typesErreur dit pourquoi) ; idp : préfixe des identifiants HTML ;
- *   puces : membres en pastilles (fenêtre) plutôt qu'en liste à cocher ; choisis : identifiants déjà cochés ; envoi : affiche le bouton Donner.
- * @returns {{donner: () => Promise<object|null>, vider: () => void, bouton: HTMLElement|null}}
+ *   puces : membres en pastilles (fenêtre) plutôt qu'en liste à cocher ; choisis : identifiants déjà cochés ; envoi : affiche le bouton Donner ;
+ *   lot : lot d'une enchère (voir en tête) ; bloque : (carte) => motif qui interdit la carte, ou '' ; onChange : appelée à chaque changement.
+ * @returns {{donner: () => Promise<object|null>, vider: () => void, bouton: HTMLElement|null, lire: () => object, confirmerLot: (o: object) => Promise<object|null>}}
  */
-export function creerGive(host, { membres = [], cards = [], sets = [], restants = new Map(), types = null, typesErreur = '', idp = 'gv', puces = false, choisis = [], envoi = false } = {}) {
+export function creerGive(host, { membres = [], cards = [], sets = [], restants = new Map(), types = null, typesErreur = '', idp = 'gv', puces = false, choisis = [], envoi = false, lot = false, bloque = () => '', onChange = () => {} } = {}) {
   ensureCss();
   const cartesParId = new Map(cards.map((k) => [k.id, k]));
   const typesParId = new Map((types ?? []).map((t) => [t.id, t]));
   const seriesParId = new Map(sets.map((s) => [s.id, s]));
-  const S = { ids: new Set(choisis), all: false, q: '', paill: '', lignes: [], onglet: 'cartes', vue: choisis.length ? 'ajouter' : 'membres', motif: '', annonce: true };
+  const S = { ids: new Set(choisis), all: false, q: '', paill: '', lignes: [], onglet: 'cartes', vue: choisis.length || lot ? 'ajouter' : 'membres', motif: '', annonce: true };
   let picker = null, boost = null;
+  /** Libellé « par membre » du give, « dans le lot » d'une enchère. */
+  const PAR = lot ? 'dans le lot' : 'par membre';
 
   /* ---------- Calculs ---------- */
-  const nMembres = () => (S.all ? membres.length : S.ids.size);
+  const nMembres = () => (lot ? 1 : S.all ? membres.length : S.ids.size);
   const pseudo = (id) => membres.find((m) => m.id === id)?.pseudo ?? 'Ancien membre';
   const cartesLot = (l) => cards.filter((k) => (!l.set || k.set_id === l.set) && (!l.rar || k.rarity === l.rar) && (!l.fam || k.family === l.fam));
   const parMembre = (l) => (l.type === 'lot' ? cartesLot(l).length * l.qte : l.qte);
@@ -67,6 +74,15 @@ export function creerGive(host, { membres = [], cards = [], sets = [], restants 
   const erreur = () => {
     const n = nMembres(), t = totaux();
     const brut = String(S.paill).trim();
+    if (lot) {
+      if (brut && (!Number.isInteger(Number(brut)) || Number(brut) < 0)) return 'Indique un nombre entier de Paillettes.';
+      if (Number(brut) > MAX_PAILLETTES) return `Au plus ${nf(MAX_PAILLETTES)} Paillettes dans un lot.`;
+      if (!S.lignes.length) return paillettes() ? 'Un lot fait seulement de Paillettes n’est pas accepté : ajoute au moins une carte ou un booster.'
+        : 'Le lot est vide : ajoute des cartes, des boosters ou des Paillettes.';
+      if (t.ex > MAX_EXEMPLAIRES) return `Ce lot crée ${nf(t.ex)} exemplaires. Le maximum est de ${nf(MAX_EXEMPLAIRES)}.`;
+      if (!S.motif.trim()) return 'Donne un nom au lot : il est affiché aux membres.';
+      return '';
+    }
     if (!n) return 'Choisis au moins un membre, ou « Tout le gang ».';
     if (n > MAX_MEMBRES) return `Au plus ${MAX_MEMBRES} membres par don (${nf(n)} choisis).`;
     if (brut && (!Number.isInteger(Number(brut)) || Number(brut) < 0)) return 'Indique un nombre entier de Paillettes.';
@@ -79,6 +95,10 @@ export function creerGive(host, { membres = [], cards = [], sets = [], restants 
   const recap = () => {
     const e = erreur(); if (e) return e;
     const n = nMembres(), t = totaux(), p = paillettes();
+    if (lot) {
+      const gain = [p && `${nf(p)} ${paillSym()}`, t.ex && plur(t.ex, 'carte', 'cartes'), t.bo && plur(t.bo, 'booster', 'boosters')].filter(Boolean).join(', ');
+      return `Le gagnant recevra ${gain}. Rien n’est créé avant la fin de l’enchère.`;
+    }
     const quoi = [p && `${nf(p)} Paillettes`, t.ex && plur(t.ex, 'carte', 'cartes'), t.bo && plur(t.bo, 'booster', 'boosters')].filter(Boolean).join(', ');
     if (n === 1 && !S.all) return `${pseudo([...S.ids][0])} recevra ${quoi}.`;
     const qui = S.all ? `Tout le gang (${plur(n, 'membre', 'membres')}) recevra` : `${nf(n)} membres recevront`;
@@ -109,13 +129,13 @@ export function creerGive(host, { membres = [], cards = [], sets = [], restants 
 
   /** Une ligne du panier. */
   const ligneHtml = (l, i) => {
-    const qte = `<div class="gv-qte"><button type="button" data-gv-moins="${i}" aria-label="Diminuer">−</button><input type="number" min="1" step="1" inputmode="numeric" value="${l.qte}" data-gv-qte="${i}" aria-label="Quantité par membre"><button type="button" data-gv-plus="${i}" aria-label="Augmenter">+</button></div>`;
+    const qte = `<div class="gv-qte"><button type="button" data-gv-moins="${i}" aria-label="Diminuer">−</button><input type="number" min="1" step="1" inputmode="numeric" value="${l.qte}" data-gv-qte="${i}" aria-label="Quantité ${PAR}"><button type="button" data-gv-plus="${i}" aria-label="Augmenter">+</button></div>`;
     const brillance = (t) => `<label class="gv-br"><input type="checkbox" data-gv-br="${i}"${l.br ? ' checked' : ''}> <span>${t}</span></label>`;
     const retirer = (nom) => // nom déjà échappé
       `<button class="gv-x" type="button" data-gv-x="${i}" aria-label="Retirer ${nom}">×</button>`;
     if (l.type === 'booster') {
       const t = typesParId.get(l.id);
-      return `<li class="gv-l"><span class="gv-vis">${boosterVisualHtml(t)}</span><div class="gv-txt"><strong>Booster ${esc(t.name)}</strong><span>${plur(Number(t.size) || 5, 'carte', 'cartes')}${t.active === false ? ' · événement passé' : ''}</span></div>${retirer(esc(t.name))}<div class="gv-bas"><span class="small muted">par membre</span>${qte}</div></li>`;
+      return `<li class="gv-l"><span class="gv-vis">${boosterVisualHtml(t)}</span><div class="gv-txt"><strong>Booster ${esc(t.name)}</strong><span>${plur(Number(t.size) || 5, 'carte', 'cartes')}${t.active === false ? ' · événement passé' : ''}</span></div>${retirer(esc(t.name))}<div class="gv-bas"><span class="small muted">${PAR}</span>${qte}</div></li>`;
     }
     if (l.type === 'lot') {
       const c = cartesLot(l).length;
@@ -124,14 +144,14 @@ export function creerGive(host, { membres = [], cards = [], sets = [], restants 
     const k = cartesParId.get(l.id), w = depassement(l);
     return `<li class="gv-l"><span class="gv-vis">${cardHtml(k, { size: 'sm', shiny: l.br })}</span><div class="gv-txt"><strong>${esc(k.name)}</strong><span>${esc(rarityLabel(k.rarity))}${k.set_name ? ` · ${esc(k.set_name)}` : ''}</span></div>${retirer(esc(k.name))}<div class="gv-bas">${k.can_shiny ? brillance('Brillante') : '<span class="small muted">Sans version brillante</span>'}${qte}</div>${w ? `<p class="gv-warn">${esc(w)}</p>` : ''}</li>`;
   };
-  const panierHtml = () => `<div class="gv-panier-h"><h3>Le panier</h3>${S.lignes.length ? '<button class="gv-vider" type="button" data-gv-vider>Tout retirer</button>' : ''}</div>
+  const panierHtml = () => `<div class="gv-panier-h"><h3>${lot ? 'Le lot' : 'Le panier'}</h3>${S.lignes.length ? '<button class="gv-vider" type="button" data-gv-vider>Tout retirer</button>' : ''}</div>
     <ul class="gv-ls">
-      <li class="gv-l"><span class="gv-vis"><span class="gv-etoile" aria-hidden="true">${paillSym()}</span></span><div class="gv-txt"><strong>Paillettes</strong><span>par membre</span></div>
-        <div class="gv-qte"><input class="gv-p" id="${idp}-paill" type="number" min="0" step="1" inputmode="numeric" placeholder="0" value="${esc(S.paill)}" aria-label="Paillettes par membre"></div>
+      <li class="gv-l"><span class="gv-vis"><span class="gv-etoile" aria-hidden="true">${paillSym()}</span></span><div class="gv-txt"><strong>Paillettes</strong><span>${PAR}</span></div>
+        <div class="gv-qte"><input class="gv-p" id="${idp}-paill" type="number" min="0" step="1" inputmode="numeric" placeholder="0" value="${esc(S.paill)}" aria-label="Paillettes ${PAR}"></div>
         <div class="gv-rapides">${[100, 1000, 10000].map((v) => `<button type="button" data-gv-ajp="${v}">+${nf(v)}</button>`).join('')}</div></li>
       ${S.lignes.map(ligneHtml).join('')}
     </ul>
-    ${S.lignes.length ? '' : '<p class="gv-vide">Ajoute des cartes ou des boosters depuis le catalogue.</p>'}`;
+    ${S.lignes.length ? '' : `<p class="gv-vide">Ajoute des cartes ou des boosters depuis le catalogue.${lot ? ' Un lot fait seulement de Paillettes n’est pas accepté.' : ''}</p>`}`;
 
   /** Bouton « Ajouter toute la sélection » sous les filtres (une série, un type, ou leur combinaison). */
   const majLot = () => {
@@ -139,7 +159,12 @@ export function creerGive(host, { membres = [], cards = [], sets = [], restants 
     const { set, rar, fam } = picker.filtres();
     const l = { set: set || null, rar: rar || null, fam: fam || null };
     const c = set || rar || fam ? cartesLot(l).length : 0;
-    const html = c ? `<button class="btn btn-sand gv-lot" type="button" data-gv-lot>Ajouter : ${esc(titreLot(l))} (${plur(c, 'carte', 'cartes')})</button>` : '';
+    // Lot d'une enchère : une sélection qui contient une carte refusée (unique déjà attribuée) ne s'ajoute pas d'un bloc.
+    const refusees = lot && c ? cartesLot(l).filter((k) => bloque(k)).length : 0;
+    const html = refusees ? `<p class="gv-warn enp-note" role="status">${refusees === c
+      ? 'Les cartes uniques déjà attribuées ne se mettent pas aux enchères. Crée une nouvelle carte unique (Catalogue › Cartes) ou compose un lot avec d’autres cartes.'
+      : 'Cette sélection contient une carte unique déjà attribuée : ajoute ses autres cartes une à une.'}</p>`
+      : c ? `<button class="btn btn-sand gv-lot" type="button" data-gv-lot>Ajouter : ${esc(titreLot(l))} (${plur(c, 'carte', 'cartes')})</button>` : '';
     // Le bouton ne change pas quand on ajoute au panier : il garde le focus.
     if (zone.dataset.gvHtml !== html) { zone.innerHTML = html; zone.dataset.gvHtml = html; }
   };
@@ -159,6 +184,7 @@ export function creerGive(host, { membres = [], cards = [], sets = [], restants 
   };
   /** Redessine la liste des membres (les cases gardent la sélection). */
   const majMembres = () => {
+    if (lot) return;
     const needle = norm(S.q.trim());
     const liste = membres.filter((m) => !needle || norm(m.pseudo).includes(needle));
     const zone = host.querySelector('[data-gv-liste]');
@@ -189,7 +215,7 @@ export function creerGive(host, { membres = [], cards = [], sets = [], restants 
     const onglet = { cartes: `Cartes${nc ? ` · ${nc}` : ''}`, boosters: `Boosters${nb ? ` · ${nb}` : ''}` };
     host.querySelectorAll('[data-gv-onglet]').forEach((b) => { b.textContent = onglet[b.dataset.gvOnglet]; b.setAttribute('aria-pressed', String(b.dataset.gvOnglet === S.onglet)); });
     const nbPanier = S.lignes.length + (paillettes() ? 1 : 0);
-    const vues = { membres: `Membres · ${nf(nMembres())}`, ajouter: 'Ajouter', panier: `Panier · ${nf(nbPanier)}` };
+    const vues = { membres: `Membres · ${nf(nMembres())}`, ajouter: 'Ajouter', panier: `${lot ? 'Lot' : 'Panier'} · ${nf(nbPanier)}` };
     host.querySelectorAll('[data-gv-vue]').forEach((b) => { b.textContent = vues[b.dataset.gvVue]; b.setAttribute('aria-pressed', String(b.dataset.gvVue === S.vue)); });
     host.querySelector('.gv').dataset.vue = S.vue;
     host.querySelector('[data-gv-oc]').hidden = S.onglet !== 'cartes';
@@ -197,17 +223,18 @@ export function creerGive(host, { membres = [], cards = [], sets = [], restants 
     const s = host.querySelector('[data-gv-sum]');
     s.textContent = recap();
     s.classList.toggle('is-warn', !!erreur());
+    onChange();
   }
 
   host.innerHTML = `<div class="gv-zone">
-    <div class="qk-seg gv-vues" role="group" aria-label="Étapes du give">
-      <button type="button" data-gv-vue="membres"></button><button type="button" data-gv-vue="ajouter"></button><button type="button" data-gv-vue="panier"></button>
+    <div class="qk-seg gv-vues" role="group" aria-label="Étapes du ${lot ? 'lot' : 'give'}">
+      ${lot ? '' : '<button type="button" data-gv-vue="membres"></button>'}<button type="button" data-gv-vue="ajouter"></button><button type="button" data-gv-vue="panier"></button>
     </div>
     <div class="gv">
       <div class="gv-g">
-        <div class="gv-p-mbr">${membresHtml()}</div>
+        ${lot ? '' : `<div class="gv-p-mbr">${membresHtml()}</div>`}
         <div class="gv-p-ajout">
-          <p class="gv-t">Ajouter au panier</p>
+          <p class="gv-t">${lot ? 'Ajouter au lot' : 'Ajouter au panier'}</p>
           <div class="filters gest-tabs" role="group" aria-label="Catalogue"><button class="chip" type="button" data-gv-onglet="cartes"></button><button class="chip" type="button" data-gv-onglet="boosters"></button></div>
           <div class="gv-cat" data-gv-oc></div>
           <div class="gv-cat" data-gv-ob>${types ? '' : `<p class="form-error" role="alert">Impossible de charger les boosters : ${esc(typesErreur)}</p>`}</div>
@@ -216,8 +243,10 @@ export function creerGive(host, { membres = [], cards = [], sets = [], restants 
       <div class="gv-d">
         <div class="gv-panier" data-gv-panier></div>
         <div class="gv-opts">
-          <div class="field"><label for="${idp}-motif">Motif <span class="muted small">(facultatif, inscrit au journal)</span></label><input id="${idp}-motif" maxlength="200" autocomplete="off" placeholder="Ex. récompense de quête"></div>
-          <label class="switch acd-switch"><input type="checkbox" id="${idp}-ann" checked><span class="switch-ui" aria-hidden="true"></span><span>Annoncer dans le fil (une seule ligne groupée)</span></label>
+          ${lot ? `<div class="field"><label for="${idp}-motif">Nom du lot <span class="muted small">(affiché aux membres)</span></label><input id="${idp}-motif" maxlength="60" autocomplete="off" placeholder="Ex. Le coffre d’automne"></div>
+          <label class="switch acd-switch"><input type="checkbox" id="${idp}-ann" checked><span class="switch-ui" aria-hidden="true"></span><span>Annoncer l’ouverture et le gagnant dans le fil</span></label>`
+            : `<div class="field"><label for="${idp}-motif">Motif <span class="muted small">(facultatif, inscrit au journal)</span></label><input id="${idp}-motif" maxlength="200" autocomplete="off" placeholder="Ex. récompense de quête"></div>
+          <label class="switch acd-switch"><input type="checkbox" id="${idp}-ann" checked><span class="switch-ui" aria-hidden="true"></span><span>Annoncer dans le fil (une seule ligne groupée)</span></label>`}
         </div>
         <p class="gv-sum" data-gv-sum aria-live="polite"></p>
         <p class="form-error gv-err" role="alert" hidden></p>
@@ -227,7 +256,7 @@ export function creerGive(host, { membres = [], cards = [], sets = [], restants 
   </div>`;
 
   picker = cardPicker(host.querySelector('[data-gv-oc]'), {
-    cards, sets, restants, idp: `${idp}-c`, types: true,
+    cards, sets, restants, bloque, idp: `${idp}-c`, types: true,
     ajout: (k) => ajouter({ type: 'carte', id: k.id }), quantite: quantiteCarte, onFiltre: () => majLot(),
   });
   if (types) boost = boosterPicker(host.querySelector('[data-gv-ob]'), { types, idp: `${idp}-b`, ajout: (t) => ajouter({ type: 'booster', id: t.id }), quantite: quantiteBooster });
@@ -259,7 +288,7 @@ export function creerGive(host, { membres = [], cards = [], sets = [], restants 
     const t = e.target;
     if (t.id === `${idp}-paill`) { S.paill = t.value; maj({ panier: false }); } else if (t.dataset.gvQte) {
       S.lignes[+t.dataset.gvQte].qte = Math.max(1, parseInt(t.value, 10) || 1); maj({ panier: false });
-    } else if (t.id === `${idp}-q`) { S.q = t.value; majMembres(); } else if (t.id === `${idp}-motif`) S.motif = t.value;
+    } else if (t.id === `${idp}-q`) { S.q = t.value; majMembres(); } else if (t.id === `${idp}-motif`) { S.motif = t.value; if (lot) maj({ panier: false }); }
   });
   host.addEventListener('change', (e) => {
     const t = e.target;
@@ -291,42 +320,62 @@ export function creerGive(host, { membres = [], cards = [], sets = [], restants 
     p_announce: S.annonce,
     p_note: S.motif.trim() || null,
   });
-  /** Contenu de la confirmation : visuels, détail par membre, alertes, destinataires. */
-  const confirmHtml = () => {
-    const visuel = (l) => {
-      if (l.type === 'booster') return boosterVisualHtml(typesParId.get(l.id));
-      if (l.type === 'lot') return `<span class="gv-pile">${nf(cartesLot(l).length)}</span>`;
-      return cardHtml(cartesParId.get(l.id), { size: 'sm', shiny: l.br });
-    };
-    const texte = (l) => {
-      if (l.type === 'booster') return `${plur(l.qte, 'booster', 'boosters')} ${typesParId.get(l.id).name}`;
-      if (l.type === 'lot') return `${titreLot(l)} : ${plur(cartesLot(l).length, 'carte', 'cartes')}${l.qte > 1 ? `, ${l.qte} exemplaires de chaque` : ''}${l.br ? ', brillantes' : ''}`;
-      return `${plur(l.qte, 'exemplaire', 'exemplaires')} de « ${cartesParId.get(l.id).name} »${l.br ? ' (brillante)' : ''}`;
-    };
+  /** Visuel d'une ligne, pour la bande de la confirmation. */
+  const visuel = (l) => {
+    if (l.type === 'booster') return boosterVisualHtml(typesParId.get(l.id));
+    if (l.type === 'lot') return `<span class="gv-pile">${nf(cartesLot(l).length)}</span>`;
+    return cardHtml(cartesParId.get(l.id), { size: 'sm', shiny: l.br });
+  };
+  /** Ligne en texte, pour la liste « reçoit ». */
+  const texte = (l) => {
+    if (l.type === 'booster') return `${plur(l.qte, 'booster', 'boosters')} ${typesParId.get(l.id).name}`;
+    if (l.type === 'lot') return `${titreLot(l)} : ${plur(cartesLot(l).length, 'carte', 'cartes')}${l.qte > 1 ? `, ${l.qte} exemplaires de chaque` : ''}${l.br ? ', brillantes' : ''}`;
+    return `${plur(l.qte, 'exemplaire', 'exemplaires')} de « ${cartesParId.get(l.id).name} »${l.br ? ' (brillante)' : ''}`;
+  };
+  /** Bande de visuels, puis liste « reçoit » et alertes de dépassement : communes au don et à l'enchère. */
+  const bandeHtml = () => {
+    const reste = S.lignes.length - 8;
+    return `<div class="gv-strip">${S.lignes.slice(0, 8).map((l) => `<span class="gv-vis">${visuel(l)}</span>`).join('')}${reste > 0 ? `<span class="gv-plus">+${nf(reste)}</span>` : ''}</div>`;
+  };
+  const recuHtml = (titre) => {
     const p = paillettes();
     const lignes = [...(p ? [`${nf(p)} Paillettes`] : []), ...S.lignes.map(texte)];
     const alertes = S.lignes.filter(depassement).map((l) => `${cartesParId.get(l.id).name}. ${depassement(l)}`);
-    const reste = S.lignes.length - 8;
+    return `<div><p class="qk-label">${esc(titre)}</p><ul class="gv-recu">${lignes.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>
+      ${alertes.map((w) => `<p class="gv-warn">${esc(w)}</p>`).join('')}`;
+  };
+  /** Contenu de la confirmation : visuels, détail par membre, alertes, destinataires. */
+  const confirmHtml = () => {
     const qui = S.all ? `Tout le gang (${plur(membres.length, 'membre', 'membres')}).` : `${[...S.ids].map(pseudo).sort((a, b) => a.localeCompare(b, 'fr')).join(', ')}.`;
-    return `<div class="gv-strip">${S.lignes.slice(0, 8).map((l) => `<span class="gv-vis">${visuel(l)}</span>`).join('')}${reste > 0 ? `<span class="gv-plus">+${nf(reste)}</span>` : ''}</div>
+    return `${bandeHtml()}
       <p class="qk-sum qk-sum-strong" data-gv-confirm-sum>${esc(recap())}</p>
-      <div><p class="qk-label">Chaque membre reçoit</p><ul class="gv-recu">${lignes.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>
-      ${alertes.map((w) => `<p class="gv-warn">${esc(w)}</p>`).join('')}
+      ${recuHtml('Chaque membre reçoit')}
       ${S.lignes.some((l) => l.type === 'lot') ? '<p class="small muted">Un lot prend les cartes actives au moment du don. Ses cartes limitées peuvent dépasser leur maximum. Une série complétée rapporte le bonus habituel.</p>' : ''}
       <p class="small muted" data-gv-confirm-qui>Destinataires : ${esc(qui)}</p>
       <p class="small muted">Tout passe ou rien ne passe. Le don est définitif. Aucun message privé n’est envoyé.</p>
       <p class="qk-err" role="alert" hidden></p>`;
   };
-  /** Ouvre la confirmation ; la promesse donne la réponse de la RPC, ou null si la personne revient en arrière. */
-  const confirmer = () => new Promise((fin) => {
+  /** Contenu de la confirmation d'une enchère : visuels, phrase (dates, mise), ce que reçoit le gagnant. */
+  const confirmLotHtml = (phrase) => `${bandeHtml()}
+      <p class="qk-sum qk-sum-strong" data-gv-confirm-sum>${esc(phrase)}</p>
+      ${recuHtml('Le gagnant reçoit')}
+      <p class="small muted">Rien n’est créé maintenant : le lot est donné au gagnant à la fin (cartes dans sa collection, boosters dans son stock, Paillettes sur son solde). Sans offre, rien n’est donné.</p>
+      <p class="small muted">Les Paillettes de l’offre gagnante sont détruites. Inscrit au journal.</p>
+      <p class="qk-err" role="alert" hidden></p>`;
+  /**
+   * Ouvre la confirmation ; la promesse donne la réponse de la RPC, ou null si la personne revient en arrière.
+   * Sans argument : le don (hg_cards_admin_give_panier). Pour une enchère : { titre, sous, couleur, bouton, corps, envoi }.
+   */
+  const confirmer = ({ titre = 'Confirmer le don', sous = 'Vérifie avant de donner', couleur = '#159946', bouton = 'Confirmer le don',
+    corps = null, envoi = () => sb.rpc('hg_cards_admin_give_panier', args()) } = {}) => new Promise((fin) => {
     const d = document.createElement('dialog');
     d.className = 'qk-dlg gv-confirm';
-    d.style.setProperty('--qk-c', '#159946');
+    d.style.setProperty('--qk-c', couleur);
     d.setAttribute('aria-labelledby', `${idp}-ct`);
     let res = null;
-    d.innerHTML = `<div class="qk-form"><header class="qk-head"><div><h2 class="qk-title" id="${idp}-ct">Confirmer le don</h2><p class="qk-sub">Vérifie avant de donner</p></div><button class="qk-x" type="button" data-gv-retour aria-label="Fermer">×</button></header>
-      <div class="qk-body">${confirmHtml()}</div>
-      <footer class="qk-foot"><div class="qk-btns"><button class="btn btn-ghost" type="button" data-gv-retour>Retour</button><button class="btn btn-primary" type="button" data-gv-ok>Confirmer le don</button></div></footer></div>`;
+    d.innerHTML = `<div class="qk-form"><header class="qk-head"><div><h2 class="qk-title" id="${idp}-ct">${esc(titre)}</h2><p class="qk-sub">${esc(sous)}</p></div><button class="qk-x" type="button" data-gv-retour aria-label="Fermer">×</button></header>
+      <div class="qk-body">${corps ?? confirmHtml()}</div>
+      <footer class="qk-foot"><div class="qk-btns"><button class="btn btn-ghost" type="button" data-gv-retour>Retour</button><button class="btn btn-primary" type="button" data-gv-ok>${esc(bouton)}</button></div></footer></div>`;
     document.body.append(d);
     d.addEventListener('close', () => { d.remove(); fin(res); });
     d.addEventListener('click', async (e) => {
@@ -336,7 +385,7 @@ export function creerGive(host, { membres = [], cards = [], sets = [], restants 
       const err = d.querySelector('.qk-err');
       err.hidden = true; ok.disabled = true; ok.setAttribute('aria-busy', 'true');
       try {
-        res = check(await sb.rpc('hg_cards_admin_give_panier', args()));
+        res = check(await envoi());
         d.close();
       } catch (ex) {
         err.textContent = errMsg(ex); err.hidden = false;
@@ -364,8 +413,30 @@ export function creerGive(host, { membres = [], cards = [], sets = [], restants 
     majMembres(); maj();
   }
 
+  /** Lot d'une enchère : erreur en cours, Paillettes, nom, annonce, lignes (format du give) et aperçu (enchere-lot.js). */
+  function lire() {
+    const t = totaux();
+    return {
+      erreur: erreur(), paillettes: paillettes(), nom: S.motif.trim(), annonce: S.annonce, lignes: args().p_lignes,
+      apercu: { nom: S.motif.trim(), paillettes: paillettes(), cartes: t.ex, boosters: t.bo, lignes: S.lignes.map((l) => {
+        if (l.type === 'booster') { const b = typesParId.get(l.id); return { type: 'booster', titre: b.name, qte: l.qte, type_booster: b }; }
+        if (l.type === 'lot') return { type: 'lot', titre: titreLot(l), qte: l.qte, shiny: l.br, n: cartesLot(l).length };
+        const k = cartesParId.get(l.id), br = !!(l.br && k.can_shiny);
+        return { type: 'carte', titre: `${k.name}${br ? ' brillante' : ''}`, qte: l.qte, shiny: br, card: k };
+      }) },
+    };
+  }
+  /** Affiche une erreur sous le récapitulatif ; en colonne étroite, amène à l'étape Lot. */
+  function signaler(m) { if (m) { S.vue = 'panier'; maj({ panier: false }); } montrerErreur(m); }
+  /**
+   * Confirmation d'une enchère, dans la même fenêtre que le don. o : { phrase, envoi: () => promesse de la RPC }.
+   * @returns {Promise<object|null>} réponse de la RPC, ou null (retour)
+   */
+  const confirmerLot = ({ phrase, envoi: rpc }) => confirmer({ titre: 'Confirmer l’enchère', sous: 'Vérifie avant de planifier', couleur: '#6F8FE8',
+    bouton: 'Planifier l’enchère', corps: confirmLotHtml(phrase), envoi: rpc });
+
   majMembres();
   maj();
   majLot();
-  return { donner, vider, bouton: host.querySelector('[data-gv-go]') };
+  return { donner, vider, bouton: host.querySelector('[data-gv-go]'), lire, signaler, confirmerLot };
 }

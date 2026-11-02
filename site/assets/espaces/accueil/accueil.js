@@ -1,6 +1,7 @@
 // ===== Accueil : le QG du Humane Gang (/pages/compte/accueil.html) =====
 // Page d'accueil. Visiteur : présentation et connexion. Membre : tuiles (Secret Santa, IRL, Historique),
-// fil d'activité, anniversaires à venir (30 jours), défi du gang, bandeaux (récap, événement en cours) et boîte à idées.
+// fil d'activité (pastilles et « Voir plus », idée 74), anniversaires à venir (30 jours, carte commune : carte-anniv.js),
+// défi du gang, bandeaux (récap, événement en cours) et boîte à idées.
 // Chaque tuile et chaque bloc se charge séparément : une erreur n'empêche pas les autres.
 // Dépendances : core.js (sb, initPage, canAccess, textes réglables), icons.js, dyn-events.js (événement en cours, chargé à la demande),
 // accueil-ce-jour.js (tuile « Ce jour-là »).
@@ -593,37 +594,149 @@ async function loadDynBanner() {
 }
 
 /* ---------- Fil d'activité ---------- */
-/** Fil d'activité : les 10 dernières entrées de hg_activity, avec l'avatar de l'auteur quand il existe. */
-async function loadFeed() {
-  const ul = $('#feed');
-  try {
-    const [{ data, error }, all] = await Promise.all([
-      sb.from('hg_activity').select('*').order('created_at', { ascending: false }).limit(10), // ref (migration 090) : lien vers un sondage
-      members().catch(() => []),
-    ]);
-    if (error) throw error;
-    if (!data?.length) {
-      ul.innerHTML = `<li class="empty">Rien pour l'instant. Le fil se remplira au fil des inscriptions, sorties et souvenirs.</li>`;
-      import('./polls.js').then((m) => m.mountPolls({ feed: null, head: $('#feed-tools'), reload: loadFeed })).catch(() => {});
-      return;
-    }
-    const byId = new Map(all.map((m) => [m.id, m]));
-    const logo = logoAttrs();
-    ul.innerHTML = data.map((a) => {
-      const m = a.user_id ? byId.get(a.user_id) : null;
-      const av = m ? avatarHtml(m, 36) : `<span class="avatar feed-sys" aria-hidden="true" style="width:36px;height:36px"><img src="${esc(logo.src)}"${logo.srcset ? ` srcset="${esc(logo.srcset)}" sizes="36px"` : ''} alt="" data-on-error="remove"></span>`;
-      return `<li class="feed-item" data-kind="${esc(a.kind)}"${a.ref ? ` data-ref="${esc(a.ref)}"` : ''}>
+/* Pastilles du fil (idée 74) : [clé, libellé, types d'entrée (hg_activity.kind)]. « Tout » ne filtre rien. La pastille choisie
+   n'est pas retenue d'une visite à l'autre. */
+const FEED_FILTRES = [
+  ['tout', 'Tout', null],
+  ['gang', 'Le gang', ['join', 'merci', 'sondage', 'sondage_resultat', 'birthday', 'soiree', 'ss_draw', 'parrainage']],
+  ['cartes', 'Cartes', ['cartes']],
+  ['badges', 'Badges et secrets', ['badge', 'secret', 'saison']],
+];
+/** Entrées ajoutées par « Voir plus », et plafond du fil sur l'accueil (au-delà : page Historique). */
+const FEED_PAS = 10, FEED_MAX = 100;
+/** État du fil : pastille choisie, lignes affichées, suite disponible, annuaire. */
+const FEED = { filtre: 'tout', rows: [], suite: false, byId: new Map() };
+
+/**
+ * Lit une tranche du fil pour la pastille choisie : une ligne de plus que demandé, pour savoir s'il reste une suite.
+ * @param {number} from première ligne (0 = la plus récente)
+ * @param {number} n nombre de lignes voulues
+ * @returns {Promise<{rows: Array<object>, suite: boolean}>}
+ */
+async function feedTranche(from, n) {
+  const kinds = FEED_FILTRES.find((f) => f[0] === FEED.filtre)[2];
+  let q = sb.from('hg_activity').select('*'); // ref (migration 090) : lien vers un sondage
+  if (kinds) q = q.in('kind', kinds);
+  const { data, error } = await q.order('created_at', { ascending: false }).range(from, from + n);
+  if (error) throw error;
+  const rows = data || [];
+  return { rows: rows.slice(0, n), suite: rows.length > n && from + n < FEED_MAX };
+}
+
+/** Ligne du fil (avatar de l'auteur, ou logo pour une entrée du site). */
+function feedItemHtml(a) {
+  const m = a.user_id ? FEED.byId.get(a.user_id) : null;
+  const logo = logoAttrs();
+  const av = m ? avatarHtml(m, 36) : `<span class="avatar feed-sys" aria-hidden="true" style="width:36px;height:36px"><img src="${esc(logo.src)}"${logo.srcset ? ` srcset="${esc(logo.srcset)}" sizes="36px"` : ''} alt="" data-on-error="remove"></span>`;
+  return `<li class="feed-item" data-kind="${esc(a.kind)}"${a.ref ? ` data-ref="${esc(a.ref)}"` : ''}>
         ${av}
         <div class="feed-text">
           <p>${feedText(a, m)}</p>
           <time class="small muted" datetime="${esc(a.created_at)}" title="${esc(fmtDateTime(a.created_at))}">${esc(ago(a.created_at))}</time>
         </div>
       </li>`;
-    }).join('');
-    // Sondages libres (migration 090) : cartes de vote à la place des lignes « sondage », boutons de l'en-tête.
-    import('./polls.js').then((m) => m.mountPolls({ feed: ul, head: $('#feed-tools'), rows: data, members: byId, reload: loadFeed }))
-      .catch((e) => console.warn('[sondages]', e));
-  } catch (e) { ul.innerHTML = `<li>${failBox(e)}</li>`; }
+}
+
+/** Pied du fil : « Voir plus », ou la fin du fil (avec le renvoi à la page Historique au plafond). */
+function feedPiedHtml() {
+  if (FEED.suite) return '<button type="button" class="btn btn-ghost btn-sm feed-plus">Voir plus</button>';
+  if (FEED.rows.length >= FEED_MAX) {
+    return `<p class="small muted">Tout l’historique est sur la page ${canAccess('historique') ? '<a href="/pages/irl/historique.html">Historique</a>' : 'Historique'}.</p>`;
+  }
+  if (FEED.rows.length > FEED_PAS) {
+    const lib = FEED_FILTRES.find((f) => f[0] === FEED.filtre)[1];
+    return `<p class="small muted">C’est tout${FEED.filtre === 'tout' ? '' : ` pour « ${esc(lib)} »`}.</p>`;
+  }
+  return '';
+}
+
+/** Dessine les lignes et le pied du fil, puis rebranche les sondages sur les lignes affichées. */
+function feedDessine() {
+  const ul = $('#feed');
+  const box = ul.closest('.home-feed');
+  if (!FEED.rows.length) {
+    const lib = FEED_FILTRES.find((f) => f[0] === FEED.filtre)[1];
+    ul.innerHTML = FEED.filtre === 'tout'
+      ? `<li class="empty">Rien pour l'instant. Le fil se remplira au fil des inscriptions, sorties et souvenirs.</li>`
+      : `<li class="empty">Rien dans « ${esc(lib)} » pour l’instant.</li>`;
+  } else ul.innerHTML = FEED.rows.map(feedItemHtml).join('');
+  let pied = box.querySelector('.feed-pied');
+  const html = feedPiedHtml();
+  if (!html) pied?.remove();
+  else {
+    if (!pied) { pied = document.createElement('div'); pied.className = 'feed-pied'; ul.after(pied); }
+    pied.innerHTML = html;
+  }
+  // Sondages libres (migration 090) : cartes de vote à la place des lignes « sondage », boutons de l'en-tête.
+  import('./polls.js').then((m) => m.mountPolls({ feed: FEED.rows.length ? ul : null, head: $('#feed-tools'), rows: FEED.rows, members: FEED.byId, reload: loadFeed }))
+    .catch((e) => console.warn('[sondages]', e));
+}
+
+/** Pastilles au-dessus du fil (posées une fois) : un clic recharge le fil depuis le début pour la pastille choisie. */
+function feedPastilles() {
+  const box = $('#feed').closest('.home-feed');
+  if (box.querySelector('.feed-filtres')) return;
+  const bar = document.createElement('div');
+  bar.className = 'he-chips feed-filtres';
+  bar.setAttribute('role', 'group');
+  bar.setAttribute('aria-label', 'Afficher dans le fil');
+  bar.innerHTML = FEED_FILTRES.map(([k, l]) => `<button type="button" class="he-chip" data-feed-filtre="${k}" aria-pressed="${k === FEED.filtre}">${esc(l)}</button>`).join('');
+  box.querySelector('.feed-head').after(bar);
+  bar.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-feed-filtre]');
+    if (!b || b.dataset.feedFiltre === FEED.filtre) return;
+    FEED.filtre = b.dataset.feedFiltre;
+    bar.querySelectorAll('[data-feed-filtre]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    FEED.rows = [];
+    box.querySelector('.feed-pied')?.remove();
+    $('#feed').innerHTML = '<li class="skeleton-row"></li><li class="skeleton-row"></li><li class="skeleton-row"></li>';
+    loadFeed();
+  });
+  // « Voir plus » (et « Réessayer ») : 10 entrées de plus sous les autres, sans recharger la page.
+  box.addEventListener('click', async (e) => {
+    const b = e.target.closest('.feed-plus');
+    if (!b) return;
+    const pied = b.closest('.feed-pied');
+    const filtre = FEED.filtre;
+    b.disabled = true; b.setAttribute('aria-busy', 'true'); b.textContent = 'Chargement…';
+    $('#feed').insertAdjacentHTML('beforeend', '<li class="skeleton-row"></li><li class="skeleton-row"></li><li class="skeleton-row"></li>');
+    try {
+      const { rows, suite } = await feedTranche(FEED.rows.length, FEED_PAS);
+      if (filtre !== FEED.filtre) return; // pastille changée entre-temps
+      const avant = FEED.rows.length;
+      FEED.rows = [...FEED.rows, ...rows];
+      FEED.suite = suite;
+      feedDessine();
+      // Focus sur la première entrée ajoutée (lecteur d'écran : la lecture reprend là)
+      const li = $('#feed').children[avant];
+      if (li) { li.tabIndex = -1; li.focus({ preventScroll: true }); }
+    } catch (err) {
+      console.warn('[fil]', err?.message || err);
+      $('#feed').querySelectorAll('.skeleton-row').forEach((li) => li.remove());
+      pied.innerHTML = '<p class="small muted" role="alert">La suite du fil n’a pas pu être chargée.</p><button type="button" class="btn btn-ghost btn-sm feed-plus">Réessayer</button>';
+    }
+  });
+}
+
+/**
+ * Fil d'activité (hg_activity) : les 10 dernières entrées de la pastille choisie, avec l'avatar de l'auteur quand il existe.
+ * Rappelé par les sondages (vote, création) : recharge autant de lignes qu'il y en a déjà d'affichées.
+ */
+async function loadFeed() {
+  const ul = $('#feed');
+  feedPastilles();
+  const filtre = FEED.filtre;
+  try {
+    const [tranche, all] = await Promise.all([
+      feedTranche(0, Math.min(FEED_MAX, Math.max(FEED_PAS, FEED.rows.length))),
+      members().catch(() => []),
+    ]);
+    if (filtre !== FEED.filtre) return; // pastille changée entre-temps : le chargement suivant dessine
+    FEED.byId = new Map(all.map((m) => [m.id, m]));
+    FEED.rows = tranche.rows;
+    FEED.suite = tranche.suite;
+    feedDessine();
+  } catch (e) { ul.innerHTML = `<li>${failBox(e)}</li>`; ul.closest('.home-feed').querySelector('.feed-pied')?.remove(); }
 }
 
 /* ---------- Anniversaires à venir ---------- */
@@ -640,12 +753,22 @@ async function loadBirthdays() {
       return;
     }
     ul.innerHTML = list.map((m) => `
-      <li class="bday${m.dans === 0 ? ' is-today' : ''}">
+      <li class="bday${m.dans === 0 ? ' is-today' : ''}" data-membre="${esc(m.id)}">
         ${avatarHtml(m, 36)}
         <span class="bday-name">${memberLink(m)}</span>
         ${m.dans === 0 ? '<span class="pill pill-current">Aujourd\'hui</span>' : `<span class="bday-date">${m.quand.getDate()} ${MOIS_COURTS[m.quand.getMonth()]}</span>`}
       </li>`).join('');
   } catch (e) { ul.innerHTML = `<li>${failBox(e)}</li>`; }
+}
+
+/* ---------- Carte d'anniversaire commune (idée 52, migration 205) ---------- */
+/** Carte à signer sous les lignes des membres fêtés (J−3 à J) et bandeau du jour J : module chargé à part (carte-anniv.js). */
+async function loadCartesAnniv() {
+  try {
+    const all = await members().catch(() => []);
+    const { mountCartesAnniv } = await import('./carte-anniv.js');
+    await mountCartesAnniv({ ul: $('#bdays'), me, membres: new Map(all.map((m) => [m.id, m])) });
+  } catch (e) { console.warn('[carte d’anniversaire]', e?.message || e); }
 }
 
 /* ---------- Défi du gang : objectif collectif (progression calculée côté serveur) ---------- */
@@ -780,7 +903,7 @@ if (!me) {
   await Promise.allSettled([
     tileOn('tile-ss') ? loadSecretSanta() : null, tileOn('tile-irl') ? loadIrl() : null, tileOn('tile-hist') ? loadHistory() : null,
     loadTheme(), tileOn('tile-admin') ? loadAdminTile() : null,
-    $('#feed') ? loadFeed() : null, $('#bdays') ? loadBirthdays() : null, loadDynBanner(), $('#defi') ? loadChallenges() : null, loadDailyQuestion(), loadSeasonal(),
+    $('#feed') ? loadFeed() : null, ($('#bdays') ? loadBirthdays() : Promise.resolve()).then(loadCartesAnniv), loadDynBanner(), $('#defi') ? loadChallenges() : null, loadDailyQuestion(), loadSeasonal(),
     home?.loadOwn(),
     tileOn('tile-day') ? import('./accueil-ce-jour.js').then((m) => m.loadOnThisDay($('#tile-day'), me)) : null, // module chargé seulement si la tuile existe
   ]);

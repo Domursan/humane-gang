@@ -44,6 +44,8 @@ const ICON = {
   download: svg('download', { size: 20, stroke: 1.8 }),
   users: svg('users2', { size: 20, stroke: 1.8 }),
   badge: svg('badge', { size: 20, stroke: 1.8 }),
+  // Barres de stats (idée 18, « Mes stats de jeux ») : dessin local, icons.js n'en a pas
+  stats: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
 };
 
 /** Les cinq statistiques de la carte : clé des données, libellé au singulier, libellé au pluriel. */
@@ -202,6 +204,7 @@ function cardHtml(c) {
       ${isMe ? '' : `<a class="btn btn-primary" href="/pages/compte/messages.html?to=${encodeURIComponent(c.id)}">${ICON.msg} Envoyer un message</a>`}
       <button class="btn ${isMe ? 'btn-primary' : 'btn-ghost'}" type="button" id="dl-card">${ICON.download} Télécharger la carte</button>
       ${isMe ? '<a class="btn btn-ghost" href="/pages/compte/compte.html">Modifier mon profil</a>' : ''}
+      ${isMe && canAccess('jeux') ? `<a class="btn btn-ghost" id="mb-stats-jeux" href="/pages/jeux/jeux.html#mes-stats">${ICON.stats} Mes stats de jeux</a>` : ''}
     </div>`;
 }
 
@@ -572,7 +575,7 @@ async function renderOnline() {
         $('#mb-actions').hidden = false;
         $('#mb-actions').innerHTML = `<a class="btn btn-ghost" href="/pages/cartes/cartes.html#collection/${esc(card.id)}">Voir sa collection</a>`;
       }
-      if (canAccess('cartes')) mountShowcase($('#mb-showcase'), { userId: card.id, isMe });
+      if (canAccess('cartes')) mountShowcase($('#mb-showcase'), { userId: card.id, isMe, pseudo: card.pseudo });
       if (!isMe) questTrack('fiche_vue', card.id); // quête « fiches consultées » : jamais sa propre carte
       else saveOffline(me, 'membre', { card }); // Q4 : sa propre carte gardée pour le hors ligne
       // Social (migration 090) : bloc « En jeu » et mercis, chargés à la demande sans retarder la carte.

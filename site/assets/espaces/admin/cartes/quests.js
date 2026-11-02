@@ -79,6 +79,10 @@ export const QUEST_METRICS = [
   ["ss_messages", "Messages à sa cible", "Messages secrets envoyés à sa cible Secret Santa."],
   ["ss_cadeau_a_temps", "Cadeau envoyé à temps", "Cadeau Secret Santa marqué envoyé avant la date limite."],
   ["preuve_validee", "Preuve validée par le Staff (capture)", "Quête à preuve : le membre envoie une capture, un membre du Staff « preuves » la valide. Tirée à part ({{preuve}} par semaine, réglage de cette page)."],
+  // Défis de collection (migration 210) : comptés dans la série du défi. « {serie} » dans le libellé reçoit son nom.
+  ["cartes_serie", "Cartes d'une série obtenues (défi)", "Défi de collection : cartes de la série du défi obtenues dans la semaine (boosters, échanges, cadeaux, cartes sauvages). Écris {serie} dans le libellé pour afficher son nom."],
+  ["nouvelles_serie", "Cartes nouvelles d'une série (défi)", "Défi de collection : cartes de la série du défi que le membre n'avait jamais eues. Écris {serie} dans le libellé pour afficher son nom."],
+  ["fabriquees_serie", "Cartes fabriquées dans une série (défi)", "Défi de collection : cartes de la série du défi fabriquées dans la semaine. Écris {serie} dans le libellé pour afficher son nom."],
 ];
 /* Libellé court de chaque action, par identifiant. */
 const METRIC_LABEL = Object.fromEntries(QUEST_METRICS.map(([v, l]) => [v, l]));
@@ -86,11 +90,15 @@ const METRIC_LABEL = Object.fromEntries(QUEST_METRICS.map(([v, l]) => [v, l]));
 const METRIC_HELP = Object.fromEntries(QUEST_METRICS.map(([v, , h]) => [v, h]));
 /** Phrase d'aide d'une action, avec le nombre de quêtes à preuve tiré chaque semaine. */
 const helpOf = (metric) => (METRIC_HELP[metric] || METRIC_HELP.boosters_ouverts).replaceAll('{{preuve}}', String(proofPerWeek()));
+/** Nom d'un type de booster (récompense d'un défi), sinon son identifiant. */
+const boosterName = (id) => Q.types.find((t) => t.id === id)?.name || id || '';
 /* Forme d'un identifiant technique : minuscules, chiffres et tiret bas, de 2 à 40 caractères. */
 const CODE_RE = /^[a-z0-9_]{2,40}$/;
 
 /** État de la liste (chargée à l'ouverture de l'onglet). */
-export const Q = { rows: [], loaded: false, loading: null, error: null };
+export const Q = { rows: [], types: [], loaded: false, loading: null, error: null };
+/* Compteurs liés à la série du défi (migration 210). */
+const SERIE_METRICS = ['cartes_serie', 'nouvelles_serie', 'fabriquees_serie'];
 
 /**
  * Nombre de quêtes tirées chaque semaine : réglage cards.quetes_par_semaine (lu dans hg_settings.cards),
@@ -117,7 +125,10 @@ export function loadQuests(force = false) {
   if (Q.loaded && !force) return Promise.resolve();
   Q.loading = (async () => {
     try {
-      Q.rows = check(await sb.from('hg_card_quests_templates').select('*').order('sort').order('code')) ?? [];
+      const [rows, types] = await Promise.all([sb.from('hg_card_quests_templates').select('*').order('sort').order('code'),
+        sb.from('hg_booster_types').select('id,name,sort').order('sort')]);
+      Q.rows = check(rows) ?? [];
+      Q.types = types?.data ?? []; // types de boosters, pour la récompense des défis (liste vide : défis en lecture seule)
       Q.loaded = true;
       Q.error = null;
     } catch (e) {
@@ -134,13 +145,13 @@ export function loadQuests(force = false) {
 export function questsPanel() {
   if (Q.error) return `<div class="empty">Impossible de charger les quêtes : ${esc(Q.error)} <button class="btn btn-ghost btn-sm" type="button" data-act="quest-retry">Réessayer</button></div>`;
   if (!Q.loaded) return '<div class="empty">Chargement des quêtes…</div>';
-  const active = Q.rows.filter((q) => q.active).length;
+  const active = Q.rows.filter((q) => q.active && !q.defi).length;
   const perWeek = questsPerWeek();
   const warn = active === 0
     ? 'Aucune quête active : les membres n\'en verront aucune cette semaine.'
     : active < perWeek ? `Seulement ${active} quête${active > 1 ? 's' : ''} active${active > 1 ? 's' : ''} : chaque semaine, les membres n'en auront que ${active}.` : '';
   return `<div class="acd-head">
-      <p class="small muted">Chaque semaine (du lundi au dimanche, heure suisse), ${perWeek} quête${perWeek > 1 ? 's' : ''} sont tirées au sort parmi les modèles <strong>actifs</strong> ; le tirage est le même pour tout le monde. Un membre touche les Paillettes une fois par quête et par semaine, en réclamant la quête une fois atteinte.</p>
+      <p class="small muted">Chaque semaine (du lundi au dimanche, heure suisse), ${perWeek} quête${perWeek > 1 ? 's' : ''} sont tirées au sort parmi les modèles <strong>actifs</strong> ; le tirage est le même pour tout le monde. Un membre touche les Paillettes une fois par quête et par semaine, en réclamant la quête une fois atteinte. En plus, un <strong>défi de collection</strong> actif est tiré chaque semaine (pas le même pendant 4 semaines s'il y en a assez) : sa récompense est un booster.</p>
       <button class="btn btn-primary" type="button" data-act="quest-new">${ICON.plus} Nouvelle quête</button>
     </div>
     <form class="acd-proof" id="acd-proof-form" novalidate>
@@ -154,7 +165,7 @@ export function questsPanel() {
     ${Q.rows.length ? `<ul class="acd-list">${Q.rows.map((q) => `<li class="acd-item">
         <div class="acd-item-main">
           <p><strong>${esc(q.label)}</strong> <code class="acd-code">${esc(q.code)}</code> <span class="pill ${q.active ? 'pill-ok' : 'pill-todo'}">${q.active ? 'Active' : 'Inactive'}</span></p>
-          <p class="small muted">${esc(METRIC_LABEL[q.metric] || q.metric)} · objectif ${esc(nf(q.target))} · ${esc(nf(q.reward))} ${paillSym()} · ordre ${esc(q.sort)}</p>
+          <p class="small muted">${q.defi ? 'Défi de collection · ' : ''}${esc(METRIC_LABEL[q.metric] || q.metric)} · objectif ${esc(nf(q.target))} · ${q.defi ? `1 booster ${esc(boosterName(q.reward_booster))}${SERIE_METRICS.includes(q.metric) ? ` · ${esc(q.set_id ? (C.setById.get(q.set_id)?.name || 'série choisie') : 'série de la semaine')}` : ''}` : `${esc(nf(q.reward))} ${paillSym()}`} · ordre ${esc(q.sort)}</p>
         </div>
         <div class="btn-row acd-set-actions">
           <button class="btn ${q.active ? 'btn-ghost' : 'btn-primary'} acd-set-toggle" type="button" data-act="quest-toggle" data-id="${esc(q.code)}" aria-pressed="${q.active ? 'true' : 'false'}">${q.active ? `${ICON.off} Désactiver` : `${ICON.on} Activer`}</button>
@@ -180,11 +191,24 @@ function formHtml(q, isNew) {
     <div class="field"><label for="aq-metric">Action à compter</label>
       <select id="aq-metric" name="metric" aria-describedby="aq-metric-h">${metricOpts}</select>
       <span class="small" id="aq-metric-h">${esc(helpOf(v.metric))}</span></div>
+    <div class="field"><label for="aq-kind">Genre</label>
+      <select id="aq-kind" name="kind" aria-describedby="aq-kind-h">
+        <option value="quete"${v.defi ? '' : ' selected'}>Quête de la semaine (Paillettes)</option>
+        <option value="defi"${v.defi ? ' selected' : ''}>Défi de collection (un booster)</option>
+      </select>
+      <span class="small muted" id="aq-kind-h">Un défi de collection est tiré à part, un par semaine pour tout le gang, et affiché en tête des quêtes.</span></div>
+    <div class="acd-grid-2" id="aq-defi"${v.defi ? '' : ' hidden'}>
+      <div class="field"><label for="aq-booster">Booster offert</label>
+        <select id="aq-booster" name="booster">${Q.types.map((t) => `<option value="${esc(t.id)}"${(v.reward_booster || 'classique') === t.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select></div>
+      <div class="field"><label for="aq-set">Série du défi</label>
+        <select id="aq-set" name="set" aria-describedby="aq-set-h"><option value="">Série de la semaine (tirée au sort)</option>${C.sets.map((s) => `<option value="${esc(s.id)}"${v.set_id === s.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select>
+        <span class="small muted" id="aq-set-h">Sert seulement aux actions « (défi) » liées à une série.</span></div>
+    </div>
     <div class="acd-grid-2">
       <div class="field"><label for="aq-target">Objectif</label>
         <input id="aq-target" name="target" type="number" min="1" max="1000000" step="1" inputmode="numeric" required value="${esc(v.target ?? 1)}" aria-describedby="aq-target-h">
         <span class="small muted" id="aq-target-h">Nombre d'actions à faire dans la semaine pour terminer la quête.</span></div>
-      <div class="field"><label for="aq-reward">Récompense (Paillettes)</label>
+      <div class="field" id="aq-reward-f"${v.defi ? ' hidden' : ''}><label for="aq-reward">Récompense (Paillettes)</label>
         <input id="aq-reward" name="reward" type="number" min="1" max="10000" step="1" inputmode="numeric" required value="${esc(v.reward ?? 10)}" aria-describedby="aq-reward-h">
         <span class="small muted" id="aq-reward-h">Versée une fois par membre et par semaine, quand il réclame la quête (1 à 10 000).</span></div>
     </div>
@@ -210,6 +234,12 @@ export function openQuestDialog(q = null) {
   const E = dr.form.elements;
   // L'aide de l'action change avec le choix
   E.metric.addEventListener('change', () => { $('#aq-metric-h', dr.body).textContent = helpOf(E.metric.value); });
+  // Défi de collection : booster et série à la place des Paillettes
+  E.kind.addEventListener('change', () => {
+    const defi = E.kind.value === 'defi';
+    $('#aq-defi', dr.body).hidden = !defi;
+    $('#aq-reward-f', dr.body).hidden = defi;
+  });
   (isNew ? E.code : E.label).focus();
 }
 
@@ -231,9 +261,15 @@ async function saveQuest(form, q) {
   if (!label || label.length > 120) return fail('Donne un libellé (120 caractères au maximum).');
   if (!METRIC_LABEL[E.metric.value]) return fail('Choisis une action dans la liste.');
   if (!Number.isInteger(target) || target < 1 || target > 1000000) return fail('L\'objectif doit être un nombre entier positif.');
-  if (!Number.isInteger(reward) || reward < 1 || reward > 10000) return fail('La récompense doit être un nombre entier entre 1 et 10 000 Paillettes.');
+  const defi = E.kind.value === 'defi';
+  if (!defi && (!Number.isInteger(reward) || reward < 1 || reward > 10000)) return fail('La récompense doit être un nombre entier entre 1 et 10 000 Paillettes.');
   if (!Number.isInteger(sort)) return fail('L\'ordre d\'affichage doit être un nombre entier.');
-  const row = { label, metric: E.metric.value, target, reward, sort, active: E.active.checked };
+  if (defi && !E.booster.value) return fail('Choisis le booster offert.');
+  if (defi && E.metric.value === 'preuve_validee') return fail('Un défi de collection se compte tout seul : choisis une autre action.');
+  if (!defi && SERIE_METRICS.includes(E.metric.value)) return fail('Cette action est réservée aux défis de collection.');
+  // Défi : la colonne reward (Paillettes) n'est jamais versée ; elle garde une valeur valide (1 à 10 000).
+  const row = { label, metric: E.metric.value, target, reward: defi ? Math.min(10000, Math.max(1, Number.isInteger(reward) ? reward : 1)) : reward, sort, active: E.active.checked,
+    defi, reward_booster: defi ? E.booster.value : null, set_id: defi && E.set.value ? E.set.value : null };
   try {
     if (isNew) {
       check(await sb.from('hg_card_quests_templates').insert({ code, ...row }));

@@ -85,6 +85,24 @@
 .uno-tag { display: inline-flex; align-items: center; min-height: 20px; padding: 1px 8px; border-radius: 999px;
   border: 1px solid #3A3A40; font-size: 12px; color: var(--muted); }
 
+/* ---------- Place tenue par un robot (joueur parti, migration 211 ; maquette validée du lot 7) ---------- */
+.uno-robot-zone { display: grid; gap: 8px; }
+.rb-msg { margin: 0; }
+.rb-msg svg { color: var(--sand); }
+.rb-msg strong { font-weight: 800; }
+.rb-msg p { flex: 1; min-width: 0; }
+.rb-msg .uno-robot-reprendre { flex: none; align-self: center; margin-left: auto; min-height: 44px; }
+.uno-siege.is-robot .uno-siege-photo .avatar, .uno-siege.is-robot .uno-siege-photo img { filter: grayscale(1); opacity: .7; }
+.rb-pastille { position: absolute; right: -6px; bottom: -4px; z-index: 2; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+  background: #FBD32D; color: #000; border: 2px solid #000; box-shadow: 2px 2px 0 #000; }
+.rb-pastille svg { width: 16px; height: 16px; }
+.rb-tag { background: #FBD32D; color: #000; border: 1px solid #000; font-weight: 800; }
+.uno-siege-infos .rb-tag { margin-top: 2px; }
+@media (max-width: 760px) {
+  .rb-msg { flex-wrap: wrap; }
+  .rb-msg .uno-robot-reprendre { margin-left: 30px; }
+}
+
 /* Anneau arc-en-ciel posé sous les joueurs (ordinateur : ellipse ; les joueurs sont sur son bord) */
 .uno-tapis { position: absolute; inset: 0; z-index: 1; }
 .uno-ovale, .uno-fleches { position: absolute; left: 10%; right: 10%; top: 16%; bottom: 16%; border-radius: 50%; }
@@ -324,3 +342,11 @@
     .uno-tapis-centre { top: 60%; transform: translate(-50%, -50%) scale(.85); }
   }
 }
+
+/* ---------- Spectateurs (migration 214 ; maquette validée du lot 7) ---------- */
+.uno-chat-tete:has(.sp-onglets) { flex-direction: column; align-items: stretch; gap: 8px; }
+.uno-chat-tete:has(.sp-onglets) .uno-chat-fermer { align-self: flex-end; }
+.uno-chat-corps[hidden] { display: none; }
+.uno-table.est-spectateur .uno-tri, .uno-table.est-spectateur .uno-aide-tel, .uno-table.est-spectateur .uno-indice,
+.uno-table.est-spectateur .uno-moi, .uno-table.est-spectateur .uno-commandes { display: none !important; }
+@media (max-width: 760px) { .uno-barre .sp-nb-barre { display: none; } }

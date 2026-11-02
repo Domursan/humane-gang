@@ -19,7 +19,8 @@ const nf = new Intl.NumberFormat('fr-CH');
  * Champs du formulaire de règles.
  * @param {string} id préfixe unique des identifiants (plusieurs formulaires sur une page)
  * @param {object} [rules] règles actuelles (défaut : DEFAULT_RULES)
- * @param {{lockMin?: boolean}} [opts] lockMin : mise de départ figée (une offre existe déjà)
+ * @param {{lockMin?: boolean, sansMise?: boolean}} [opts] lockMin : mise de départ figée (une offre existe déjà) ;
+ *   sansMise : pas de champ « Mise de départ » (le formulaire d'enchère en lot la demande à part, près des dates)
  * @returns {string} HTML
  */
 export function rulesFieldsHtml(id, rules = DEFAULT_RULES, opts = {}) {
@@ -29,7 +30,7 @@ export function rulesFieldsHtml(id, rules = DEFAULT_RULES, opts = {}) {
       ${help ? `<p class="small muted" id="${id}-${name}-h">${help}</p>` : ''}</div>`;
   return `<fieldset class="enr-rules"><legend>Règles de l’enchère</legend>
     <div class="acd-grid-2">
-      ${f('min_bid', `Mise de départ (${paillSym()})`, `min="1" max="100000" required${opts.lockMin ? ' readonly' : ''}`, opts.lockMin ? 'Figée : une offre a déjà été faite.' : '')}
+      ${opts.sansMise ? '' : f('min_bid', `Mise de départ (${paillSym()})`, `min="1" max="100000" required${opts.lockMin ? ' readonly' : ''}`, opts.lockMin ? 'Figée : une offre a déjà été faite.' : '')}
       ${f('step', `Pas minimal entre deux offres (${paillSym()})`, 'min="1" max="10000" required', '')}
       ${f('max_bid', `Mise maximale par offre (${paillSym()})`, 'min="1" max="1000000" placeholder="Aucune"', 'Vide : pas de maximum.')}
       ${f('cap_pct', 'Plafond d’un membre (% de son solde du lundi)', 'min="1" max="100" placeholder="Aucun"', 'Vide : seul son solde compte. 50 = la moitié.')}

@@ -369,3 +369,19 @@ html[data-mode="clair"][data-espace="compte"] .soc-dialog { box-shadow: 8px 8px 
   html[data-espace="compte"] .gm-fav:hover { transform: none !important; }
 }
 html[data-fx="off"][data-espace="compte"] .gm-fav:hover { transform: none !important; }
+
+/* Idée 52 · carte d'anniversaire commune : boîtes « Signer la carte » et mur des mots (accueil et compte, carte-anniv.js) */
+.anv-mots { list-style: none; margin: 12px 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.anv-mot { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 2px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.anv-mot p { margin: 2px 0 0; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.anv-bas { display: flex; justify-content: space-between; gap: 12px; margin-top: 4px; }
+.anv-bas > span:last-child { flex: none; white-space: nowrap; }
+.anv-form .btn-row { justify-content: flex-end; }
+.anv-mur { list-style: none; margin: 12px 0 16px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+.anv-carte { display: flex; flex-direction: column; justify-content: space-between; gap: 12px; padding: 14px; border: 2px solid #08080B; border-top: 8px solid var(--c); border-radius: 10px; background: var(--surface-2); }
+.anv-carte p { margin: 0; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; }
+.anv-sign { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.anv-souv { list-style: none; margin: 0; padding: 0; }
+.anv-souv li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.anv-souv li:last-child { border-bottom: 0; }
+.anv-souv-txt { display: flex; flex-direction: column; min-width: 0; }

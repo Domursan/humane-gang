@@ -2,7 +2,7 @@
 // parcours-d3.cjs. Reprend le faux client du site (fake-sb.mjs, chargé depuis le dépôt) et ajoute les RPC de la migration 087,
 // avec les mêmes contrôles que la base (plafonds, bornes, droits) pour que les erreurs affichées soient réalistes.
 // Scénario (window.__SCN) : discord (ID Discord enregistré), cineEmpty (aucune séance ni film), cineHost (le membre connecté est projectionniste),
-// calFail (hg_calendar en erreur). Expose window.__VD (état simulé) en plus de window.__DB et window.__LOG.
+// calFail (hg_calendar en erreur), calEmpty (aucun rendez-vous dans le mois). Expose window.__VD (état simulé) en plus de window.__DB et window.__LOG.
 // Exporte createClient(). Servi à la place de supabase-js (voir lib/harness.cjs).
 const base = await import(`${location.origin}/tests/fixtures/fake-sb.mjs`);
 const S = window.__SCN || {};
@@ -59,6 +59,7 @@ const filmById = (f) => VD.films.find((x) => x.id === f);
 /* ---------- Calendrier ---------- */
 function calendar(from, to) {
   if (S.calFail) return err('Failed to fetch');
+  if (S.calEmpty) return ok([]);
   const items = [];
   const inRange = (d) => d >= from && d <= to;
   // Jour de Zurich + 5 (comme le test) : à partir de l'heure UTC, la sortie tombe la veille entre 23 h et minuit à Zurich

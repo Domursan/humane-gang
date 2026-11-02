@@ -6,21 +6,20 @@
 // Chaque fenêtre garde les mêmes contrôles et la même charge (RPC) que la page complète, qu'elle renvoie en lien
 // « Ouvrir la page complète » :
 //   give    : le panier (admin/give-panier.js), RPC hg_cards_admin_give_panier. Page : Fabrique › Gestion globale.
-//   enchere : hg_auctions_admin (lecture), hg_auction_create (règles : enchere-regles.js). Page : Fabrique › Enchères.
+//   enchere : le lot composé comme un give (creerEnchereLot d'admin-cards/auctions.js), hg_auctions_admin (lecture),
+//             hg_auction_create. Page : Ventes › Enchères.
 //   drop    : hg_drop_create, puis hg-notify « card_drop » si la case Discord est cochée. Carte choisie sur ses visuels.
 //             Page : Fabrique › Drops.
 // Lectures : hg_members, hg_card_sets, hg_cards, hg_card_copies (restants), hg_booster_types, hg_settings (clé « cards », bornes des drops).
 // Focus : la fenêtre est modale (<dialog>), Tab reste dedans, Échap ferme, le focus revient au bouton d'origine.
 // Exporte : initQuick (à appeler une fois, dans admin.js), QUICK_PERM.
-// Dépendances : core.js, cartes-ui.js (rarityLabel), admin-cards/helpers.js (check, fetchAll, fmtWhen, nf),
-// admin/give-panier.js, admin-cards/auctions.js (nextWeekend), enchere-regles.js, admin/visual-pick.js (sélecteurs visuels).
+// Dépendances : core.js, cartes-ui.js (rarityLabel), admin-cards/helpers.js (check, fetchAll, nf),
+// admin/give-panier.js, admin-cards/auctions.js (creerEnchereLot), admin/visual-pick.js (sélecteurs visuels).
 // =====================================================================
-import { paillSym } from '../../commun/paillettes.js';
 import { sb, toast, errMsg, esc, notify, getCachedPerms, hasPerm } from '../../commun/core.js';
-import { check, fetchAll, fmtWhen, nf } from './cartes/helpers.js';
+import { check, fetchAll, nf } from './cartes/helpers.js';
 import { creerGive } from './give-panier.js';
-import { nextWeekend } from './cartes/auctions.js';
-import { rulesFieldsHtml, readRules } from '../cartes/enchere-regles.js';
+import { creerEnchereLot } from './cartes/auctions.js';
 import { cardPicker, chargerBoosters, chargerRestants, visuelHtml, libelleEpuisee } from './visual-pick.js';
 
 /** Permission exigée pour les trois actions (Jeu de cartes). */
@@ -40,8 +39,6 @@ const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toL
 const plur = (n, one, many) => `${nf(n)} ${n > 1 ? many : one}`;
 /** Nombre entier formaté (locale suisse), comme dans la page des drops. */
 const fmtN = (n) => new Intl.NumberFormat('fr-CH').format(n);
-/** Valeur d'un champ datetime-local (heure locale). */
-const toLocal = (d) => { const x = new Date(d); x.setMinutes(x.getMinutes() - x.getTimezoneOffset()); return x.toISOString().slice(0, 16); };
 /** Bornes des drops : hg_settings.cards.drops, avec les valeurs de base en repli (comme admin-cards/drops.js). */
 function limitsOf(cfg) {
   const d = cfg?.drops || {};
@@ -197,88 +194,47 @@ async function openGive(trigger) {
 }
 
 /* =========================================================
-   2. Nouvelle enchère : une carte unique, planifiée
+   2. Nouvelle enchère : un lot composé comme un give, planifié
    ========================================================= */
-/** Ouvre « Nouvelle enchère ». Mêmes contrôles que le formulaire d'admin-cards/auctions.js (carte unique, règles). */
+/** Ouvre « Nouvelle enchère ». Même composition, mêmes contrôles et même RPC que admin-cards/auctions.js (creerEnchereLot). */
 async function openEnchere(trigger) {
-  const ui = openShell({ title: 'Nouvelle enchère', sub: 'Une carte unique, mise aux enchères pour le week-end par défaut.', color: '#FCA301', href: '/pages/admin/admin.html#fabrique/encheres', trigger });
-  let cards, copies, auctions;
+  const ui = openShell({ title: 'Nouvelle enchère', sub: 'Un lot composé comme un give, aux enchères pour le week-end par défaut.', color: '#FCA301', href: '/pages/admin/admin.html#ventes/encheres', trigger });
+  ui.dlg.classList.add('gv-dlg');
+  let sets, cards, auctions;
   try {
-    cards = await fetchAll(() => sb.from('hg_cards').select('id, name, rarity, member_id, family').order('id'));
-    const uniqueIds = cards.filter((k) => k.rarity === 'unique').map((k) => k.id);
-    copies = uniqueIds.length ? await fetchAll(() => sb.from('hg_card_copies').select('card_id').in('card_id', uniqueIds)) : [];
-    auctions = check(await sb.rpc('hg_auctions_admin')) ?? [];
+    [sets, cards, auctions] = await Promise.all([
+      fetchAll(() => sb.from('hg_card_sets').select('id, name, sort').order('sort')),
+      fetchAll(() => sb.from('hg_cards').select('*').eq('active', true).order('number')),
+      sb.rpc('hg_auctions_admin').then(check),
+    ]);
   } catch (e) { failLoad(ui, e); return; }
-  // Mêmes filtres que la page : carte unique, pas une carte de membre, pas encore attribuée, pas déjà aux enchères.
-  const owned = new Set(copies.map((x) => x.card_id));
-  const booked = new Set(auctions.filter((a) => a.status === 'prevue' || a.status === 'ouverte').map((a) => a.card_id));
-  const eligible = cards.filter((k) => k.rarity === 'unique' && !k.member_id && k.family !== 'membre' && !owned.has(k.id) && !booked.has(k.id))
-    .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
-  const byId = new Map(cards.map((k) => [k.id, k]));
-  const { start, end } = nextWeekend();
-
-  if (!eligible.length) {
-    ui.body.innerHTML = '<p class="qk-empty">Aucune carte unique disponible : crée une carte de rareté « Unique » (Catalogue › Cartes).</p>';
-    ui.btns.innerHTML = '<button class="btn btn-ghost" type="button" data-qk-close>Fermer</button>';
-    return;
-  }
-  ui.body.innerHTML = `
-    <p class="qk-err" role="alert" hidden></p>
-    <div class="qk-pane" data-pane="form">
-      <section class="qk-sec">
-        <div class="field"><label for="qk-a-card">Carte unique</label>
-          <select id="qk-a-card" name="card_id" data-focus>${eligible.map((k) => `<option value="${esc(k.id)}">${esc(k.name)}</option>`).join('')}</select></div>
-        <div class="qk-pair">
-          <div class="field"><label for="qk-a-start">Début</label><input id="qk-a-start" name="starts_at" type="datetime-local" value="${toLocal(start)}" required></div>
-          <div class="field"><label for="qk-a-end">Fin</label><input id="qk-a-end" name="ends_at" type="datetime-local" value="${toLocal(end)}" required></div>
-        </div>
-      </section>
-      <details class="qk-adv">
-        <summary>Règles de l’enchère (valeurs par défaut)</summary>
-        ${rulesFieldsHtml('qk-auc')}
-      </details>
-    </div>
-    <div class="qk-pane" data-pane="confirm" hidden>
-      <p class="qk-sum qk-sum-strong" data-confirm></p>
-      <p class="small muted">Les Paillettes du gagnant sont détruites. La carte reste en réserve si personne n'offre.</p>
-    </div>`;
-
-  bindActions(ui, {
-    onBack: () => showPane(ui, 'form', { submit: 'Planifier l’enchère' }),
-    onReview: () => {
-      const f = ui.form;
-      const card = byId.get(f.elements.card_id.value);
-      const s = f.elements.starts_at.value, e = f.elements.ends_at.value;
-      if (!card) { showErr(ui, 'Choisis une carte.'); return; }
-      if (!s || !e || new Date(e) <= new Date(s)) { showErr(ui, 'La fin doit être après le début.'); return; }
-      const r = readRules(f);
-      ui.body.querySelector('[data-confirm]').textContent =
-        `« ${card.name} » aux enchères du ${fmtWhen(new Date(s).toISOString())} au ${fmtWhen(new Date(e).toISOString())}. `
-        + `Mise de départ ${nf(r.min_bid)} ${paillSym()}, pas de ${nf(r.step)} ${paillSym()}.`;
-      showPane(ui, 'confirm', { submit: 'Planifier l’enchère', confirm: 'Planifier l’enchère' });
-    },
-    onConfirm: (btn) => sendAuction(ui, btn),
+  sets = (sets ?? []).sort((a, b) => a.sort - b.sort);
+  cards = cards ?? [];
+  const setsById = new Map(sets.map((s) => [s.id, s]));
+  cards.forEach((k) => { k.set_name = setsById.get(k.set_id)?.name; });
+  // Exemplaires restants et boosters : une lecture qui échoue ne bloque pas la fenêtre.
+  const [rest, boost] = await Promise.allSettled([chargerRestants(cards), chargerBoosters()]);
+  if (!ui.dlg.isConnected) return;
+  ui.body.innerHTML = '<p class="qk-err" role="alert" hidden></p><div data-qk-lot></div>';
+  const compo = creerEnchereLot(ui.body.querySelector('[data-qk-lot]'), {
+    idp: 'qk-a', cards, sets, restants: rest.status === 'fulfilled' ? rest.value.restants : new Map(),
+    types: boost.status === 'fulfilled' ? boost.value : null, typesErreur: boost.status === 'rejected' ? errMsg(boost.reason) : '',
+    encheres: auctions ?? [],
   });
-  showPane(ui, 'form', { submit: 'Planifier l’enchère' });
-}
-
-/**
- * Crée l'enchère : mêmes champs que le formulaire de la page (règles lues telles quelles, dates en ISO).
- * @param {object} ui fenêtre
- * @param {HTMLButtonElement} btn bouton de confirmation
- */
-async function sendAuction(ui, btn) {
-  busyOn(btn);
-  try {
-    const f = ui.form;
-    const p = { ...readRules(f), card_id: f.elements.card_id.value, starts_at: new Date(f.elements.starts_at.value).toISOString(), ends_at: new Date(f.elements.ends_at.value).toISOString() };
-    check(await sb.rpc('hg_auction_create', { p }));
+  ui.btns.innerHTML = '<button class="btn btn-ghost" type="button" data-qk-close>Annuler</button><button class="btn btn-primary" type="submit" data-qk-submit>Planifier l’enchère</button>';
+  ui.form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const r = compo.lire();
+    if (r.erreur) { showErr(ui, r.erreur); compo.give.signaler(r.erreur); return; }
+    showErr(ui, '');
+    const btn = ui.btns.querySelector('[data-qk-submit]');
+    busyOn(btn);
+    const res = await compo.give.confirmerLot({ phrase: r.phrase, envoi: () => sb.rpc('hg_auction_create', { p: r.p }) });
+    busyOff(btn);
+    if (!res) return;
     toast('Enchère planifiée', 'ok');
     ui.close();
-  } catch (e) {
-    showErr(ui, errMsg(e));
-    busyOff(btn);
-  }
+  });
 }
 
 /* =========================================================

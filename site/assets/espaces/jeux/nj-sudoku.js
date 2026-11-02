@@ -22,6 +22,9 @@ import { esc, errMsg } from '../../commun/core.js';
 import { chargerCss, nf, classementHtml, zurichIso, jourLong } from './commun.js';
 import { sonJour, pointsDeGain, rejoue, secouer, finDePartie } from './effets-jour.js';
 import { boutonReponses } from '../../commun/core/admin-reponses.js';
+import { serieHtml, jokerHtml } from './serie-jeux.js'; // série commune et joker payant (migrations 206 et 207)
+// Grilles passées pour l'honneur (idée 13, migration 213) : #sudoku-AAAA-MM-JJ, sans Paillettes, classement ni série.
+import { jourVoulu, sousTitreHonneur, modeHonneur, monterArchives, suivreJour } from './archives-jeux.js';
 
 /* ---------- Constantes ---------- */
 /** Déplacement au clavier (ligne, colonne). */
@@ -34,7 +37,8 @@ const NIVEAU = { facile: 'facile', moyen: 'moyen', difficile: 'difficile' };
 // (AAAA-MM-JJ, renvoyé par le serveur) ; niveau ; donnes : chiffres donnés (0 = vide) ; val : chiffres posés (donnés compris) ;
 // notes : candidats par case (bits 1 à 9) ; actif : case sélectionnée ; modeNotes : mode Notes ; t0 : premier chiffre posé
 // (ms) ; run : promesse de l'identifiant de partie ; horloge : minuteur ; fini : grille complète et juste envoyée ;
-// entrainement : grille du jour déjà terminée, rejouée sans score ; officiel : réponse de hg_nj_solo_fin ; gain, recompense, board.
+// entrainement : grille du jour déjà terminée, rejouée sans score ; officiel : réponse de hg_nj_solo_fin ; gain, recompense, board ;
+// honneur : grille passée (AAAA-MM-JJ) jouée pour l'honneur (hg_jeux_honneur_etat / hg_jeux_honneur_essai), null sinon.
 let S = null;
 
 /* ---------- Outils ---------- */
@@ -99,9 +103,13 @@ const pointsDeTemps = (secondes) => Math.max(1, 10 - Math.max(0, Math.floor((Num
  * @param {HTMLElement} panel Panneau vide de l'onglet.
  * @param {{sb: object, me: object, toast: Function, esc: Function}} ctx Contexte de la page.
  */
-export async function mount(panel, ctx) {
+export async function mount(zone, ctx) {
   chargerCss('solo');
-  S = { panel, ctx, gen: 0, jour: zurichIso(), niveau: 'facile', donnes: new Array(81).fill(0), val: new Array(81).fill(0), notes: new Array(81).fill(0),
+  // Le jeu se dessine dans panel ; les grilles passées dessous, dans leur propre bloc.
+  const panel = document.createElement('div');
+  const blocArchives = document.createElement('div');
+  zone.append(panel, blocArchives);
+  S = { panel, ctx, zone, honneur: jourVoulu(ctx.sub), gen: 0, jour: zurichIso(), niveau: 'facile', donnes: new Array(81).fill(0), val: new Array(81).fill(0), notes: new Array(81).fill(0),
     actif: 0, modeNotes: false, t0: 0, run: null, horloge: null, fini: false, entrainement: false, officiel: null, gain: 0, recompense: false, board: [], cases: [] };
   panel.innerHTML = `<div class="jg sol sol-sudoku">
     <header class="sol-head">
@@ -111,10 +119,13 @@ export async function mount(panel, ctx) {
         <p class="small muted jg-sub" id="su-sub">Chargement…</p>
       </div>
       <div class="sol-pills">
+        ${serieHtml('nj_sudoku')}
+        <a class="btn btn-ghost ar-retour" id="su-retour" href="#sudoku" hidden>Grille du jour</a>
         <span class="sol-pill">Chrono <strong id="su-chrono">00:00</strong></span>
         <span class="sol-pill">Niveau <strong id="su-niveau">–</strong></span>
         <span class="sol-gain" id="su-gain"></span>
       </div>
+      ${jokerHtml('nj_sudoku')}
     </header>
     <div class="jg-grid2">
       <div class="jg-col">
@@ -146,7 +157,7 @@ export async function mount(panel, ctx) {
             <li data-n="5">Grille pleine et juste : la partie est finie, et le temps du serveur compte.</li>
           </ol>
         </section>
-        <section class="jg-card" aria-labelledby="su-board-h">
+        <section class="jg-card" id="su-board-carte" aria-labelledby="su-board-h">
           <h3 class="jg-h3" id="su-board-h">Classement du jour</h3>
           <p class="small muted">Le temps de chacun sur la grille du jour.</p>
           <div id="su-board" aria-live="polite"><p class="jg-empty-row">Chargement…</p></div>
@@ -168,6 +179,18 @@ export async function mount(panel, ctx) {
   }
 
   boutonReponses(q('.sol-head > div'), 'sudoku');
+  const liste = monterArchives(blocArchives, { sb: ctx.sb, esc, jeu: 'nj_sudoku', lien: (d) => `#sudoku-${d}`, code: 'Sudoku du jour',
+    titre: 'Grilles passées', unite: 'grille du jour', essais: null, actuel: S.honneur });
+  S.liste = liste;
+  suivreJour(zone, ctx, () => S?.honneur ?? null, (j) => {
+    if (!S) return;
+    arreterHorloge();
+    Object.assign(S, { honneur: j, jour: zurichIso(), gen: S.gen + 1, t0: 0, run: null, fini: false, officiel: null, modeNotes: false, actif: 0 });
+    q('#su-chrono').textContent = '00:00';
+    q('#su-fin').hidden = true;
+    chargerEtat();
+    liste.rafraichir(j);
+  });
   panel.addEventListener('click', onClic);
   q('#su-jeu').addEventListener('keydown', onClavier);
   grille.addEventListener('focusin', (e) => { const b = e.target.closest?.('.sol-s'); if (b) S.actif = Number(b.dataset.i); });
@@ -204,7 +227,13 @@ async function chargerEtat() {
   const gen = S.gen;
   const { sb, toast } = S.ctx;
   let data = null, error = null;
-  try { ({ data, error } = await sb.rpc('hg_nj_solo_etat', { p_jeu: 'sudoku', p_var: S.jour })); } catch (e) { error = e; }
+  const honneur = S.honneur;
+  majEntete();
+  try {
+    ({ data, error } = honneur
+      ? await sb.rpc('hg_jeux_honneur_etat', { p_jeu: 'nj_sudoku', p_day: honneur })
+      : await sb.rpc('hg_nj_solo_etat', { p_jeu: 'sudoku', p_var: S.jour }));
+  } catch (e) { error = e; }
   if (!S || gen !== S.gen) return;
   if (error || !data?.sudoku) {
     const msg = errMsg(error || 'grille indisponible');
@@ -226,7 +255,7 @@ async function chargerEtat() {
   S.gain = Number(data.gain) || 0;
   S.recompense = !!data.recompense_aujourdhui;
   S.board = data.board || [];
-  q('#su-sub').textContent = `Grille du ${jourLong(S.jour)}`;
+  q('#su-sub').textContent = honneur ? sousTitreHonneur('Grille passée', honneur) : `Grille du ${jourLong(S.jour)}`;
   q('#su-niveau').textContent = NIVEAU[S.niveau] || S.niveau;
   majGain();
   majBoard();
@@ -236,11 +265,33 @@ async function chargerEtat() {
   maj();
 }
 
+/**
+ * En-tête et colonne selon la grille ouverte : grille du jour (série, joker, Paillettes, classement du jour) ou grille
+ * passée (retour à la grille du jour, rien de tout cela).
+ */
+function majEntete() {
+  const h = !!S.honneur;
+  const cacher = (el, oui) => { if (el) el.style.display = oui ? 'none' : ''; };
+  q('.sol-eyebrow').textContent = h ? 'Solo · grille passée' : 'Solo · grille du jour';
+  cacher(q('.sol-pills [data-sj]'), h);
+  cacher(q('.sol-head [data-sjk]'), h);
+  cacher(q('#su-gain'), h);
+  cacher(q('#su-board-carte'), h);
+  q('#su-retour').hidden = !h;
+  q('.sol-banniere').textContent = h ? 'Grille passée, pour l’honneur : sans Paillettes ni classement' : 'La même grille pour tout le gang aujourd’hui';
+  modeHonneur(S.zone, h, 'Grilles passées');
+}
+
 /** Lance une partie chronométrée côté serveur (hg_nj_solo_debut) : renvoie la promesse de l'identifiant (null si refusée). */
 function lancerDebut() {
   const { sb, toast } = S.ctx;
-  const jour = S.jour;
+  const jour = S.jour, honneur = S.honneur;
   return (async () => {
+    if (honneur) {
+      const { error } = await sb.rpc('hg_jeux_honneur_essai', { p_jeu: 'nj_sudoku', p_day: honneur, p: { debut: true } });
+      if (error) throw error;
+      return 'honneur';
+    }
     const { data, error } = await sb.rpc('hg_nj_solo_debut', { p_jeu: 'sudoku', p_var: jour });
     if (error) throw error;
     return data;
@@ -279,7 +330,10 @@ async function finir() {
     if (!S || gen !== S.gen) return;
     if (!id) { majFin({ type: 'non_envoye' }); return; }
     const grille = S.val.join('');
-    const { data, error } = await sb.rpc('hg_nj_solo_fin', { p_run: id, p_res: { gagne: true, grille } });
+    const honneur = S.honneur;
+    const { data, error } = honneur
+      ? await sb.rpc('hg_jeux_honneur_essai', { p_jeu: 'nj_sudoku', p_day: honneur, p: { grille } })
+      : await sb.rpc('hg_nj_solo_fin', { p_run: id, p_res: { gagne: true, grille } });
     if (!S || gen !== S.gen) return;
     if (error) throw error;
     if (!data?.ok) {
@@ -291,6 +345,12 @@ async function finir() {
       maj();
       secouer(q('#su-grille'));
       sonJour('G4');
+      return;
+    }
+    if (honneur) {
+      S.officiel = data;
+      majFin({ type: 'honneur', secondes: data.secondes });
+      S.liste?.rafraichir();
       return;
     }
     if (data.reward > 0) S.recompense = true;
@@ -392,11 +452,11 @@ function maj() {
   q('#su-rejouer').hidden = !S.entrainement;
   const st = q('#su-statut');
   let texte = '', ton = '';
-  if (S.entrainement && !S.t0) { texte = 'Grille du jour déjà terminée : tu peux la rejouer pour le plaisir, sans score.'; }
+  if (S.entrainement && !S.t0) { texte = S.honneur ? 'Grille déjà terminée : tu peux la rejouer pour le plaisir.' : 'Grille du jour déjà terminée : tu peux la rejouer pour le plaisir, sans score.'; }
   else if (!S.t0) texte = 'Choisis une case, puis place un chiffre : le chrono part au premier chiffre.';
   else if (S.fini) texte = 'Grille complète : vérification en cours…';
   else texte = 'Partie en cours.';
-  if (S.officiel) { texte = 'Grille du jour terminée.'; ton = 'is-ok'; }
+  if (S.officiel) { texte = S.honneur ? 'Grille passée terminée.' : 'Grille du jour terminée.'; ton = 'is-ok'; }
   st.className = `sol-statut ${ton}`.trim();
   st.textContent = texte;
 }
@@ -434,6 +494,7 @@ function majFin({ type, secondes, reward = 0 }) {
     else detail = S.recompense ? 'Paillettes déjà reçues aujourd’hui.' : 'Grille enregistrée.';
   } else if (type === 'incorrecte') { titre = 'Grille incorrecte'; detail = 'Corrige une case, puis valide à nouveau : une nouvelle partie chronométrée a démarré.'; }
   else if (type === 'deja') { titre = `Grille du jour terminée en ${fmtTemps(secondes)}`; ton = 'is-ok'; detail = 'Tu peux la rejouer pour le plaisir : sans score ni Paillettes.'; }
+  else if (type === 'honneur') { titre = `Grille passée terminée en ${fmtTemps(secondes)}`; ton = 'is-ok'; detail = 'Pour l’honneur : sans Paillettes, sans classement, sans série.'; }
   else if (type === 'rejoue') { titre = 'Bravo, grille rejouée'; ton = 'is-ok'; detail = `Temps local : ${fmtTemps(secondes)}. Pas de score : la grille du jour est déjà terminée.`; }
   else { titre = 'Partie non enregistrée'; detail = 'Le serveur n’a pas ouvert la partie. Rafraîchis la page pour réessayer.'; }
   box.hidden = false;
@@ -441,7 +502,7 @@ function majFin({ type, secondes, reward = 0 }) {
   if (type === 'gagne') {
     // Partie gagnée sous les yeux du membre : le gain défile dans la ligne existante (pas de doublon)
     finDePartie(box, { points: reward > 0 ? pointsDeGain(reward) : pointsDeTemps(secondes), gain: reward > 0 ? reward : null, cibleGain: box.querySelector('#su-fin-gain') });
-  } else if (type === 'deja') {
+  } else if (type === 'deja' && !S.honneur) {
     finDePartie(box, { points: pointsDeTemps(secondes), animer: false });
   }
   if (type === 'incorrecte') q('#su-statut').className = 'sol-statut is-ko';

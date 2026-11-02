@@ -3,6 +3,8 @@
 // Dépendances : core.js (Supabase, notifications), sound.js (son), icons.js.
 // Tables et RPC : hg_members, hg_my_conversations, hg_get_messages, hg_send_message, hg_mark_read, hg_open_direct ;
 // groupes (migration 090) : messages-groupes.js (hg_group_*, hg_event_conv_open). Lien direct : ?event=<sortie>.
+// Recherche (migration 203) : hg_search_messages, champ en haut de la liste ; la loupe du fil cherche dans les messages chargés.
+// Réactions (migration 204) : hg_message_reactions_get, hg_message_react ; jamais dans l'assistance, aucune notification.
 // Temps réel : canal privé « conv:<id> » (Supabase Realtime), avec actualisation périodique de secours.
 // N'exporte rien.
 import * as core from '../../commun/core.js';
@@ -32,7 +34,16 @@ const I = {
   help: svg('info', { size: 14, stroke: 2 }),
   group: svg('users2', { size: 18, stroke: 2 }),
   users: svg('users2', { size: 20, stroke: 2 }),
+  search: svg('search2', { size: 20, stroke: 2 }),
+  up: svg('up', { size: 20, stroke: 2 }),
+  down: svg('down', { size: 20, stroke: 2 }),
+  close: svg('close', { size: 20, stroke: 2 }),
+  smile: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c.9 1.2 2.1 1.8 3.5 1.8s2.6-.6 3.5-1.8M9 9.5h.01M15 9.5h.01"/></svg>',
 };
+/** Les six réactions proposées sous un message (comme sous les souvenirs, avec 👍 au lieu de 👏). */
+const REACTIONS = ['❤️', '😂', '👍', '😮', '🔥', '🎉'];
+const LONG_PRESS_MS = 450; // appui long (téléphone) : choix d'une réaction, ou qui a réagi
+const SEARCH_MIN = 3;      // lettres au moins pour chercher
 
 /* ---------- État ---------- */
 const S = {
@@ -43,6 +54,10 @@ const S = {
   lastId: 0,
   sending: false,
   loadingThread: false,
+  reacts: new Map(),   // réactions de la conversation ouverte : id du message -> Map(émoji -> { mine, qui: [noms] })
+  reactsKey: '',       // empreinte des réactions lues (pour ne redessiner qu'en cas de changement)
+  search: { q: '', etat: '', res: null, err: '', seq: 0 }, // recherche dans toutes mes conversations
+  find: null,          // loupe du fil : { ids: [identifiants trouvés], i: position courante }
 };
 let threadTimer = null, listTimer = null;
 // Canal Supabase Realtime de la conversation ouverte (Broadcast privé « conv:<id> ») ; ok = abonnement confirmé
@@ -119,6 +134,50 @@ function linkify(text) {
   return out + esc(src.slice(last));
 }
 
+/* ---------- Recherche : texte sans accents ni majuscules, et surlignage ---------- */
+/**
+ * Texte « plié » (sans accents, en minuscules) et, pour chaque caractère plié, sa position dans le texte d'origine.
+ * @param {string} s texte d'origine
+ * @returns {{t: string, pos: number[]}} pos a un élément de plus que t (fin du texte)
+ */
+function plie(s) {
+  let t = '', i = 0;
+  const pos = [];
+  for (const ch of String(s ?? '')) {
+    const n = ch.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    for (let k = 0; k < n.length; k++) { t += n[k]; pos.push(i); }
+    i += ch.length;
+  }
+  pos.push(i);
+  return { t, pos };
+}
+/**
+ * Passages du texte qui contiennent le mot cherché (sans tenir compte des accents ni des majuscules).
+ * @param {string} s texte
+ * @param {string} q mot cherché
+ * @returns {Array<[number, number]>} débuts et fins dans le texte d'origine
+ */
+function passages(s, q) {
+  const { t, pos } = plie(s), k = plie(q).t;
+  const out = [];
+  if (!k) return out;
+  for (let j = t.indexOf(k); j >= 0; j = t.indexOf(k, j + k.length)) out.push([pos[j], pos[j + k.length]]);
+  return out;
+}
+/** Texte échappé, avec le mot cherché surligné (<mark>). */
+function surligneHtml(s, q) {
+  const src = String(s ?? '');
+  let out = '', last = 0;
+  for (const [a, b] of passages(src, q)) { out += `${esc(src.slice(last, a))}<mark class="msg-mark">${esc(src.slice(a, b))}</mark>`; last = b; }
+  return out + esc(src.slice(last));
+}
+/** Extrait d'un message pour la liste des résultats : centré sur le mot trouvé quand il est loin dans le message. */
+function extrait(body, q) {
+  const s = String(body ?? '').replace(/\s+/g, ' ');
+  const i = passages(s, q)[0]?.[0] ?? 0;
+  return i > 34 ? `…${s.slice(s.lastIndexOf(' ', i - 20) + 1)}` : s;
+}
+
 /* ---------- Données ---------- */
 /** Charge l'annuaire des membres (pseudo, avatar, couleur) dans S.members. Lève une erreur si la RPC échoue. */
 async function loadMembers() {
@@ -179,6 +238,12 @@ function renderShell() {
     <div class="msg-app" id="msg-app" data-view="list">
       <section class="msg-side" aria-labelledby="msg-side-t">
         <h2 id="msg-side-t" class="visually-hidden">Conversations</h2>
+        <form class="msg-cherche" id="msg-cherche" role="search">
+          <label class="visually-hidden" for="msg-q">Chercher dans mes messages</label>
+          <span class="msg-cherche-ic" aria-hidden="true">${I.search}</span>
+          <input id="msg-q" type="search" placeholder="Chercher dans mes messages…" autocomplete="off" maxlength="80">
+          <button type="button" class="btn btn-ghost msg-icon-btn" id="msg-q-x" aria-label="Effacer la recherche" hidden>${I.close}</button>
+        </form>
         <ul class="msg-convs" id="msg-convs"></ul>
       </section>
       <section class="msg-main" id="msg-main" aria-labelledby="msg-thread-t">
@@ -192,6 +257,7 @@ function renderShell() {
     <p class="muted small msg-admin-note">${I.lock}<span>Les messages peuvent être consultés par l’admin. <a href="/pages/infos/legal.html#confidentialite">En savoir plus</a></span></p>`;
   $('#msg-new').addEventListener('click', openNewDialog);
   $('#msg-new-group').addEventListener('click', () => G.openGroupCreate({ members: S.members, me, onCreated: reopen }));
+  bindSearch();
 }
 /** Recharge la liste puis ouvre (ou rouvre) la conversation id : après création, ajout, renommage ou sourdine. */
 async function reopen(id) {
@@ -219,9 +285,18 @@ function convAvatar(c, size = 44) {
     ? `<span class="msg-av-wrap">${avatarHtml(m, size)}<span class="msg-av-badge" aria-hidden="true">${I.mask}</span></span>`
     : (c.other_id ? avatarPresence(avatarHtml(m, size), c.other_id) : avatarHtml(m, size));
 }
-/** Dessine la liste des conversations (aperçu, heure, non-lus, étiquette Secret Santa) et branche les clics. */
+/** Étiquette d'une conversation dans la liste : Secret Santa, assistance, groupe ou sortie (vide pour une conversation simple). */
+function convTagHtml(c) {
+  const side = santaSide(c);
+  return side === 'target' ? '<span class="msg-tag">Anonyme</span>' : side === 'santa' ? '<span class="msg-tag">Tu es son Santa</span>'
+    : isSupport(c) ? '<span class="msg-tag is-support">Assistance</span>'
+    : G.isGroup(c) ? `<span class="msg-tag is-group">${c.event_id ? 'Sortie' : 'Groupe'} · ${Number(c.members_count) || 0}${G.muteLabel(c.muted_until) ? ' · en sourdine' : ''}</span>` : '';
+}
+/** Dessine la liste des conversations (aperçu, heure, non-lus, étiquette Secret Santa) et branche les clics. Pendant une recherche : les résultats. */
 function renderConvs() {
   const ul = $('#msg-convs'); if (!ul) return;
+  if (S.search.q) { renderResults(ul); return; }
+  ul.removeAttribute('aria-label');
   if (!S.convs.length) {
     ul.innerHTML = `<li class="msg-convs-empty"><div class="empty">Aucune conversation pour l’instant.<br>Lance-toi avec « Nouveau message ».</div></li>`;
     return;
@@ -230,9 +305,7 @@ function renderConvs() {
     const side = santaSide(c);
     const unread = c.id === S.current ? 0 : (c.unread || 0);
     const preview = c.last_body ? `${c.last_mine ? 'Toi : ' : ''}${c.last_body}` : 'Pas encore de message';
-    const tag = side === 'target' ? '<span class="msg-tag">Anonyme</span>' : side === 'santa' ? '<span class="msg-tag">Tu es son Santa</span>'
-      : isSupport(c) ? '<span class="msg-tag is-support">Assistance</span>'
-      : G.isGroup(c) ? `<span class="msg-tag is-group">${c.event_id ? 'Sortie' : 'Groupe'} · ${Number(c.members_count) || 0}${G.muteLabel(c.muted_until) ? ' · en sourdine' : ''}</span>` : '';
+    const tag = convTagHtml(c);
     return `<li>
       <button type="button" class="msg-conv${side ? ' is-santa' : ''}${unread ? ' is-unread' : ''}" data-conv="${esc(c.id)}"${c.id === S.current ? ' aria-current="true"' : ''}>
         ${convAvatar(c)}
@@ -245,6 +318,87 @@ function renderConvs() {
     </li>`;
   }).join('');
   ul.querySelectorAll('[data-conv]').forEach((b) => b.addEventListener('click', () => openConv(b.dataset.conv)));
+}
+
+/* ---------- Recherche dans toutes mes conversations (hg_search_messages, migration 203) ---------- */
+let searchTimer = null;
+/** Branche le champ de recherche en haut de la liste : recherche 300 ms après la frappe, Échap ou la croix pour effacer. */
+function bindSearch() {
+  const input = $('#msg-q'), clear = $('#msg-q-x');
+  input.addEventListener('input', () => {
+    clear.hidden = !input.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runSearch, 300);
+  });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Escape' && input.value) { e.preventDefault(); clearSearch(); } });
+  $('#msg-cherche').addEventListener('submit', (e) => { e.preventDefault(); clearTimeout(searchTimer); runSearch(); });
+  clear.addEventListener('click', () => { clearSearch(); input.focus(); });
+}
+/** Vide le champ et revient à la liste des conversations. */
+function clearSearch() {
+  clearTimeout(searchTimer);
+  $('#msg-q').value = ''; $('#msg-q-x').hidden = true;
+  runSearch();
+}
+/** Lance la recherche du texte saisi. Seule la réponse de la dernière recherche lancée est affichée. */
+async function runSearch() {
+  const q = ($('#msg-q')?.value || '').trim();
+  const seq = ++S.search.seq;
+  Object.assign(S.search, { q, res: null, err: '', etat: !q ? '' : q.length < SEARCH_MIN ? 'court' : 'charge' });
+  renderConvs();
+  if (S.search.etat !== 'charge') return;
+  try {
+    const { data, error } = await sb.rpc('hg_search_messages', { p_q: q, p_conv: null });
+    if (error) throw error;
+    if (seq !== S.search.seq) return;
+    Object.assign(S.search, { res: Array.isArray(data) ? data : [], etat: '' });
+  } catch (e) {
+    if (seq !== S.search.seq) return;
+    Object.assign(S.search, { etat: 'erreur', err: errMsg(e) });
+  }
+  renderConvs();
+}
+/** Résultats de la recherche dans la colonne de gauche (à la place des conversations). Un clic ouvre le message à sa place. */
+function renderResults(ul) {
+  const { q, etat, res, err } = S.search;
+  ul.setAttribute('aria-label', 'Résultats de la recherche');
+  if (etat === 'court') { ul.innerHTML = `<li class="msg-res-info">Tape au moins ${SEARCH_MIN} lettres.</li>`; return; }
+  if (etat === 'charge') { ul.innerHTML = '<li class="msg-res-info" role="status"><span class="msg-spinner" aria-hidden="true"></span> Recherche…</li>'; return; }
+  if (etat === 'erreur') { ul.innerHTML = `<li class="msg-res-info" role="alert">La recherche n’a pas abouti : ${esc(err)}</li>`; return; }
+  if (!res?.length) {
+    ul.innerHTML = `<li class="msg-res-info" role="status">Aucun message ne contient « ${esc(q)} ».<br><span class="small muted">La recherche couvre tes conversations, tes groupes et l’assistance.</span></li>`;
+    return;
+  }
+  const n = res.length;
+  ul.innerHTML = `<li class="msg-res-info" role="status">${n === 1 ? '1 message trouvé' : n >= 50 ? '50 messages trouvés, les plus récents' : `${n} messages trouvés`}</li>`
+    + res.map((r) => {
+      const c = convOf(r.conversation_id) || { id: r.conversation_id, kind: r.conv_kind, title: r.conv_title };
+      return `<li>
+        <button type="button" class="msg-conv msg-res${santaSide(c) ? ' is-santa' : ''}" data-res-conv="${esc(c.id)}" data-res-msg="${esc(r.message_id)}">
+          ${convAvatar(c)}
+          <span class="msg-conv-body">
+            <span class="msg-conv-top"><span class="msg-conv-title">${esc(c.title)}</span><time class="msg-conv-time" datetime="${esc(r.created_at)}">${esc(relTime(r.created_at))}</time></span>
+            <span class="msg-res-txt"><b>${esc(r.mine ? 'Toi' : r.sender_label)} :</b> ${surligneHtml(extrait(r.body, q), q)}</span>
+            ${convTagHtml(c)}
+          </span>
+        </button>
+      </li>`;
+    }).join('');
+  ul.querySelectorAll('[data-res-conv]').forEach((b) => b.addEventListener('click', () => openFound(b.dataset.resConv, Number(b.dataset.resMsg))));
+}
+/** Ouvre la conversation d'un résultat et amène le message trouvé au milieu du fil, encadré. */
+async function openFound(conv, msgId) {
+  await openConv(conv, { focus: false });
+  if (S.current !== conv) return;
+  showRow($(`#msg-thread .msg-row[data-id="${msgId}"]`));
+}
+/** Fait défiler le fil jusqu'à une bulle (un peu sous le haut) et l'encadre ; retire l'encadré précédent. */
+function showRow(row) {
+  const box = $('#msg-thread'); if (!box) return;
+  box.querySelectorAll('.msg-row.is-trouve').forEach((r) => r.classList.remove('is-trouve'));
+  if (!row) return;
+  row.classList.add('is-trouve');
+  box.scrollTop += row.getBoundingClientRect().top - box.getBoundingClientRect().top - 80;
 }
 
 /* ---------- Fil ---------- */
@@ -268,6 +422,7 @@ function threadHeadHtml(c) {
         <h2 id="msg-thread-t" class="msg-thread-title">${esc(c.title)}</h2>
         <p class="msg-thread-sub">${esc(sub)}</p>
       </div>
+      <button class="btn btn-ghost msg-icon-btn" type="button" id="msg-find" aria-label="Chercher dans cette conversation" aria-expanded="false" aria-controls="msg-cherche-fil">${I.search}</button>
       ${G.isGroup(c) ? `<button class="btn btn-ghost msg-icon-btn" type="button" id="msg-group-info" aria-label="Membres et réglages du groupe">${I.users}</button>` : ''}
     </header>`;
 }
@@ -298,6 +453,8 @@ function renderThreadShell(c) {
       </div>
     </form>`;
   $('#msg-back').addEventListener('click', backToList);
+  S.find = null;
+  $('#msg-find').addEventListener('click', () => ($('#msg-cherche-fil') ? closeFind() : openFind()));
   $('#msg-group-info')?.addEventListener('click', () => G.openGroupPanel(c.id, { members: S.members, me,
     onChange: () => reopen(c.id), onLeft: async () => { backToList(); await reopen(null); } }));
   if (isSupport(c)) loadSupportSummary(c.id);
@@ -379,9 +536,15 @@ function bubbleHtml(m, prev, c) {
       <time class="msg-time" datetime="${esc(m.created_at)}" title="${esc(fullFmt.format(d))}">${esc(timeFmt.format(d))}</time></div>`;
   // Message d'un autre membre (sauf conversation d'assistance) : menu « … » avec « Signaler »
   const canReport = !m.mine && !hidden && c?.kind !== 'support';
+  // Réactions (sauf assistance et message masqué) : bouton au survol (bureau), appui long sur la bulle (téléphone)
+  const add = canReact(c) && !hidden
+    ? '<button type="button" class="msg-react-add" aria-label="Réagir à ce message" aria-haspopup="true" aria-expanded="false">' + I.smile + '</button>' : '';
+  const line = canReport ? `<div class="msg-line">${bubble}${add}${reportButtonHtml('message', m.id, 'message')}</div>`
+    : add ? `<div class="msg-line">${m.mine ? add + bubble : bubble + add}</div>` : bubble;
   return `<div class="msg-row ${m.mine ? 'is-mine' : 'is-other'}${isSanta ? ' is-santa' : ''}${sameGroup ? ' is-cont' : ''}${who ? ' is-grp' : ''}${hidden ? ' is-hidden' : ''}" data-id="${esc(m.id)}">
     ${who ? `<span class="msg-row-av" aria-hidden="true">${sameGroup ? '' : avatarHtml(who, 28)}</span><div class="msg-row-col">${glabel}` : label}
-    ${canReport ? `<div class="msg-line">${bubble}${reportButtonHtml('message', m.id, 'message')}</div>` : bubble}
+    ${line}
+    ${add ? `<div class="msg-reacts">${reactsHtml(m.id)}</div>` : ''}
     ${hidden && m.mine ? '<span class="small muted msg-hidden-note">Masqué par le Staff : l’autre personne ne le voit plus.</span>' : ''}
     ${who ? '</div>' : ''}
   </div>`;
@@ -444,6 +607,255 @@ function scrollBottom(instant = false) {
   box.scrollTo({ top: box.scrollHeight, behavior: instant ? 'auto' : 'smooth' });
 }
 
+/* ---------- Réactions (migration 204) ----------
+   Lues par hg_message_reactions_get (membres de la conversation seulement ; le Santa s'affiche « Ton Santa »),
+   posées ou retirées par hg_message_react. Aucune notification, aucun non-lu, la conversation ne remonte pas. */
+const listeFr = new Intl.ListFormat('fr', { type: 'conjunction' });
+/** Vrai si l'on peut réagir dans cette conversation (jamais dans l'assistance). */
+function canReact(c) { return !!c && !isSupport(c); }
+/** Qui a mis une réaction, en toutes lettres : « Bruno, Léo et toi ». */
+function quiTexte(x) { return listeFr.format(x.mine ? [...x.qui, 'toi'] : x.qui); }
+/**
+ * Puces des réactions d'un message, dans l'ordre de la palette : émoji, nombre, et « j'ai réagi » (aria-pressed).
+ * @param {number|string} id identifiant du message
+ * @returns {string} HTML
+ */
+function reactsHtml(id) {
+  const e = S.reacts.get(Number(id)); if (!e) return '';
+  return REACTIONS.filter((emo) => e.has(emo)).map((emo) => {
+    const x = e.get(emo), n = x.qui.length + (x.mine ? 1 : 0);
+    return `<button type="button" class="msg-react" data-react="${esc(emo)}" aria-pressed="${x.mine}" aria-label="${esc(`${emo} : ${quiTexte(x)}. ${x.mine ? 'Retirer ta réaction' : 'Réagir aussi'}`)}">${esc(emo)}<span aria-hidden="true">${n}</span></button>`;
+  }).join('');
+}
+/**
+ * Lit les réactions d'une conversation dans S.reacts. Rien pour l'assistance.
+ * @param {string} conv identifiant de la conversation
+ * @returns {Promise<boolean>} true si elles ont changé depuis la dernière lecture
+ */
+async function loadReactions(conv) {
+  if (!canReact(convOf(conv))) return false;
+  const { data, error } = await sb.rpc('hg_message_reactions_get', { p_conv: conv });
+  if (error) throw error;
+  const rows = Array.isArray(data) ? data : [];
+  const key = JSON.stringify(rows);
+  if (S.current !== conv || key === S.reactsKey) return false;
+  const map = new Map();
+  for (const r of rows) {
+    const id = Number(r.message_id);
+    if (!map.has(id)) map.set(id, new Map());
+    const e = map.get(id);
+    if (!e.has(r.emoji)) e.set(r.emoji, { mine: false, qui: [] });
+    if (r.mine) e.get(r.emoji).mine = true; else e.get(r.emoji).qui.push(r.label);
+  }
+  S.reacts = map; S.reactsKey = key;
+  return true;
+}
+/** Relit les réactions de la conversation ouverte (avec l'actualisation du fil) et redessine les puces si elles ont changé. */
+async function pollReactions() {
+  const conv = S.current;
+  if (!conv || S.loadingThread || S.reactBusy) return;
+  try { if (await loadReactions(conv) && !S.reactBusy) paintReactions(); } catch (e) { console.warn('[messages] réactions', e); }
+}
+/** Redessine les puces de réactions d'une bulle, ou de tout le fil. */
+function paintReactions(row = null) {
+  const box = $('#msg-thread'); if (!box) return;
+  for (const r of row ? [row] : box.querySelectorAll('.msg-row')) {
+    const el = r.querySelector('.msg-reacts');
+    if (el) el.innerHTML = reactsHtml(r.dataset.id);
+  }
+}
+/** Pose ou retire localement ma réaction emo sur le message id. */
+function basculeLocal(id, emo) {
+  const e = S.reacts.get(id) || new Map();
+  const x = e.get(emo) || { mine: false, qui: [] };
+  x.mine = !x.mine;
+  if (x.mine || x.qui.length) e.set(emo, x); else e.delete(emo);
+  if (e.size) S.reacts.set(id, e); else S.reacts.delete(id);
+}
+/**
+ * Pose ou retire ma réaction (affichée tout de suite, annulée si le serveur refuse), puis remet le focus sur la puce.
+ * @param {HTMLElement} row la bulle (.msg-row)
+ * @param {string} emo l'émoji
+ * @param {HTMLElement|null} [fallback] élément à focaliser si la puce a disparu
+ */
+async function react(row, emo, fallback = null) {
+  const conv = S.current, id = Number(row?.dataset.id);
+  if (!conv || !id || !REACTIONS.includes(emo)) return;
+  const refocus = () => (row.querySelector(`.msg-react[data-react="${emo}"]`) || fallback)?.focus();
+  basculeLocal(id, emo); paintReactions(row); refocus();
+  S.reactBusy = (S.reactBusy || 0) + 1;
+  try {
+    const { error } = await sb.rpc('hg_message_react', { p_message: id, p_emoji: emo });
+    if (error) throw error;
+    S.reactsKey = ''; // la prochaine lecture redessine avec l'état du serveur
+  } catch (e) {
+    if (S.current === conv) { basculeLocal(id, emo); paintReactions(row); }
+    toast(`Réaction impossible : ${errMsg(e)}`, 'error');
+  } finally { S.reactBusy--; }
+}
+/**
+ * Ouvre la palette des six réactions au-dessus de la bulle (en dessous s'il n'y a pas la place).
+ * @param {HTMLElement} row la bulle (.msg-row)
+ * @param {HTMLElement|null} [opener] bouton qui l'a ouverte (reçoit le focus à la fermeture)
+ */
+function openPicker(row, opener = null) {
+  closePicker();
+  const e = S.reacts.get(Number(row.dataset.id));
+  const p = document.createElement('div');
+  p.className = 'msg-react-pick'; p.setAttribute('role', 'group'); p.setAttribute('aria-label', 'Choisir une réaction');
+  p.innerHTML = REACTIONS.map((emo) => `<button type="button" data-pick="${esc(emo)}" aria-pressed="${!!e?.get(emo)?.mine}" aria-label="${esc(emo)}">${esc(emo)}</button>`).join('');
+  row.classList.add('is-pick'); row.append(p);
+  const box = $('#msg-thread');
+  if (box && row.getBoundingClientRect().top - box.getBoundingClientRect().top < 64) p.classList.add('is-bas');
+  opener?.setAttribute('aria-expanded', 'true');
+  S.picker = { row, p, opener };
+  p.querySelector('button').focus();
+}
+/** Ferme la palette ouverte ; refocus : rend le focus au bouton qui l'a ouverte. */
+function closePicker(refocus = false) {
+  const k = S.picker; if (!k) return;
+  S.picker = null;
+  k.p.remove(); k.row.classList.remove('is-pick');
+  k.opener?.setAttribute('aria-expanded', 'false');
+  if (refocus) k.opener?.focus();
+}
+/** Bulle « qui a réagi » sous une puce (survol, focus, ou appui long au téléphone). */
+function showQui(chip) {
+  hideQui();
+  const row = chip.closest('.msg-row'), x = S.reacts.get(Number(row?.dataset.id))?.get(chip.dataset.react);
+  if (!x) return;
+  const qui = quiTexte(x);
+  const t = document.createElement('div');
+  t.className = 'msg-react-qui'; t.setAttribute('role', 'status');
+  t.innerHTML = `<b>${esc(chip.dataset.react)}</b> ${esc(qui.charAt(0).toUpperCase() + qui.slice(1))}`;
+  chip.parentElement.append(t);
+}
+/** Retire la bulle « qui a réagi ». */
+function hideQui() { $('#msg-thread .msg-react-qui')?.remove(); }
+/** Écouteurs des réactions, posés une fois sur la page (le fil est redessiné souvent). */
+function bindReactions() {
+  let press = null; // appui long en cours (téléphone)
+  app.addEventListener('pointerdown', (e) => {
+    clearTimeout(press?.t); press = null;
+    if (e.pointerType === 'mouse') return;
+    const chip = e.target.closest('.msg-react'), bub = e.target.closest('.msg-bubble');
+    const row = (chip || bub)?.closest('.msg-row');
+    if (!row || (!chip && !row.querySelector('.msg-react-add'))) return;
+    const p = { x: e.clientX, y: e.clientY, fired: false };
+    p.t = setTimeout(() => {
+      p.fired = true;
+      if (chip) { showQui(chip); setTimeout(hideQui, 4000); } else openPicker(row);
+    }, LONG_PRESS_MS);
+    press = p;
+  });
+  app.addEventListener('pointermove', (e) => { if (press && !press.fired && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) clearTimeout(press.t); });
+  for (const ev of ['pointerup', 'pointercancel']) app.addEventListener(ev, () => { if (press && !press.fired) clearTimeout(press.t); });
+  app.addEventListener('contextmenu', (e) => { if (press?.fired) e.preventDefault(); });
+  app.addEventListener('click', (e) => {
+    if (press?.fired) { press = null; e.preventDefault(); return; } // relâchement d'un appui long
+    const inPick = e.target.closest('.msg-react-pick'), add = e.target.closest('.msg-react-add');
+    if (S.picker && !inPick && add !== S.picker.opener) closePicker();
+    if (add) { const row = add.closest('.msg-row'); if (S.picker?.row === row) closePicker(true); else openPicker(row, add); return; }
+    const pick = e.target.closest('[data-pick]');
+    if (pick && S.picker) { const { row, opener } = S.picker; closePicker(); react(row, pick.dataset.pick, opener); return; }
+    const chip = e.target.closest('.msg-react');
+    if (chip) react(chip.closest('.msg-row'), chip.dataset.react);
+  });
+  app.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.picker) { e.preventDefault(); closePicker(true); } });
+  app.addEventListener('mouseover', (e) => { const chip = e.target.closest('.msg-react'); if (chip && !chip.parentElement.querySelector('.msg-react-qui')) showQui(chip); });
+  app.addEventListener('mouseout', (e) => { const chip = e.target.closest('.msg-react'); if (chip && !chip.contains(e.relatedTarget)) hideQui(); });
+  app.addEventListener('focusin', (e) => { if (e.target.matches?.('.msg-react')) showQui(e.target); });
+  app.addEventListener('focusout', (e) => { if (e.target.matches?.('.msg-react')) hideQui(); });
+}
+
+/* ---------- Loupe : chercher dans la conversation ouverte ----------
+   Tous les messages de la conversation sont déjà chargés : la recherche se fait sur place, sans accents ni majuscules.
+   Mêmes règles que la recherche générale : 3 lettres au moins, messages masqués et messages système exclus. */
+let findTimer = null;
+/** Ouvre la barre de recherche sous l'en-tête du fil. */
+function openFind() {
+  const head = $('.msg-thread-head'); if (!head || $('#msg-cherche-fil')) return;
+  head.insertAdjacentHTML('afterend', `
+    <form class="msg-cherche-fil" id="msg-cherche-fil" role="search">
+      <label class="visually-hidden" for="msg-q-fil">Chercher dans cette conversation</label>
+      <input id="msg-q-fil" type="search" placeholder="Chercher dans cette conversation…" autocomplete="off" maxlength="80">
+      <span class="msg-cherche-nb" id="msg-cherche-nb" role="status"></span>
+      <button type="button" class="btn btn-ghost msg-icon-btn" id="msg-find-prev" aria-label="Résultat précédent" disabled>${I.up}</button>
+      <button type="button" class="btn btn-ghost msg-icon-btn" id="msg-find-next" aria-label="Résultat suivant" disabled>${I.down}</button>
+      <button type="button" class="btn btn-ghost msg-icon-btn" id="msg-find-close" aria-label="Fermer la recherche">${I.close}</button>
+    </form>`);
+  $('#msg-find').setAttribute('aria-expanded', 'true');
+  const input = $('#msg-q-fil');
+  input.addEventListener('input', () => { clearTimeout(findTimer); findTimer = setTimeout(runFind, 200); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); closeFind(); }
+    else if (e.key === 'Enter') { e.preventDefault(); clearTimeout(findTimer); if (!S.find) runFind(); else stepFind(e.shiftKey ? 1 : -1); }
+  });
+  $('#msg-cherche-fil').addEventListener('submit', (e) => e.preventDefault());
+  $('#msg-find-prev').addEventListener('click', () => stepFind(-1));
+  $('#msg-find-next').addEventListener('click', () => stepFind(1));
+  $('#msg-find-close').addEventListener('click', closeFind);
+  input.focus();
+}
+/** Ferme la barre, retire le surlignage, et rend le focus à la loupe. */
+function closeFind() {
+  clearTimeout(findTimer);
+  clearMarks();
+  S.find = null;
+  $('#msg-cherche-fil')?.remove();
+  const b = $('#msg-find'); b?.setAttribute('aria-expanded', 'false'); b?.focus();
+}
+/** Cherche le texte saisi dans les messages du fil, les surligne, et va au plus récent. */
+function runFind() {
+  clearMarks();
+  const q = ($('#msg-q-fil')?.value || '').trim();
+  if (q.length < SEARCH_MIN) { S.find = null; majFind(); return; }
+  const ids = S.msgs.filter((m) => !m.system && !S.hidden?.has(Number(m.id)) && passages(m.body, q).length).map((m) => Number(m.id));
+  const box = $('#msg-thread');
+  for (const id of ids) { const t = box?.querySelector(`.msg-row[data-id="${id}"] .msg-text`); if (t) marque(t, q); }
+  S.find = { ids, i: ids.length - 1 };
+  majFind();
+}
+/** Met à jour le compteur (« 2 sur 5 »), les flèches, et amène le résultat courant à l'écran. */
+function majFind() {
+  const f = S.find, nb = $('#msg-cherche-nb'); if (!nb) return;
+  nb.textContent = !f ? '' : f.ids.length ? `${f.i + 1} sur ${f.ids.length}` : 'Aucun';
+  $('#msg-find-prev').disabled = !f || f.i <= 0;
+  $('#msg-find-next').disabled = !f || f.i >= f.ids.length - 1;
+  showRow(f?.ids.length ? $(`#msg-thread .msg-row[data-id="${f.ids[f.i]}"]`) : null);
+}
+/** Résultat précédent (-1, plus ancien) ou suivant (+1, plus récent). */
+function stepFind(d) {
+  const f = S.find; if (!f?.ids.length) return;
+  f.i = Math.min(f.ids.length - 1, Math.max(0, f.i + d));
+  majFind();
+}
+/** Surligne le mot cherché dans les textes d'un élément (sans toucher aux liens ni à la mise en forme). */
+function marque(el, q) {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    const s = node.textContent, ps = passages(s, q);
+    if (!ps.length) continue;
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    for (const [a, b] of ps) {
+      frag.append(s.slice(last, a));
+      const mk = document.createElement('mark'); mk.className = 'msg-mark'; mk.textContent = s.slice(a, b);
+      frag.append(mk); last = b;
+    }
+    frag.append(s.slice(last));
+    node.replaceWith(frag);
+  }
+}
+/** Retire le surlignage et l'encadré du fil. */
+function clearMarks() {
+  const box = $('#msg-thread'); if (!box) return;
+  box.querySelectorAll('mark.msg-mark').forEach((mk) => { const p = mk.parentNode; mk.replaceWith(mk.textContent); p.normalize(); });
+  box.querySelectorAll('.msg-row.is-trouve').forEach((r) => r.classList.remove('is-trouve'));
+}
+
 /* ---------- Navigation ---------- */
 /**
  * Affiche la liste ou le fil. Sur mobile, le fil passe en plein écran (classe msg-fullscreen sur body).
@@ -472,7 +884,8 @@ async function openConv(id, { focus = true } = {}) {
     c = convOf(id);
     if (!c) { toast('Conversation introuvable.', 'error'); setUrl(null); return; }
   }
-  S.current = id; S.msgs = []; S.lastId = 0;
+  closePicker();
+  S.current = id; S.msgs = []; S.lastId = 0; S.reacts = new Map(); S.reactsKey = '';
   setUrl(id);
   setView('thread');
   renderConvs();
@@ -480,7 +893,8 @@ async function openConv(id, { focus = true } = {}) {
   S.loadingThread = true;
   try {
     const [rows, hid] = await Promise.all([fetchMessages(id, 0),
-      sb.rpc('hg_conv_hidden', { p_conv: id }).then((r) => r.data || [], () => [])]); // A6 : messages masqués
+      sb.rpc('hg_conv_hidden', { p_conv: id }).then((r) => r.data || [], () => []), // A6 : messages masqués
+      loadReactions(id).catch((e) => console.warn('[messages] réactions', e))]);
     if (S.current !== id) return;
     S.hidden = new Set((Array.isArray(hid) ? hid : []).map(Number));
     S.msgs = rows;
@@ -496,7 +910,8 @@ async function openConv(id, { focus = true } = {}) {
 }
 /** Quitte le fil : arrête les actualisations et le temps réel de cette conversation, puis revient à la liste. */
 function backToList() {
-  S.current = null; S.msgs = []; S.lastId = 0;
+  closePicker();
+  S.current = null; S.msgs = []; S.lastId = 0; S.reacts = new Map(); S.reactsKey = ''; S.find = null;
   stopThreadPolling();
   unsubscribeThreadRt();
   setUrl(null);
@@ -586,7 +1001,7 @@ async function pollList() {
 function startThreadPolling() {
   stopThreadPolling();
   const ms = RT.threadOk ? POLL_SAFETY_MS : POLL_THREAD_MS;
-  threadTimer = setInterval(() => { if (!document.hidden) pollThread(); }, ms);
+  threadTimer = setInterval(() => { if (!document.hidden) { pollThread(); pollReactions(); } }, ms);
 }
 /** Arrête l'actualisation du fil. */
 function stopThreadPolling() { clearInterval(threadTimer); threadTimer = null; }
@@ -640,6 +1055,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
   pollList();
   pollThread();
+  pollReactions();
 });
 
 /* ---------- Nouveau message ---------- */
@@ -696,6 +1112,7 @@ try {
   await Promise.all([loadMembers(), loadConvs()]);
   renderShell();
   renderConvs();
+  bindReactions();
   const params = new URLSearchParams(location.search);
   const to = params.get('to'), c = params.get('c'), ev = params.get('event');
   const UUID = /^[0-9a-f-]{36}$/i;

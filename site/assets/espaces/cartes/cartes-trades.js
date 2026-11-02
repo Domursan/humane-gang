@@ -1,8 +1,8 @@
 // ===== Cartes à collectionner — échanges entre membres =====
 // Chargé par cartes.js : import('./cartes-trades.js').then((m) => m.mountTrades(el, ctx)).
 // ctx = { me: profil courant (id, pseudo…), refresh: async () => {}, expose: (api) => {} } ; refresh recharge solde et collection côté page.
-// expose reçoit { offer({ to, want }), onglet(id) } : ouvre l'éditeur d'offre avec un membre (utilisé par la collection d'un membre, cartes.js)
-// ou un onglet du panneau (#echanges/tableau, lien des alertes de la liste de souhaits).
+// expose reçoit { offer({ to, give, want }), onglet(id) } : ouvre l'éditeur d'offre avec un membre, exemplaires pré-cochés (collection d'un membre, cartes.js)
+// ou un onglet du panneau (#echanges/tableau, lien des alertes de la liste de souhaits ; #echanges/encheres[/<id>], idée 33).
 // Affichage des cartes : cartes-ui.js (cardHtml). Styles : cartes-trades.css (+ cartes-card.css).
 // Exporte : mountTrades(el, ctx), la seule fonction appelée par cartes.js. Toute la logique est dans cette fonction :
 // les données (S, E) sont partagées par les fonctions imbriquées et réinitialisées à chaque ouverture de la page.
@@ -24,7 +24,16 @@ const TABS = [
   { id: 'correspondances', label: 'Correspondances' },
   { id: 'historique', label: 'Historique' },
   { id: 'tableau', label: 'Tableau' }, // « Je cherche / Je donne » (idée C12, cartes-tableau.js)
+  { id: 'encheres', label: 'Enchères' }, // enchères entre membres (idée 33, cartes-encheres.js)
 ];
+// Adresse d'un onglet des Échanges : #echanges/tableau, #echanges/encheres, #echanges/encheres/<enchère> (lien des notifications).
+const ENCH_RE = /^#echanges\/encheres(?:\/([0-9a-f-]{36}))?$/i;
+/** Onglet demandé par l'adresse (null : aucun) et enchère à ouvrir. */
+function ongletDeAdresse(hash) {
+  if (hash === '#echanges/tableau') return { tab: 'tableau', id: null };
+  const m = ENCH_RE.exec(hash);
+  return m ? { tab: 'encheres', id: m[1] || null } : null;
+}
 // Libellés des statuts d'une offre (colonne status de hg_card_trades).
 const STATUS_LABEL = { proposee: 'En attente', acceptee: 'Acceptée', refusee: 'Refusée', annulee: 'Annulée', remplacee: 'Remplacée', expiree: 'Expirée' };
 const PAGE = 1000;   // pagination PostgREST (plafond par défaut de la base)
@@ -93,7 +102,7 @@ async function fetchAll(build) {
  * @param {HTMLElement} el élément hôte (vidé et remplacé)
  * @param {{me?: object, refresh?: () => Promise<void>, expose?: (api: object) => void}} [ctx]
  *   me : profil courant ; refresh : recharge solde et collection côté page ;
- *   expose : reçoit { offer({to, want}) } pour ouvrir l'éditeur depuis la collection d'un membre.
+ *   expose : reçoit { offer({to, give, want}) } pour ouvrir l'éditeur depuis la collection d'un membre.
  * @returns {Promise<void>}
  */
 export async function mountTrades(el, ctx = {}) {
@@ -115,12 +124,14 @@ export async function mountTrades(el, ctx = {}) {
      E : état de l'éditeur d'offre (destinataire, cartes choisies, filtres, aperçu...). */
   const S = {
     me: null, members: new Map(), cards: new Map(), copies: new Map(), trades: [], items: new Map(),
-    wish: new Map(), balance: 0, tab: location.hash === '#echanges/tableau' ? 'tableau' : 'recues', pickWho: '', setNames: new Map(), setTotal: new Map(),
+    wish: new Map(), balance: 0, tab: ongletDeAdresse(location.hash)?.tab || 'recues', pickWho: '', setNames: new Map(), setTotal: new Map(),
+    enchereId: ongletDeAdresse(location.hash)?.id || null, nbEncheres: null, // onglet Enchères : enchère à ouvrir, compteur de l'onglet
     peers: new Set(), matchesP: null,
     sugg: [], suggAll: false, // bloc « Échanges possibles » : membres suggérés et affichage « Voir plus »
   };
   const E = { to: '', parent: null, give: new Set(), want: new Set(), giveP: 0, wantP: 0, message: '', busy: false,
     filt: { give: { q: '', set: '', rar: '', dup: false, lim: 0 }, want: { q: '', set: '', rar: '', dup: false, lim: 0 } }, peek: null,
+    tete: { give: new Set(), want: new Set() }, // cartes cochées à l'ouverture : en tête de leur colonne, visibles sans chercher
     lots: {} }; // lots : chargement anticipé de chaque colonne (lotsAnticipes), créé à chaque ouverture de l'éditeur
 
   /* ---------- Données ----------
@@ -276,7 +287,7 @@ export async function mountTrades(el, ctx = {}) {
     const n = incoming().length;
     tabsEl.innerHTML = TABS.map((t) => {
       const sel = S.tab === t.id;
-      const label = t.id === 'recues' && n ? `${t.label} (${n})` : t.label;
+      const label = t.id === 'recues' && n ? `${t.label} (${n})` : t.id === 'encheres' && S.nbEncheres ? `${t.label} (${S.nbEncheres})` : t.label;
       return `<button class="trd-tab" type="button" role="tab" id="trd-tab-${t.id}" data-tab="${t.id}"
         aria-selected="${sel}" aria-controls="trd-panel" tabindex="${sel ? 0 : -1}">${esc(label)}</button>`;
     }).join('');
@@ -475,6 +486,15 @@ export async function mountTrades(el, ctx = {}) {
   function renderPanel() {
     renderTabs();
     panel.setAttribute('aria-labelledby', `trd-tab-${S.tab}`);
+    root.querySelector('#trd-sugg').hidden = S.tab === 'encheres'; // les échanges possibles ne concernent pas les enchères
+    if (S.tab === 'encheres') { // enchères entre membres (idée 33) : module chargé à la demande
+      const id = S.enchereId;
+      S.enchereId = null;
+      import('./cartes-encheres.js')
+        .then((m) => { if (S.tab === 'encheres') m.mountEncheres(panel, { id, onCount: compteEncheres, refresh: ctx.refresh }); })
+        .catch(() => { panel.innerHTML = emptyBox('Les enchères ne sont pas disponibles pour le moment.'); });
+      return;
+    }
     if (S.tab === 'correspondances') {
       const tab = S.tab;
       const release = holdHeight(panel); // le texte d'attente garde la hauteur : la page ne remonte pas
@@ -496,6 +516,13 @@ export async function mountTrades(el, ctx = {}) {
   }
   /** Redessine le panneau en gardant la place de l'utilisateur. */
   const render = () => keepPlace(renderPanel); // le re-rendu garde la place de l'utilisateur
+  /** Compteur de l'onglet « Enchères » : seul le libellé change (le focus reste sur l'onglet). */
+  function compteEncheres(n) {
+    if (n == null) return;
+    S.nbEncheres = n;
+    const b = tabsEl.querySelector('[data-tab="encheres"]');
+    if (b) b.textContent = n ? `Enchères (${n})` : 'Enchères';
+  }
 
   /* ---------- Échanges possibles (bloc au-dessus des onglets) ----------
      Deux listes : « Ils ont une carte de ta liste » (ils ont en double une carte que je souhaite) et
@@ -607,8 +634,10 @@ export async function mountTrades(el, ctx = {}) {
   const freshFilter = () => ({ q: '', set: '', rar: '', dup: false, lim: 0 });
   /** Propriétaire des cartes d'un côté : moi pour « give », le destinataire pour « want ». */
   const sideOwner = (side) => (side === 'give' ? S.me.id : E.to);
-  /** Exemplaires d'un côté : disponibles, plus ceux déjà dans l'offre (toujours visibles, même filtrés). */
-  const sideCopies = (side) => withSelected(side === 'give' ? tradables(S.me.id) : tradables(E.to, E.parent), E[side]);
+  /** Exemplaires d'un côté : disponibles, plus ceux déjà dans l'offre (toujours visibles, même filtrés), ceux cochés à l'ouverture en tête. */
+  const sideCopies = (side) => enTete(withSelected(side === 'give' ? tradables(S.me.id) : tradables(E.to, E.parent), E[side]), E.tete[side]);
+  /** Place en tête les exemplaires de `tete` (ordre gardé) ; une carte cochée ensuite garde sa place, la grille ne saute pas. */
+  const enTete = (list, tete) => (tete.size ? [...list.filter((c) => tete.has(String(c.id))), ...list.filter((c) => !tete.has(String(c.id)))] : list);
   /** Ajoute à la liste de base les exemplaires déjà choisis qui n'y figurent pas, puis trie. */
   const withSelected = (base, set) => [...base, ...[...set].map(copyOf).filter((c) => c && !base.includes(c))].sort(byCard);
   /** Nombre d'exemplaires possédés par un membre, par carte (exemplaires recyclés exclus). */
@@ -644,6 +673,7 @@ export async function mountTrades(el, ctx = {}) {
     Object.assign(E, {
       to, parent, give: new Set(give.map(String)), want: new Set(want.map(String)), giveP, wantP, message, busy: false,
       filt: { give: freshFilter(), want: freshFilter() }, peek: null,
+      tete: { give: new Set(give.map(String)), want: new Set(want.map(String)) },
     });
     renderEditor();
     dlg.showModal();
@@ -1121,11 +1151,12 @@ export async function mountTrades(el, ctx = {}) {
       await load();
       render();
       refreshSuggest();
+      if (S.tab !== 'encheres') import('./cartes-encheres.js').then((m) => m.compter()).then(compteEncheres).catch(() => {}); // compteur de l'onglet
     } catch (e) {
       panel.innerHTML = `<div class="empty">Impossible de charger les échanges : ${esc(errMsg(e))}
         <div class="btn-row trd-retry"><button class="btn btn-ghost" type="button" data-act="retry">Réessayer</button></div></div>`;
     }
   }
-  ctx.expose?.({ offer: (opts) => openEditor(opts), onglet: (id) => { S.tab = id; render(); } });
+  ctx.expose?.({ offer: (opts) => openEditor(opts), onglet: (id, enchere = null) => { S.tab = id; S.enchereId = enchere; render(); } });
   await start();
 }

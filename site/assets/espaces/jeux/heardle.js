@@ -15,17 +15,27 @@ import { motionAllowed } from '../../commun/core.js';
 import { sonJour, pointsDeGain, rejoue, secouer, finDePartie } from './effets-jour.js';
 import { loadCss, guessFormHtml, bindGuess, boardHtml, shareText, copyText } from './devine.js';
 import { boutonReponses } from '../../commun/core/admin-reponses.js';
-import { monterHistorique } from './heardle-historique.js';
+import { monterHistorique, relireHistorique } from './heardle-historique.js';
+import { serieHtml, jokerHtml } from './serie-jeux.js'; // série commune et joker payant (migrations 206 et 207)
+// Manches passées pour l'honneur (idée 13, migration 213) : #heardle-AAAA-MM-JJ (bouton « Jouer » de l'historique),
+// sans Paillettes, classement ni série.
+import { jourVoulu, sousTitreHonneur, retourHtml, modeHonneur, suivreJour } from './archives-jeux.js';
 
 const STEPS = [1, 2, 4, 7, 11, 16];
 const dateLong = new Intl.DateTimeFormat('fr-CH', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Zurich' });
 let P = null, C = null;
-const S = { st: null, busy: false, err: null, player: null, playerP: null, ready: false, playing: false, pos: 0, timer: null, forVideo: null, propose: false, vol: 70, muted: false, attendFin: false };
+// jour : manche passée jouée pour l'honneur (null = manche du jour).
+const S = { jour: null, st: null, busy: false, err: null, player: null, playerP: null, ready: false, playing: false, pos: 0, timer: null, forVideo: null, propose: false, vol: 70, muted: false, attendFin: false };
 const VOL_KEY = 'hg_heardle_volume';
 
 /** Monte l'onglet. */
 export async function mount(panel, ctx) {
   P = panel; C = ctx;
+  S.jour = jourVoulu(ctx.sub);
+  suivreJour(panel, ctx, () => S.jour, (j) => {
+    S.jour = j; S.busy = false; S.attendFin = false;
+    load().then(() => { if (j) P.scrollIntoView?.({ block: 'start' }); });
+  });
   S.vol = lireVolume();
   loadCss('jeux-devine');
   panel.innerHTML = '<p class="muted">Chargement du Heardle…</p>';
@@ -59,9 +69,13 @@ export function unmount() { stop(); }
 
 /** Charge l'état du jour. */
 async function load() {
+  const jour = S.jour;
   try {
-    const { data, error } = await C.sb.rpc('hg_heardle_state');
+    const { data, error } = jour
+      ? await C.sb.rpc('hg_jeux_honneur_etat', { p_jeu: 'heardle', p_day: jour })
+      : await C.sb.rpc('hg_heardle_state');
     if (error) throw error;
+    if (S.jour !== jour) return;
     S.st = data; S.err = null;
   } catch (e) { S.err = e?.message || String(e); }
   render();
@@ -124,6 +138,8 @@ function ensurePlayer() {
  */
 async function videoBloquee(code) {
   stop();
+  // Manche passée : rien à signaler au serveur (la manche du jour n'est pas concernée).
+  if (S.jour) { C.toast('Cette vidéo ne se lit plus : impossible de rejouer cette manche.', 'error'); return; }
   if (![100, 101, 150, 153].includes(Number(code))) { C.toast('Cette vidéo ne se lit pas sur cet appareil. Réessaie un peu plus tard.', 'error'); return; }
   try {
     const { data, error } = await C.sb.rpc('hg_heardle_signaler', { p_code: Number(code) });
@@ -233,13 +249,14 @@ function proposeHtml() {
 
 /** Dessine l'onglet. */
 function render() {
-  const esc = C.esc, st = S.st;
+  const esc = C.esc, st = S.st, honneur = !!S.jour;
+  modeHonneur(P, honneur);
   if (S.err) { P.innerHTML = `<p class="card">Heardle indisponible : ${esc(S.err)}</p>`; return; }
   stop();
   S.player = null; S.playerP = null; S.forVideo = null;
   const hier = st.hier ? `<div class="card jd-hier"><p class="jd-hier-t">Hier · #${esc(st.hier.round)} ${esc(st.hier.title)}</p>
       <p class="muted small">trouvé par ${esc(st.hier.solvers)} membre${st.hier.solvers > 1 ? 's' : ''}${st.hier.avg ? ` · moyenne ${esc(String(st.hier.avg).replace('.', ','))} / 6` : ''}</p></div>` : '';
-  const board = `<section class="card jd-board-box" aria-labelledby="jh-board-h"><h2 id="jh-board-h" class="jd-h2">Classement de la semaine</h2>${boardHtml(st.board, C.me?.id, esc)}</section>`;
+  const board = honneur ? '' : `<section class="card jd-board-box" aria-labelledby="jh-board-h"><h2 id="jh-board-h" class="jd-h2">Classement de la semaine</h2>${boardHtml(st.board, C.me?.id, esc)}</section>`;
   if (!st.round) {
     P.innerHTML = `<div class="jd"><div class="jd-head"><h2 class="jd-title">Heardle du gang</h2></div>
       <p class="card muted">${st.cancelled ? 'Manche annulée aujourd’hui (la vidéo ne se lit plus). Rendez-vous demain !' : 'Pas de morceau aujourd’hui.'}${st.next_day ? ` Prochain Heardle le ${esc(dateLong.format(new Date(st.next_day + 'T12:00:00Z')))}.` : ''}</p>
@@ -251,8 +268,9 @@ function render() {
   const lim = st.finished ? 16 : st.seconds;
   const essai = (st.guesses?.length || 0) + 1;
   const head = `<div class="jd-head"><h2 class="jd-title">Heardle du gang #${esc(st.round)}</h2>
-    <div class="jd-sub"><span class="muted small">Un morceau du salon musique · ${st.finished ? 'partie terminée' : `${essai}${essai === 1 ? 'er' : 'e'} essai`}</span>
-    <span class="pill jd-pts-pill">${esc(lim)} s débloquée${lim > 1 ? 's' : ''}</span></div></div>`;
+    <div class="jd-sub"><span class="muted small">${honneur ? esc(sousTitreHonneur(`Manche n°${st.round}`, S.jour)) : `Un morceau du salon musique · ${st.finished ? 'partie terminée' : `${essai}${essai === 1 ? 'er' : 'e'} essai`}`}</span>
+    <div class="sj-pills">${honneur ? retourHtml('#heardle', 'Morceau du jour') : serieHtml('heardle')}<span class="pill jd-pts-pill">${esc(lim)} s débloquée${lim > 1 ? 's' : ''}</span></div></div></div>
+    ${honneur ? '' : jokerHtml('heardle')}`;
   const t = st.track || {};
   const playerBox = `<div class="card jh-box${st.finished ? ' is-open' : ''}">
       <div class="jh-cover" aria-hidden="${st.finished ? 'false' : 'true'}"><div class="jh-video"><div id="jh-player"></div></div>
@@ -273,10 +291,10 @@ function render() {
       <div class="jd-actions"><button type="button" class="btn btn-sand" data-act="share">Partager le résultat</button></div></div>`;
   } else {
     bottom = guessFormHtml('jh', 'Titre ou artiste', S.busy)
-      + `<p class="muted small jd-note">Seuls les ${esc(st.tracks.length)} morceaux du gang sont proposés. Trouvé : ${esc(st.gain)} ${paillSym()} · pas trouvé : ${esc(st.consolation)} ${paillSym()}.</p>`;
+      + `<p class="muted small jd-note">Seuls les ${esc(st.tracks.length)} morceaux du gang sont proposés. ${honneur ? 'Manche passée, pour l’honneur : sans Paillettes.' : `Trouvé : ${esc(st.gain)} ${paillSym()} · pas trouvé : ${esc(st.consolation)} ${paillSym()}.`}</p>`;
   }
-  P.innerHTML = `<div class="jd">${head}${playerBox}${barHtml(st)}${triesHtml(st)}${bottom}${hier}${board}${proposeHtml()}</div><div id="jh-hist" class="jh-hist"></div>`;
-  boutonReponses(P.querySelector('.jd-head'), 'heardle');
+  P.innerHTML = `<div class="jd">${head}${playerBox}${barHtml(st)}${triesHtml(st)}${bottom}${hier}${board}${honneur ? '' : proposeHtml()}</div><div id="jh-hist" class="jh-hist"></div>`;
+  if (!honneur) boutonReponses(P.querySelector('.jd-head'), 'heardle');
   monterHistorique(P.querySelector('#jh-hist'), C);
   if (!st.finished) {
     const g = st.guesses?.length || 0;
@@ -300,7 +318,7 @@ function render() {
  */
 function habillerFin(animer) {
   const st = S.st, carte = P.querySelector('.jd-end');
-  if (!st || !carte) return;
+  if (!st || !carte || S.jour) return; // manche passée : ni points, ni Paillettes, ni série
   const gain = Number(st.reward) > 0 ? Number(st.reward) : null;
   const points = st.score != null && Number.isFinite(Number(st.score)) ? Number(st.score) : pointsDeGain(st.reward);
   finDePartie(carte, { points, gain, animer, cibleGain: gain ? carte.querySelector('.jd-gain-v') : null });
@@ -340,13 +358,19 @@ async function guess(id) {
   const avant = S.st;
   let nouveau = false;
   S.busy = true; render();
+  const jour = S.jour;
   try {
-    const { data, error } = await C.sb.rpc('hg_heardle_guess', { p_track: id });
+    const { data, error } = jour
+      ? await C.sb.rpc('hg_jeux_honneur_essai', { p_jeu: 'heardle', p_day: jour, p: { track: id } })
+      : await C.sb.rpc('hg_heardle_guess', { p_track: id });
     if (error) throw error;
+    if (S.jour !== jour) { S.busy = false; return; }
     S.st = data;
     nouveau = (data.guesses?.length || 0) > (avant?.guesses?.length || 0);
     S.attendFin = nouveau && !!data.finished;
-    if (data.finished) C.toast(data.solved ? `Bravo ! +${data.reward} ${paillSym()}` : `C’était « ${data.track?.title} ». +${data.reward} ${paillSym()}`, 'ok');
+    if (data.finished && jour) relireHistorique();
+    if (data.finished && jour) C.toast(data.solved ? 'Bravo, trouvé pour l’honneur !' : `C’était « ${data.track?.title} ».`, 'ok');
+    else if (data.finished) C.toast(data.solved ? `Bravo ! +${data.reward} ${paillSym()}` : `C’était « ${data.track?.title} ». +${data.reward} ${paillSym()}`, 'ok');
   } catch (e) { C.toast(e?.message || String(e), 'error'); }
   S.busy = false; render();
   if (nouveau && S.st) effets(avant, S.st);

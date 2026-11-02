@@ -44,10 +44,10 @@ export function ensureVisualCss() {
 
 /**
  * Types de boosters (hg_booster_types), actifs et passés, triés par ordre d'affichage. Lève une erreur si la lecture échoue.
- * @returns {Promise<object[]>} lignes { id, name, size, style, description, active, sort }
+ * @returns {Promise<object[]>} lignes { id, name, size, style, price, description, active, sort }
  */
 export async function chargerBoosters() {
-  const { data, error } = await sb.from('hg_booster_types').select('id, name, size, style, description, active, sort').order('sort');
+  const { data, error } = await sb.from('hg_booster_types').select('id, name, size, style, price, description, active, sort').order('sort');
   if (error) throw error;
   return (data || []).slice().sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0));
 }

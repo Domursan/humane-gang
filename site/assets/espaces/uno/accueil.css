@@ -57,6 +57,9 @@
 .uno-acc-bouton { flex: none; min-height: 44px; padding: 0 16px; }
 .uno-acc-etiquette { flex: none; display: inline-flex; align-items: center; min-height: 24px; padding: 0 10px; border-radius: 999px;
   background: var(--sand); color: #121212; font-size: 12px; font-weight: 700; }
+/* Un robot tient ma place (migration 211) */
+.rb-etiq { gap: 6px; background: #FBD32D; color: #000; border: 1px solid #000; font-size: 12px; font-weight: 800; }
+.rb-etiq svg { width: 14px; height: 14px; }
 
 /* Tuiles de statistiques résumées */
 .uno-acc-tuiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }

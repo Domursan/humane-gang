@@ -22,6 +22,7 @@ import { plat, erreurTexte, nomDe, imageExiste } from '../../api.js';
 import { bandeauHtml, brancherChrono, journalHtml, imagePlateau, envoyer, moiJoueur, joueurDe, quitterPartie } from '../../vues/commun.js';
 import { boutonQuitter } from '../../../../commun/quitter.js';
 import { creerChat, tiroirChat } from '../../vues/chat.js';
+import { brancherSpectateur } from '../../vues/spectateur.js';
 import { creerSignalTour } from '../../../../commun/tour-signal.js';
 import { jouerSonJeu } from '../../../../commun/sons-jeux.js';
 import { plateauHtml, legendeHtml, POSITIONS, LIBELLES, NOM_ZONE, zoneDeCase, caseSuivante, pasEntre } from './plateau.js';
@@ -171,6 +172,8 @@ export function creer(root, ctx) {
     chatZone: q('[data-chat]'), tiroirChatZone: q('[data-tiroir-chat]'), annonce: q('[data-annonce]'),
   };
   refs.code.textContent = `Code ${code}`;
+  // Spectateur (migration 214) : « Arrêter de regarder » et message sous la barre ; compteur pour les joueurs.
+  const spect = brancherSpectateur({ barre: q('.ds-barre'), quitter: refs.quitter, naviguer: ctx.naviguer });
 
   let etat = null;
   let occupe = false;
@@ -828,6 +831,7 @@ export function creer(root, ctx) {
       etat = e;
       rendreBandeau();
       rendreElimine();
+      spect.maj(e);
       suivreChangements();
       rendrePlan();
       rendreRoue();

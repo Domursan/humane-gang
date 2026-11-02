@@ -3,7 +3,7 @@
  * Rôle : le moment commun aux 19 jeux quotidiens (maquette validée en oct. 2026). Quand une partie vient de se terminer
  *   sous les yeux du membre, finDePartie() fait apparaître la carte de fin, pose le tampon « N PTS », joue le son selon
  *   les points, fait défiler les Paillettes et, à 10 points seulement, lance des confettis. Puis les classements montés
- *   sont rechargés (la tuile de la page Jeux passe au vert).
+ *   sont rechargés (la tuile de la page Jeux passe au vert), ainsi que les séries (pastille « joué aujourd'hui »).
  *   Les sons suivent la préférence « Sons des jeux » (sons-jeux.js) ; sans mouvement (préférence « effets » coupée ou
  *   mouvement réduit), le résultat s'affiche directement et les sons restent, comme dans les duels.
  * Dépendances : core.js (motionAllowed), sons-jeux.js (jouerSonJeu), paillettes.js (paillSym), ./classement-jeux.js (chargé à la demande).
@@ -170,4 +170,6 @@ export function finDePartie(carte, { points, gain = null, animer = true, cibleGa
   }
   if (gain != null) setTimeout(() => { sonJour('F5'); compteur(ligne, gain, ecrire); }, 420);
   setTimeout(() => { import('./classement-jeux.js').then((m) => m.rafraichirClassements()).catch(() => {}); }, 1300);
+  // Pastille de série (serie-jeux.js) : la partie du jour compte, elle passe à « joué aujourd'hui ».
+  if (document.querySelector('[data-sj]')) setTimeout(() => { import('./serie-jeux.js').then((m) => m.rafraichirSeries()).catch(() => {}); }, 1300);
 }

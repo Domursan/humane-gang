@@ -14,6 +14,9 @@ import { motionAllowed } from '../../commun/core.js';
 import { sonJour, pointsDeGain, rejoue, secouer, finDePartie } from './effets-jour.js';
 import { loadCss, guessFormHtml, bindGuess, boardHtml, shareText, copyText } from './devine.js';
 import { boutonReponses } from '../../commun/core/admin-reponses.js';
+import { serieHtml, jokerHtml } from './serie-jeux.js'; // série commune et joker payant (migrations 206 et 207)
+// Manches passées pour l'honneur (idée 13, migration 213) : #framed-AAAA-MM-JJ, sans Paillettes, classement ni série.
+import { jourVoulu, sousTitreHonneur, retourHtml, modeHonneur, monterArchives, suivreJour } from './archives-jeux.js';
 
 const BUCKET = 'hg-jeux';
 const dateFmt = new Intl.DateTimeFormat('fr-CH', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/Zurich' });
@@ -21,23 +24,37 @@ const dateLong = new Intl.DateTimeFormat('fr-CH', { day: 'numeric', month: 'long
 /** Date « 9 mars 2025 » d'une date AAAA-MM-JJ (sans décalage de fuseau). */
 const day = (d, f = dateFmt) => (d ? f.format(new Date(d + 'T12:00:00Z')) : '');
 
-let P = null, C = null;
-const S = { st: null, busy: false, urls: {}, view: 0, err: null, attendFin: false };
+let P = null, C = null, Z = null, A = null, L = null;
+// jour : manche passée jouée pour l'honneur (null = manche du jour).
+const S = { st: null, busy: false, urls: {}, view: 0, err: null, attendFin: false, jour: null };
 
 /** Monte l'onglet. */
 export async function mount(panel, ctx) {
-  P = panel; C = ctx;
+  Z = panel; C = ctx; S.jour = jourVoulu(ctx.sub);
   loadCss('jeux-devine');
-  panel.innerHTML = '<p class="muted">Chargement du Framed…</p>';
-  panel.addEventListener('click', onClick);
+  P = document.createElement('div');
+  A = document.createElement('div'); // grille des manches passées, replacée sous « Hier » à chaque dessin
+  panel.append(P);
+  P.innerHTML = '<p class="muted">Chargement du Framed…</p>';
+  P.addEventListener('click', onClick);
+  L = monterArchives(A, { sb: ctx.sb, esc: ctx.esc, jeu: 'framed', lien: (d) => `#framed-${d}`, code: 'Framed du gang', forme: 'grille', actuel: S.jour });
+  suivreJour(panel, ctx, () => S.jour, (j) => {
+    S.jour = j; S.busy = false; S.attendFin = false;
+    load();
+    L.rafraichir(j);
+  });
   await load();
 }
 
 /** Charge l'état du jour, puis les URL signées des images dévoilées. */
 async function load() {
+  const jour = S.jour;
   try {
-    const { data, error } = await C.sb.rpc('hg_framed_state');
+    const { data, error } = jour
+      ? await C.sb.rpc('hg_jeux_honneur_etat', { p_jeu: 'framed', p_day: jour })
+      : await C.sb.rpc('hg_framed_state');
     if (error) throw error;
+    if (S.jour !== jour) return;
     S.st = data; S.err = null;
     await signFrames();
     S.view = Math.max(0, (S.st.frames?.length || 1) - 1);
@@ -82,11 +99,20 @@ function triesHtml(st) {
 
 /** Dessine l'onglet. */
 function render() {
-  const esc = C.esc, st = S.st;
+  dessiner();
+  // Grille des manches passées : sous « Hier » (ou en bas du jeu) ; classement du jour caché pour une manche passée.
+  const ici = P.querySelector('.jd-hier') || P.querySelector('.jd-board-box')?.previousElementSibling || P.querySelector('.jd')?.lastElementChild;
+  if (ici) ici.after(A); else P.append(A);
+  modeHonneur(Z, !!S.jour);
+}
+
+/** Dessine le jeu (manche du jour ou manche passée). */
+function dessiner() {
+  const esc = C.esc, st = S.st, honneur = !!S.jour;
   if (S.err) { P.innerHTML = `<p class="card">Framed indisponible : ${esc(S.err)}</p>`; return; }
   const hier = st.hier ? `<div class="card jd-hier"><p class="jd-hier-t">Hier · #${esc(st.hier.round)} ${esc(st.hier.title)}</p>
       <p class="muted small">trouvé par ${esc(st.hier.solvers)} membre${st.hier.solvers > 1 ? 's' : ''}${st.hier.avg ? ` · moyenne ${esc(String(st.hier.avg).replace('.', ','))} / 6` : ''}</p></div>` : '';
-  const board = `<section class="card jd-board-box" aria-labelledby="jf-board-h"><h2 id="jf-board-h" class="jd-h2">Classement de la semaine</h2>${boardHtml(st.board, C.me?.id, esc)}</section>`;
+  const board = honneur ? '' : `<section class="card jd-board-box" aria-labelledby="jf-board-h"><h2 id="jf-board-h" class="jd-h2">Classement de la semaine</h2>${boardHtml(st.board, C.me?.id, esc)}</section>`;
   if (!st.round) {
     P.innerHTML = `<div class="jd"><div class="jd-head"><h2 class="jd-title">Framed du gang</h2></div>
       <p class="card muted">Pas d’image aujourd’hui.${st.next_day ? ` Prochain Framed le ${esc(day(st.next_day, dateLong))}.` : ' Le projectionniste prépare les prochains.'}</p>${hier}${board}</div>`;
@@ -96,8 +122,9 @@ function render() {
   const k = st.frames.length, path = st.frames[S.view], url = S.urls[path];
   const pts = st.finished ? st.score : Math.max(1, 11 - k);
   const head = `<div class="jd-head"><h2 class="jd-title">Framed du gang #${esc(st.round)}</h2>
-    <div class="jd-sub"><span class="muted small">Devine l’image du jour · image ${esc(S.view + 1)} sur ${esc(st.total_frames)}</span>
-    <span class="pill jd-pts-pill">${st.finished ? `${esc(st.score)} pt${st.score > 1 ? 's' : ''}` : `${esc(pts)} pt${pts > 1 ? 's' : ''} possible${pts > 1 ? 's' : ''}`}</span></div></div>`;
+    <div class="jd-sub"><span class="muted small">${honneur ? esc(sousTitreHonneur(`Image ${S.view + 1} sur ${st.total_frames}`, S.jour)) : `Devine l’image du jour · image ${esc(S.view + 1)} sur ${esc(st.total_frames)}`}</span>
+    <div class="sj-pills">${honneur ? retourHtml('#framed', 'Image du jour') : serieHtml('framed')}<span class="pill jd-pts-pill">${st.finished ? `${esc(st.score)} pt${st.score > 1 ? 's' : ''}` : `${esc(pts)} pt${pts > 1 ? 's' : ''} possible${pts > 1 ? 's' : ''}`}</span></div></div></div>
+    ${honneur ? '' : jokerHtml('framed')}`;
   const img = `<div class="jf-img">${url ? `<img src="${esc(url)}" alt="Image ${S.view + 1} du jour à deviner" decoding="async">` : '<span class="muted small">Image en chargement…</span>'}</div>`;
   let bottom;
   if (st.finished) {
@@ -111,10 +138,10 @@ function render() {
       <button type="button" class="btn btn-ghost" data-act="livre">Le livre est mieux</button></div></div>`;
   } else {
     bottom = guessFormHtml('jf', 'Ton titre', S.busy)
-      + `<p class="muted small jd-note">Seules les ${esc(st.films.length)} réponses de la liste sont proposées. Trouvé : ${esc(st.gain)} ${paillSym()} · pas trouvé : ${esc(st.consolation)} ${paillSym()}.</p>`;
+      + `<p class="muted small jd-note">Seules les ${esc(st.films.length)} réponses de la liste sont proposées. ${honneur ? 'Manche passée, pour l’honneur : sans Paillettes.' : `Trouvé : ${esc(st.gain)} ${paillSym()} · pas trouvé : ${esc(st.consolation)} ${paillSym()}.`}</p>`;
   }
   P.innerHTML = `<div class="jd">${head}${img}${framesNav(st)}${triesHtml(st)}${bottom}${hier}${board}</div>`;
-  boutonReponses(P.querySelector('.jd-head'), 'framed');
+  if (!honneur) boutonReponses(P.querySelector('.jd-head'), 'framed');
   if (!st.finished) {
     const passBtn = P.querySelector('[data-act="passer"]');
     if (passBtn && k < (st.total_frames || 6)) passBtn.textContent = `Passer · image ${k + 1}`;
@@ -134,7 +161,7 @@ function render() {
  */
 function habillerFin(animer) {
   const st = S.st, carte = P.querySelector('.jd-end');
-  if (!st || !carte) return;
+  if (!st || !carte || S.jour) return; // manche passée : ni points, ni Paillettes, ni série
   const gain = Number(st.reward) > 0 ? Number(st.reward) : null;
   const points = st.score != null && Number.isFinite(Number(st.score)) ? Number(st.score) : pointsDeGain(st.reward);
   finDePartie(carte, { points, gain, animer, cibleGain: gain ? carte.querySelector('.jd-gain-v') : null });
@@ -190,15 +217,20 @@ async function guess(id) {
   const ancienne = P.querySelector('.jf-img img')?.cloneNode(true) || null;
   let nouveau = false;
   S.busy = true; render();
+  const jour = S.jour;
   try {
-    const { data, error } = await C.sb.rpc('hg_framed_guess', { p_film: id });
+    const { data, error } = jour
+      ? await C.sb.rpc('hg_jeux_honneur_essai', { p_jeu: 'framed', p_day: jour, p: { film: id } })
+      : await C.sb.rpc('hg_framed_guess', { p_film: id });
     if (error) throw error;
+    if (S.jour !== jour) { S.busy = false; return; }
     S.st = data;
     nouveau = (data.guesses?.length || 0) > (avant?.guesses?.length || 0);
     S.attendFin = nouveau && !!data.finished;
     await signFrames();
     S.view = data.frames.length - 1;
-    if (data.finished) C.toast(data.solved ? `Bravo ! +${data.reward} ${paillSym()}` : `C’était « ${data.film?.title} ». +${data.reward} ${paillSym()}`, 'ok');
+    if (data.finished && jour) { C.toast(data.solved ? 'Bravo, trouvé pour l’honneur !' : `C’était « ${data.film?.title} ».`, 'ok'); L.rafraichir(); }
+    else if (data.finished) C.toast(data.solved ? `Bravo ! +${data.reward} ${paillSym()}` : `C’était « ${data.film?.title} ». +${data.reward} ${paillSym()}`, 'ok');
   } catch (e) { C.toast(e?.message || String(e), 'error'); }
   S.busy = false; render();
   if (nouveau && S.st) effets(avant, S.st, ancienne);

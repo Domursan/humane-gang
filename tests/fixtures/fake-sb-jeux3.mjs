@@ -2,7 +2,7 @@
 // Enveloppe un faux existant (fake-sb.mjs par défaut, ou window.__SCN.jeuxBase, ex. 'fake-sb-cartes.mjs') chargé depuis le
 // site de test, et répond aux RPC de la migration 085 avec un état en mémoire (window.__J3). Les autres appels passent au faux
 // de base. Scénario (window.__SCN) : jeuxBase, framedDone (partie déjà finie), noRound (pas de manche),
-// heardleCancelled, proofQuests (quêtes à preuve dans hg_card_quests_me), saveFailTitle (hg_framed_film_save refuse ce titre),
+// heardleCancelled, heardleCache (manche 21 de l'historique cachée, migration 213), proofQuests (quêtes à preuve dans hg_card_quests_me), saveFailTitle (hg_framed_film_save refuse ce titre),
 // uid / staff comme le faux de base.
 // Exporte createClient().
 const S = window.__SCN || {};
@@ -70,6 +70,9 @@ const heardleHistorique = () => {
     else if (n !== 21) joueurs.push(joueur(ME, 'Ethan', '#4F6A8F', 'x'.repeat(n % 3) + 'o', 150 - 10 * (n % 3)));
     joueurs.push(joueur(U(3), 'Bruno', '#159946', 'ssssss', null));
     joueurs.sort((a, b) => (b.solved - a.solved) || (a.essais.length - b.essais.length));
+    // Scénario heardleCache (migration 213) : la manche 21, pas jouée, arrive sans titre ni vidéo, rejouable pour l'honneur.
+    if (S.heardleCache && n === 21) return { day: d.toISOString().slice(0, 10), round: n, title: null, artist: null, youtube_id: null, start_s: null,
+      shared_on: null, proposed_by: null, cache: true, jouable: true, honneur: null, joueurs };
     return { day: d.toISOString().slice(0, 10), round: n, title: n === 23 ? 'Tout va bien' : `Morceau ${n}`, artist: n === 23 ? 'Orelsan' : `Artiste ${n}`,
       youtube_id: 'VHoT4N43jK8', start_s: 12, shared_on: '#musique', proposed_by: 'Alice', joueurs };
   });

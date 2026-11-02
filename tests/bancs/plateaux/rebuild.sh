@@ -23,6 +23,10 @@ $P -d $B -f $D/../../../supabase/migrations/172_jeux_regles_audit.sql 2>&1 | gre
 $P -d $B -f $D/../../../supabase/migrations/197_jeux_mes_parties.sql 2>&1 | grep -E "ERROR|LINE"
 # Quitter une partie est définitif (migration 198).
 $P -d $B -f $D/../../../supabase/migrations/198_quitter_plateaux.sql 2>&1 | grep -E "ERROR|LINE"
+# Spectateurs (migration 214, banc t_spectateurs.sql) : elle touche aussi le Uno, chargé avant elle (121, 171, 211 avec hg__patch).
+for f in 121_uno 171_uno_jouabilite; do $P -d $B -f $D/../../../supabase/migrations/$f.sql 2>&1 | grep -E "ERROR|LINE"; done
+$P -d $B -f $D/../uno/patch.sql 2>&1 | grep -E "ERROR"
+for f in 211_uno_robot_remplacant 214_spectateurs; do $P -d $B -f $D/../../../supabase/migrations/$f.sql 2>&1 | grep -E "ERROR|LINE"; done
 $P -d $B -f $D/helpers.sql 2>&1 | grep -E "ERROR"
 # Robot de test du Risk (fonction t_rk_tour, utilisée par s3) : seulement sa définition (lignes 1 à 38 de t_risk.sql),
 # pas les simulations de t_risk.sql, qui durent plusieurs minutes.

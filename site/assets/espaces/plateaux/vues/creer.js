@@ -1,6 +1,7 @@
 // ===== Humane Gang — Jeux de plateau : créer une partie (#creer) =====
 /*
- * Rôle : formulaire de création (nom, places, durée d'un tour, visibilité, invités, annonce Discord) et, pour
+ * Rôle : formulaire de création (nom, places, durée d'un tour, visibilité, invités, spectateurs admis (Blackjack, Monopoly,
+ * Destins, partie publique : migration 214), annonce Discord) et, pour
  * chaque jeu, ses options propres. « Créer la partie » envoie plat.creer puis ouvre la salle d'attente.
  * OPTIONS (exporté) : réglages propres à chaque jeu, indexés par id de jeu. Vide pour cluedo, shadow, destins.
  *   monopoly : { duree: { valeurs: [45, 60, 90], defaut: 60, titre?, unite? } }   (unité par défaut : minutes)
@@ -15,6 +16,7 @@
  */
 import { esc } from '../../../commun/core.js';
 import { plat, contenus, erreurTexte, jeu } from '../api.js';
+import { JEUX_SPECTATEURS } from '../../../commun/spectateurs.js';
 
 /** Options propres à chaque jeu (voir l'en-tête). */
 export const OPTIONS = {
@@ -70,6 +72,7 @@ function lire(form, options) {
     t_tour: Number(fd.get('t_tour')) || 60,
     visibilite: fd.get('visibilite') === 'privee' ? 'privee' : 'publique',
     invites: fd.has('invites'),
+    spectateurs: fd.has('spectateurs'),
     annonce_discord: fd.has('discord'),
     options: reglesJeu,
   };
@@ -97,6 +100,7 @@ export async function afficher(root, { naviguer }) {
   const c = await contenus().catch(() => ({}));
   const nomJeu = c?.nom || J.nom;
   const options = OPTIONS[J.id] || {};
+  const spectables = JEUX_SPECTATEURS.includes(J.id);   // migration 214 : Blackjack, Monopoly, Destins
 
   root.innerHTML = `
     <p class="plat-fil">Jeux › <a href="${esc(J.page)}">${esc(nomJeu)}</a> › Créer</p>
@@ -125,6 +129,7 @@ export async function afficher(root, { naviguer }) {
             ${segments('t_tour', 'Durée d\'un tour', DUREES_TOUR.map((d) => ({ valeur: d, libelle: `${d} s` })), 60)}
             ${segments('visibilite', 'Visibilité', [{ valeur: 'publique', libelle: 'Publique' }, { valeur: 'privee', libelle: 'Privée' }], 'publique')}
             ${interrupteur('invites', 'Invités acceptés', 'Des joueurs sans compte peuvent rejoindre avec le lien.', true)}
+            ${spectables ? `<div data-sp-reglage>${interrupteur('spectateurs', 'Spectateurs admis', 'Les membres peuvent regarder la partie sans jouer. Ils ne voient rien de caché.', true)}</div>` : ''}
             ${interrupteur('discord', 'Annonce sur Discord', 'Publie la partie dans le salon des joueurs.', false)}
           </section>
 
@@ -161,8 +166,10 @@ export async function afficher(root, { naviguer }) {
   const erreur = (msg) => { erreurEl.textContent = msg; erreurEl.hidden = !msg; };
 
   /** Écrit le résumé « Ta partie » d'après les réglages lus. */
+  const reglageSpect = root.querySelector('[data-sp-reglage]');
   const majResume = () => {
     const p = lire(form, options);
+    if (reglageSpect) reglageSpect.hidden = p.visibilite === 'privee';   // spectateurs : partie publique seulement
     const set = (cle, texte) => { const el = root.querySelector(`[data-r="${cle}"]`); if (el) el.textContent = texte; };
     set('nom', p.nom || 'À nommer');
     set('places', String(p.nb_places));
@@ -196,6 +203,7 @@ export async function afficher(root, { naviguer }) {
         t_tour: p.t_tour,
         visibilite: p.visibilite,
         invites: p.invites,
+        ...(spectables ? { spectateurs: p.spectateurs } : {}),
         annonce_discord: p.annonce_discord,
         options: p.options,
       });

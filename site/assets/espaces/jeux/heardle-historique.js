@@ -7,11 +7,14 @@
  * répartition des essais, scores du gang (carrés des essais, Paillettes) et lien pour réécouter le morceau sur YouTube.
  * Les données (RPC hg_heardle_historique, migration 178) sont chargées une fois ; la section se redessine depuis la
  * mémoire à chaque rendu de l'onglet. La manche du jour n'y est jamais.
- * Dépendances : core.js (avatarHtml), paillettes.js (paillSym), devine.js (loadCss). Exporte : monterHistorique(box, ctx).
+ * Manches pas encore jouées (idée 13, migration 213) : le serveur ne donne ni titre, ni artiste, ni vidéo (cache) ; la
+ * ligne ne s'ouvre pas et propose « Jouer » (#heardle-AAAA-MM-JJ) si la manche est dans les 30 dernières (jouable).
+ * Dépendances : core.js (avatarHtml), paillettes.js (paillSym), devine.js (loadCss). Exporte : monterHistorique(box, ctx), relireHistorique().
  */
 import { avatarHtml } from '../../commun/core.js';
 import { paillSym } from '../../commun/paillettes.js';
 import { loadCss } from './devine.js';
+import { stylesArchives } from './archives-jeux.js';
 
 /** Manches montrées au départ (« Voir tout l'historique » montre les autres). */
 const DEBUT = 3;
@@ -29,6 +32,7 @@ export function monterHistorique(el, ctx) {
   if (!el) return;
   C = ctx; box = el;
   loadCss('heardle-historique');
+  stylesArchives();
   el.addEventListener('click', onClick);
   el.addEventListener('input', onInput);
   dessiner();
@@ -40,6 +44,9 @@ export function monterHistorique(el, ctx) {
   }
 }
 
+/** L'historique sera relu au prochain rendu (après une manche jouée pour l'honneur). */
+export function relireHistorique() { H.data = null; H.err = null; }
+
 /** Essais d'un joueur (« xso ») : trouvé, mauvaise réponse, passé ; vide = pas utilisé. */
 const carres = (essais, cls) => Array.from({ length: 6 }, (_, i) => {
   const c = (essais || '')[i];
@@ -49,15 +56,17 @@ const carres = (essais, cls) => Array.from({ length: 6 }, (_, i) => {
 const virgule = (n) => String(n).replace('.', ',');
 /** Résumé de mes essais pour le lecteur d'écran (les carrés sont décoratifs). */
 const monTexte = (j) => (!j ? 'Toi : pas joué' : j.solved ? `Toi : trouvé en ${j.essais.length}` : 'Toi : pas trouvé');
+/** Ma partie : celle du jour même, sinon celle pour l'honneur une fois finie (mêmes champs). */
+const maPartie = (m, me) => m.joueurs.find((x) => x.user_id === me) || (m.honneur?.fini ? { solved: !!m.honneur.solved, essais: m.honneur.essais || '' } : null);
 
 /** Manches qui passent la recherche et le filtre (sur mon résultat). */
 function filtrees() {
   const q = H.q.trim().toLowerCase();
   const me = C.me?.id;
   return (H.data?.manches || []).filter((m) => {
-    if (q && !`${m.title} ${m.artist}`.toLowerCase().includes(q)) return false;
+    if (q && !`${m.title || ''} ${m.artist || ''}`.toLowerCase().includes(q)) return false;
     if (H.f === 'tous') return true;
-    const j = m.joueurs.find((x) => x.user_id === me);
+    const j = maPartie(m, me);
     return H.f === 'trouves' ? !!j?.solved : !!j && !j.solved;
   });
 }
@@ -107,6 +116,20 @@ function panneauHtml(m) {
     </div>`;
 }
 
+/** Manche pas encore jouée : titre caché, ligne fermée, bouton « Jouer » (ou « Reprendre ») si elle est rejouable. */
+function ligneCacheeHtml(m, nb) {
+  const esc = C.esc;
+  const enCours = m.honneur && !m.honneur.fini;
+  return `<li class="jhh-ligne is-ajouer"><div class="jhh-tete ar-tete">
+      <span class="jhh-num">#${esc(m.round)}</span>
+      <span class="jhh-date">${esc(jourCourt.format(new Date(`${m.day}T12:00:00Z`)))}</span>
+      <span class="jhh-titre"><b><span aria-hidden="true">???</span><span class="visually-hidden">Titre caché</span></b><span>titre caché jusqu’à ta partie</span></span>
+      <span class="jhh-moi"><span>${enCours ? 'En cours' : 'Pas joué'}</span></span>
+      <span class="jhh-qui"><b>${nb}</b> / ${m.joueurs.length} ont trouvé</span>
+      ${m.jouable ? `<a class="btn btn-sand ar-btn" href="#heardle-${esc(m.day)}" aria-label="${enCours ? 'Reprendre' : 'Jouer'} la manche n°${esc(m.round)}">${enCours ? 'Reprendre' : 'Jouer'}</a>` : ''}
+    </div></li>`;
+}
+
 /** Liste des manches (recherche, filtre et nombre de lignes appliqués). */
 function listeHtml() {
   const esc = C.esc, me = C.me?.id;
@@ -116,8 +139,9 @@ function listeHtml() {
   const tout = H.tout || !!H.q.trim() || H.f !== 'tous';
   const lignes = (tout ? liste : liste.slice(0, DEBUT)).map((m) => {
     const ouverte = H.ouvertes.has(m.day);
-    const j = m.joueurs.find((x) => x.user_id === me);
+    const j = maPartie(m, me);
     const nb = m.joueurs.filter((x) => x.solved).length;
+    if (m.cache) return ligneCacheeHtml(m, nb);
     return `<li class="jhh-ligne${ouverte ? ' is-open' : ''}">
         <button type="button" class="jhh-tete" data-hist="ligne" data-day="${esc(m.day)}" aria-expanded="${ouverte}" aria-controls="jhh-p-${esc(m.day)}">
           <span class="jhh-num">#${esc(m.round)}</span>

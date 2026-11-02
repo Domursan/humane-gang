@@ -7,7 +7,8 @@
 // Dépendances : core.js (Supabase, initPage, profil), profile-fields.js (champs des informations), push.js (notifications),
 // badge-levels.js (niveaux des badges), invite-config.js (format des codes), icons.js.
 // Tables, RPC et stockage : hg_profiles, hg_profile_info, hg_badges, hg_user_badges, hg_my_badge_progress, hg_dyn_captures,
-// hg_join, hg_export_my_data, hg_delete_my_account, hg_photos, hg_moments, stockage hg-avatars et hg-photos.
+// hg_join, hg_export_my_data, hg_delete_my_account, hg_photos, hg_moments, stockage hg-avatars et hg-photos ;
+// « Mes souvenirs » : hg_carte_anniv_souvenirs (accueil/carte-anniv.js, migration 205).
 // N'exporte rien.
 import { sb, authLanding, signOutDevice, initPage, getProfile, esc, $, $$, toast, errMsg, fmtDate, fmtDateTime, avatarHtml, updateHeaderProfile, pageHref } from '../../commun/core.js';
 import { INFO_GROUPS, INFO_FIELDS } from './profile-fields.js';
@@ -574,6 +575,7 @@ async function renderMember(user) {
           <input id="pf-birthday" type="date" value="${esc(p.birthday || '')}" max="${new Date().toISOString().slice(0, 10)}">
         </div>
         <label class="check"><input type="checkbox" id="pf-share" ${p.share_birthday ? 'checked' : ''}> <span>Partager le jour et le mois de mon anniversaire avec le gang (accueil, bot) ${tagPublic}</span></label>
+        ${'carte_anniv' in p ? `<label class="check"><input type="checkbox" id="pf-carte-anniv" ${p.carte_anniv !== false ? 'checked' : ''}> <span>Le gang peut m’écrire une carte d’anniversaire commune, que je découvre le jour J (si je partage ma date)</span></label>` : ''}
         <div class="field">
           <label for="pf-discord">ID Discord ${tagPrivate}</label>
           <input id="pf-discord" inputmode="numeric" readonly aria-readonly="true" aria-describedby="pf-discord-hint" value="${esc(p.discord_id || '')}" placeholder="Pas encore enregistré">
@@ -653,6 +655,8 @@ async function renderMember(user) {
       <ul class="badge-grid" id="badge-grid" aria-live="polite"></ul>
     </section>
 
+    <section class="card stack acc-souvenirs" id="souvenirs" aria-labelledby="souv-title" hidden></section>
+
     <section class="acc-row">
       <div class="card stack" id="data-card">
         <h2 class="card-title">${ICON.data} Mes données</h2>
@@ -688,6 +692,8 @@ async function renderMember(user) {
   loadHeadStats();
   // Profil gaming (migration 090) : carte publique, chargée à la demande.
   import('./profil-gaming.js').then((m) => m.mountGamingEditor($('#gaming'), me)).catch((e) => console.warn('[gaming]', e));
+  // « Mes souvenirs » (idée 52, migration 205) : cartes d'anniversaire communes ; masqué sans carte
+  import('../accueil/carte-anniv.js').then((m) => m.mountSouvenirs($('#souvenirs'))).catch((e) => console.warn('[souvenirs]', e?.message || e));
   // Entraide et liens (idées P6, P7, P8) : module à part, une erreur n'empêche pas le reste du compte
   import('./compte-social.js').then((m) => m.mountSocialCard($('#social-slot'), me)).catch((e) => console.warn('[entraide]', e?.message || e));
 }
@@ -738,7 +744,7 @@ function bindProfile() {
   const form = $('#profile-form');
   // Barre collante (téléphone) : visible tant que le profil a des changements non enregistrés
   const bar = $('#acc-savebar');
-  const etat = () => JSON.stringify([$('#pf-pseudo').value, $('#pf-color').value, $('#pf-birthday').value, $('#pf-share').checked, $('#pf-show-gen')?.checked ?? null]);
+  const etat = () => JSON.stringify([$('#pf-pseudo').value, $('#pf-color').value, $('#pf-birthday').value, $('#pf-share').checked, $('#pf-show-gen')?.checked ?? null, $('#pf-carte-anniv')?.checked ?? null]);
   let enregistre = etat();
   const majBarre = () => {
     if (!bar) return;
@@ -759,6 +765,7 @@ function bindProfile() {
       share_birthday: $('#pf-share').checked,
     };
     if ($('#pf-show-gen')) patch.show_generation = $('#pf-show-gen').checked; // idée C8 (colonne de la migration 081)
+    if ($('#pf-carte-anniv')) patch.carte_anniv = $('#pf-carte-anniv').checked; // idée 52 : refus de la carte commune (migration 205)
     const btn = form.querySelector('button[type=submit]');
     busy(btn, true, 'Enregistrement…'); formError(form, '');
     const { data, error } = await sb.from('hg_profiles').update(patch).eq('id', me.id).select().single();

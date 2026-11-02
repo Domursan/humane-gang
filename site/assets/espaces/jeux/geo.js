@@ -18,6 +18,7 @@ import { signedUrl, signedUrls, openLightbox } from '../irl/photos.js';
 import { loadLeaflet, addOsmTiles } from '../../commun/leaflet-load.js';
 import { chargerCss, nf, km, gainHtml, classementHtml, jourLong } from './commun.js';
 import { boutonReponses } from '../../commun/core/admin-reponses.js';
+import { serieHtml, jokerHtml } from './serie-jeux.js'; // série commune et joker payant (migrations 206 et 207)
 import { sonJour, rejoue, compteur, finDePartie } from './effets-jour.js';
 
 /* ---------- Constantes ---------- */
@@ -49,9 +50,10 @@ export async function mount(panel, ctx) {
   chargerCss('geo');
   G = { panel, ctx, today: null, round: null, pin: null, map: null, L: null, layer: null, pinMarker: null, scope: 'jour', archive: null, busy: false };
   panel.innerHTML = `<div class="jg geo">
-    <header>
-      <h2 class="jg-title">GeoGuessr du gang</h2>
-      <p class="small muted jg-sub" id="geo-sub">Chargement de la manche…</p>
+    <header class="sj-tete">
+      <div><h2 class="jg-title">GeoGuessr du gang</h2>
+      <p class="small muted jg-sub" id="geo-sub">Chargement de la manche…</p></div>
+      ${serieHtml('geo')}${jokerHtml('geo')}
     </header>
     <div class="jg-grid2">
       <div class="jg-col">

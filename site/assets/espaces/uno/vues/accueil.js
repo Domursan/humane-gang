@@ -3,13 +3,18 @@
  * Rôle : écran d'accueil du Uno. Héros avec un éventail de cartes et les boutons « Créer une partie » et « Rappel des
  * règles », rejoindre avec un code, parties en cours du membre, parties publiques en attente (rafraîchies toutes les
  * 15 s), statistiques résumées et lien vers #stats. Chaque bloc charge ses données à part : une erreur n'empêche pas les autres.
- * Dépendances : core.js (esc, avatarHtml), uno/api.js (uno, erreurTexte, estInvite), uno/cartes.js (carteHtml, dosHtml).
+ * Partie où un robot tient ma place (parti, migration 211) : « un robot joue pour toi depuis 4 min », étiquette Robot, « Reprendre ma place ».
+ * « En direct » (migration 214, membres seulement) : parties publiques en cours qui admettent les spectateurs, bouton « Regarder ».
+ * Dépendances : core.js (esc, avatarHtml), uno/api.js (uno, erreurTexte, estInvite), uno/cartes.js (carteHtml, dosHtml),
+ *   commun/robot-place.js (ICONE_ROBOT, depuisTexte), commun/spectateurs.js (compteurHtml, sousTitreDirect).
  * Exporte : afficher.
  */
 import { esc, avatarHtml } from '../../../commun/core.js';
 import { uno, erreurTexte, estInvite } from '../api.js';
 import { carteHtml, dosHtml } from '../cartes.js';
 import { brancherRejoindre, chargerBloc, suivrePubliques } from '../../../commun/jeux-accueil.js';
+import { ICONE_ROBOT, depuisTexte } from '../../../commun/robot-place.js';
+import { compteurHtml, sousTitreDirect } from '../../../commun/spectateurs.js';
 
 /** Intervalle de rafraîchissement des parties publiques (ms). */
 const INTERVALLE_PUBLIQUES = 15000;
@@ -97,20 +102,22 @@ function htmlRejoindre() {
 }
 
 function ligneMaPartie(p) {
-  const infos = [
-    p.statut === 'attente' ? "Salle d'attente" : 'En cours',
-    `${nombre(p.inscrits)} joueur${Number(p.inscrits) > 1 ? 's' : ''}`,
-  ];
+  const robot = !!p.robot_depuis && p.statut === 'en_cours';
+  const infos = [p.statut === 'attente' ? "Salle d'attente" : 'En cours'];
+  if (robot) infos.push(`un robot joue pour toi depuis ${depuisTexte(p.robot_depuis)}`);
+  else infos.push(`${nombre(p.inscrits)} joueur${Number(p.inscrits) > 1 ? 's' : ''}`);
   if (p.mes_cartes != null && p.statut !== 'attente') infos.push(`il te reste ${nombre(p.mes_cartes)} carte${Number(p.mes_cartes) > 1 ? 's' : ''}`);
-  infos.push(p.mon_tour ? "c'est ton tour" : p.tour_pseudo ? `c'est au tour de ${p.tour_pseudo}` : '');
-  return `<li class="uno-acc-ligne">
+  if (!robot) infos.push(p.mon_tour ? "c'est ton tour" : p.tour_pseudo ? `c'est au tour de ${p.tour_pseudo}` : '');
+  const etiquette = robot ? `<span class="uno-acc-etiquette rb-etiq">${ICONE_ROBOT}Robot</span>`
+    : p.mon_tour ? '<span class="uno-acc-etiquette">À toi</span>' : '';
+  return `<li class="uno-acc-ligne${robot ? ' rb-ligne' : ''}">
     <span class="uno-acc-puce" aria-hidden="true">${dosHtml({ taille: 's' })}</span>
     <div class="uno-acc-ligne-texte">
       <strong>${esc(p.nom)}</strong>
       <span class="uno-acc-sous">${esc(infos.filter(Boolean).join(' · '))}</span>
     </div>
-    ${p.mon_tour ? '<span class="uno-acc-etiquette">À toi</span>' : ''}
-    <a class="btn btn-sand uno-acc-bouton" href="${esc(urlPartie(p.code))}">Reprendre<span class="visually-hidden"> ${esc(p.nom)}</span></a>
+    ${etiquette}
+    <a class="btn btn-sand uno-acc-bouton" href="${esc(urlPartie(p.code))}">${robot ? 'Reprendre ma place' : 'Reprendre'}<span class="visually-hidden"> ${esc(p.nom)}</span></a>
   </li>`;
 }
 
@@ -140,6 +147,24 @@ function htmlPubliques(liste) {
     </div>`;
   }
   return `<ul class="uno-acc-liste">${liste.map(lignePublique).join('')}</ul>`;
+}
+
+/** « En direct » (migration 214) : parties publiques en cours qui admettent les spectateurs. */
+function ligneDirect(d) {
+  return `<li class="uno-acc-ligne">
+    <span class="uno-acc-puce" aria-hidden="true">${dosHtml({ taille: 's' })}</span>
+    <div class="uno-acc-ligne-texte">
+      <strong>${esc(d.nom)}</strong>
+      <span class="uno-acc-sous">${esc(sousTitreDirect(d, 'uno'))}</span>
+    </div>
+    ${compteurHtml(d.spectateurs)}
+    <a class="btn btn-ghost uno-acc-bouton" href="${esc(urlPartie(d.code))}">Regarder<span class="visually-hidden"> ${esc(d.nom)}</span></a>
+  </li>`;
+}
+
+function htmlDirect(liste) {
+  if (!liste.length) return '<p class="uno-acc-aide">Aucune partie publique en cours. Les parties privées ne se regardent pas.</p>';
+  return `<ul class="uno-acc-liste">${liste.map(ligneDirect).join('')}</ul>`;
 }
 
 /** Carte « Mes statistiques » : corps déjà prêt en HTML. */
@@ -216,6 +241,10 @@ export async function afficher(root, { naviguer }) {
           </div>
           <div id="uno-acc-publiques" aria-live="polite"><p class="uno-acc-aide">Chargement…</p></div>
         </section>
+        ${invite ? '' : `<section class="card uno-acc-carte sp-direct" aria-labelledby="sp-direct-titre">
+          <h2 id="sp-direct-titre" class="uno-acc-titre">En direct</h2>
+          <div id="uno-acc-direct"><p class="uno-acc-aide">Chargement…</p></div>
+        </section>`}
         ${invite ? '' : `<div id="uno-acc-stats">${htmlCarteStats('<p class="uno-acc-aide">Chargement…</p>')}</div>`}
       </div>
     </div>
@@ -249,6 +278,11 @@ export async function afficher(root, { naviguer }) {
     rendre: (l) => htmlPubliques(Array.isArray(l) ? l : []), intervalle: INTERVALLE_PUBLIQUES,
     messageErreur: (m) => `<p class="uno-acc-aide">Liste indisponible pour l'instant. ${esc(m)}</p>`,
     erreurTexte, actif: () => actif });
+  const zoneDirect = root.querySelector('#uno-acc-direct');
+  const arretDirect = zoneDirect ? suivrePubliques({ zone: zoneDirect, charger: () => uno.enDirect(),
+    rendre: (l) => htmlDirect(Array.isArray(l) ? l : []), intervalle: INTERVALLE_PUBLIQUES,
+    messageErreur: (m) => `<p class="uno-acc-aide">Liste indisponible pour l'instant. ${esc(m)}</p>`,
+    erreurTexte, actif: () => actif }) : () => {};
   if (zoneStats) {
     chargerBloc({ zone: zoneStats, charger: () => uno.stats(),
       rendre: (s) => htmlCarteStats(s ? htmlStatsResume(s) : '<p class="uno-acc-aide">Tes statistiques ne sont pas disponibles pour ton compte.</p>'),
@@ -259,5 +293,6 @@ export async function afficher(root, { naviguer }) {
   return () => {
     actif = false;
     arretPubliques();
+    arretDirect();
   };
 }

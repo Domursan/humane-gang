@@ -1,0 +1,44 @@
+/* ===== Humane Gang — série commune des jeux du jour et joker payant (jeux/serie-jeux.js, migrations 206 et 207) ===== */
+/* Emplacements posés par les jeux : sans boîte, la pastille et l'encart prennent la place de leur emplacement. */
+.sj-place, .sj-jk { display: contents; }
+
+/* Idée 10 · Pastille de série : première pastille à droite de l'en-tête du jeu, même format partout */
+.sj { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 32px; padding: 4px 12px 4px 8px; border-radius: 999px;
+  border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text); font-size: 13px; line-height: 1.2; white-space: nowrap; }
+.sj-ico { flex: none; color: var(--amber); }
+.sj-n { font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.sj-x { color: var(--muted); }
+.sj-x::before { content: '·'; margin-right: 6px; color: var(--muted); }
+.sj.is-fait { border-color: color-mix(in srgb, var(--amber) 55%, transparent); }
+.sj.is-zero .sj-ico, .sj.is-zero .sj-n { color: var(--muted); }
+.sj.is-danger, .sj.is-perdue { border: 2px solid #000; background: #FBD32D; color: #000; box-shadow: 3px 3px 0 #000; font-weight: 700; }
+.sj.is-danger .sj-ico, .sj.is-danger .sj-n, .sj.is-danger .sj-x, .sj.is-danger .sj-x::before,
+.sj.is-perdue .sj-ico, .sj.is-perdue .sj-n, .sj.is-perdue .sj-x, .sj.is-perdue .sj-x::before { color: #000; }
+.sj-pills { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: flex-end; }
+.su-head .sj, .qdj-top .sj { margin-left: auto; }
+/* En-têtes sans rangée de pastilles (GeoGuessr, Qui a dit ça ?) : titre à gauche, pastille à droite. */
+.sj-tete { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px 12px; }
+.sj-tete > div:first-child { flex: 1 1 240px; min-width: 0; }
+/* Encart « Sauver ma série » posé dans un en-tête en ligne : sur toute la largeur, sous le titre. */
+.nj-head .jk, .ng-head .jk, .sol-head .jk, .sj-tete .jk { flex-basis: 100%; margin: 0; }
+.duels-jour-tete .sj { margin-top: 8px; }
+@media (max-width: 560px) {
+  .sj { white-space: normal; }
+  .su-head { flex-wrap: wrap; }
+  .su-head .sj { margin-left: 0; }
+  .jd-sub { flex-wrap: wrap; }
+  .jd-sub .sj-pills { justify-content: flex-start; }
+}
+
+/* Idée 9 · Joker payant : encart dans « Ta semaine » et bandeau sous l'en-tête des autres jeux */
+.jk { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 12px 0 4px; padding: 12px 14px; border: 2px solid #000;
+  border-radius: 12px; background: #FBD32D; color: #000; box-shadow: 3px 3px 0 #000; }
+.jk-t { flex: 1 1 260px; margin: 0; font-size: 14px; line-height: 1.4; }
+.jk-btn { min-height: 44px; flex: none; background: #000; color: #FBD32D; border-color: #000; }
+.jk-btn:disabled { opacity: 1; background: transparent; color: #000; border: 2px dashed #000; cursor: not-allowed; }
+html[data-mode="clair"] .jk .jk-btn:not(:disabled) { background: #000; color: #FBD32D; border-color: #000; } /* le mode clair passe .btn-sand en couleur d'accent : le bouton reste noir sur le jaune */
+.jk .jk-n { flex-basis: 100%; margin: 0; color: #000; font-size: 13px; }
+.jk .jk-n.muted { color: #000; opacity: .85; }
+.jk-bandeau { margin: 12px 0; }
+.qdj-day.is-paye .qdj-box { background: #FBD32D; color: #000; box-shadow: inset 0 0 0 2px #000; }
+@media (max-width: 560px) { .jk-btn { width: 100%; justify-content: center; } }

@@ -1,0 +1,65 @@
+/* ===== Humane Gang — Jeux › « Mes stats » (/pages/jeux/jeux.html#mes-stats, idée 18) =====
+   Chargée par mes-stats.js (chargerCss('mes-stats')). Jetons de base.css ; formes reprises de jeux.css (jg-card, jg-seg)
+   et de l'historique du Heardle (petit titre pixel). */
+
+.ms { display: flex; flex-direction: column; gap: 16px; }
+.ms-tete { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.ms-h { margin: 0; font-family: var(--font-display); font-size: 28px; }
+.ms-code { font: 400 12px var(--font-pixel); letter-spacing: 1.5px; text-transform: uppercase; color: var(--esp-ink); margin: 0 0 4px; }
+.ms-tete .small { margin: 4px 0 0; }
+
+/* Quatre tuiles : parties, moyenne, Paillettes, meilleure série */
+.ms-tuiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.ms-tuile { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); min-height: 96px; }
+.ms-k { font-family: var(--font-pixel); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.ms-v { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ms-v small { font-size: 15px; color: var(--muted); font-weight: 600; }
+.ms-s { font-size: 13px; color: var(--muted); }
+.ms-fl { display: inline-flex; align-items: center; gap: 2px; color: var(--amber); font-weight: 800; }
+.ms-fl .ms-ico { width: 16px; height: 16px; flex: none; }
+.ms-v .ms-fl .ms-ico { width: 20px; height: 20px; }
+
+/* Ton rival */
+.ms-rival { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px; border-color: var(--sand); }
+.ms-rival .small { margin: 0; flex: 1 1 280px; }
+.ms-rv { display: flex; align-items: center; gap: 10px; margin: 6px 0 0; font-size: 16px; }
+.ms-rv .avatar { flex: none; }
+
+/* Jeu par jeu */
+.ms-wrap { margin-top: 10px; }
+.ms-t { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.ms-t th, .ms-t td { padding: 8px 10px; text-align: right; border-top: 1px solid var(--border); font-size: 14px; }
+.ms-t thead th { border-top: 0; font-size: 13px; color: var(--muted); font-weight: 600; }
+.ms-t th[scope="row"], .ms-t thead th:first-child { text-align: left; font-weight: 600; }
+.ms-jeu { display: flex; align-items: center; gap: 10px; }
+.ms-jeu img { width: 40px; height: 27px; border-radius: 6px; object-fit: cover; flex: none; }
+.ms-jeu > span { display: flex; flex-direction: column; min-width: 0; }
+.ms-dep { font-size: 12px; color: var(--muted); font-weight: 400; }
+.ms-sur { color: var(--muted); font-size: 12px; }
+.ms-t tr.is-vide td { text-align: left; color: var(--muted); }
+
+/* Liens vers les autres stats (duels, Uno, plateaux) */
+.ms-liens { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.ms-liens .btn { min-height: 44px; }
+
+/* États : vide (aucune partie), erreur, chargement (squelettes) */
+.ms-vide { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.ms-vide p { margin: 0; }
+.ms-vide .btn { min-height: 44px; margin-top: 6px; }
+.ms-sk { background: var(--surface-2); border-color: transparent; }
+.ms-sk-l { height: 360px; }
+
+@media (max-width: 760px) {
+  .ms-tuiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ms-v { font-size: 22px; }
+  .ms-tete .jg-seg { width: 100%; }
+  /* Tableau en fiches : l'en-tête reste pour les lecteurs d'écran, chaque cellule porte son libellé (data-k) */
+  .ms-t thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .ms-t, .ms-t tbody, .ms-t tr { display: block; }
+  .ms-t tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px 8px; padding: 10px 0; border-top: 1px solid var(--border); }
+  .ms-t th, .ms-t td { border: 0; padding: 0; text-align: left; }
+  .ms-t th[scope="row"] { grid-column: 1 / -1; margin-bottom: 4px; }
+  .ms-t td::before { content: attr(data-k); display: block; font-size: 12px; color: var(--muted); }
+  .ms-t td[data-k="Série"] { grid-column: span 2; }
+  .ms-t tr.is-vide td { grid-column: 1 / -1; }
+}

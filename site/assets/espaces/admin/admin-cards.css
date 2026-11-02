@@ -71,6 +71,8 @@
 .acd-fold[hidden] { display: none; }
 .acd-grid-2 { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); min-width: 0; }
 .acd-grid-2 > .field { min-width: 0; }
+/* Formulaire des quêtes : champs du défi de collection ou des Paillettes, selon le genre choisi */
+.acd-form .acd-grid-2[hidden], .acd-form .field[hidden] { display: none; }
 .acd-sum { font-weight: 700; margin: 0; }
 .acd-sum.is-warn { color: var(--rose); }
 .acd-switch { align-self: end; }

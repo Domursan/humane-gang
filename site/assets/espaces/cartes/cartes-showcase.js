@@ -2,14 +2,17 @@
 // Lecture : hg_card_showcase → hg_card_copies → hg_cards (tous les membres peuvent lire, voir 018 c).
 // Édition (sur sa propre fiche seulement) : une <dialog> qui liste ses exemplaires non recyclés.
 // Rendu : cardHtml() de cartes-ui.js. Styles : cartes-card.css + cartes-showcase.css (préfixe shw-).
-// Exporte : mountShowcase(el, { userId, isMe }) qui affiche la vitrine dans un élément de la fiche membre.
+// Exporte : mountShowcase(el, { userId, isMe, pseudo }) qui affiche la vitrine dans un élément de la fiche membre ;
+// withMeta, loadShowcase et CARD_COLS, repris par cartes-vitrine-image.js (vitrine en image, idée 58).
 import { sb, esc, errMsg, toast, canAccess } from '../../commun/core.js';
 import { cardHtml, rarityRank } from './cartes-ui.js';
 
 /* ---------- Constantes ---------- */
 const SLOTS = [1, 2, 3]; // numéros des 3 emplacements de la vitrine
 // Colonnes lues sur hg_cards (on évite select('*') pour ne pas charger de champs inutiles).
-const CARD_COLS = 'id, set_id, number, name, family, rarity, image_url, flavor, caption, member_id, max_copies';
+export const CARD_COLS = 'id, set_id, number, name, family, rarity, image_url, flavor, caption, member_id, max_copies';
+// Icône du bouton « Créer une image » (idée 58).
+const ICON_IMG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
 
 /* ---------- Données d'affichage (mises en cache) ---------- */
 /* Données d'affichage communes à la page : noms des séries (quelques lignes) et nombre de cartes par série
@@ -54,7 +57,7 @@ function loadSince() {
  * @param {object[]} cards cartes concernées (sert seulement à savoir si une Identité est présente)
  * @returns {Promise<(card: object) => object>} fonction de complétion (renvoie la carte telle quelle si elle est vide)
  */
-async function withMeta(cards) {
+export async function withMeta(cards) {
   const [meta, since] = await Promise.all([loadMeta(), cards.some((c) => c?.rarity === 'identite') ? loadSince() : null]);
   /** Complète une carte avec sa série, son total et l'arrivée du membre (Identité). Une carte vide est renvoyée telle quelle. */
   const decorate = (card) => (card ? {
@@ -66,7 +69,7 @@ async function withMeta(cards) {
 }
 
 /** Emplacements : slot → { copy_id, shiny, serial, card }. Ignore tout exemplaire qui n'est plus à ce membre. */
-async function loadShowcase(userId) {
+export async function loadShowcase(userId) {
   const { data, error } = await sb.from('hg_card_showcase')
     .select(`slot, copy_id, hg_card_copies(id, owner_id, shiny, serial, recycled_at, hg_cards(${CARD_COLS}))`)
     .eq('user_id', userId).order('slot');
@@ -91,8 +94,11 @@ async function loadCollection(userId) {
       || (a.hg_cards.number ?? 0) - (b.hg_cards.number ?? 0) || a.id - b.id);
 }
 
-/** Affiche la vitrine dans `el`. Pour un autre membre sans vitrine, la section est masquée. */
-export async function mountShowcase(el, { userId, isMe }) {
+/**
+ * Affiche la vitrine dans `el`. Pour un autre membre sans vitrine, la section est masquée.
+ * Sur sa propre fiche : « Créer une image » (idée 58, cartes-vitrine-image.js, chargé au clic) et « Modifier ma vitrine ».
+ */
+export async function mountShowcase(el, { userId, isMe, pseudo = '' }) {
   if (!el || !userId) return;
   if (!canAccess('cartes')) { el.hidden = true; return; }
   el.hidden = false;
@@ -101,7 +107,7 @@ export async function mountShowcase(el, { userId, isMe }) {
   el.innerHTML = `
     <div class="shw-head">
       <h2 class="mb-section-title" id="shw-title">Vitrine</h2>
-      ${isMe ? '<button type="button" class="btn btn-ghost shw-edit">Modifier ma vitrine</button>' : ''}
+      ${isMe ? `<div class="shw-btns"><button type="button" class="btn btn-ghost shw-img">${ICON_IMG}Créer une image</button><button type="button" class="btn btn-ghost shw-edit">Modifier ma vitrine</button></div>` : ''}
     </div>
     <div class="shw-body" aria-busy="true"><div class="shw-skel" aria-hidden="true"></div></div>`;
   const body = el.querySelector('.shw-body');
@@ -129,6 +135,11 @@ export async function mountShowcase(el, { userId, isMe }) {
   };
 
   el.querySelector('.shw-edit')?.addEventListener('click', (e) => openEditor(userId, refresh, e.currentTarget));
+  el.querySelector('.shw-img')?.addEventListener('click', async (e) => {
+    const b = e.currentTarget;
+    try { (await import('./cartes-vitrine-image.js')).openVitrineImage({ userId, pseudo }, b); }
+    catch (err) { toast(`Image : ${errMsg(err)}`, 'error'); }
+  });
   await refresh();
 }
 

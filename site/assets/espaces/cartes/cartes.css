@@ -280,6 +280,14 @@ html[data-mode="clair"] .lcd-delta { color: #0f7a43; text-shadow: none; }
 .cq-act { flex: 0 0 auto; }
 .cq-btn { min-height: 44px; }
 .cq-item.is-claimed .cq-label { color: var(--muted); }
+/* Défi de collection de la semaine (idée 62, cartes-defi.js), en tête des quêtes */
+.cq-defi { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin: 0 0 12px; padding: 14px 16px;
+  border: 2px solid var(--sand); border-radius: var(--radius-sm); background: var(--surface-2); }
+.cq-defi-k { margin: 0; font: 400 12px var(--font-pixel); letter-spacing: 1px; color: var(--sand); text-transform: uppercase; }
+html[data-mode="clair"] .cq-defi-k { color: var(--text); }
+.cq-defi-t { font-size: 17px; }
+.cq-defi-aide { margin: 0; font-size: 13px; color: var(--muted); }
+.cq-defi.is-claimed .cq-defi-t { color: var(--muted); }
 
 /* Collection d'un autre membre (lecture seule) : cartes.html#collection/<id> */
 .cartes-peer { display: grid; gap: 16px; }

@@ -107,3 +107,45 @@
   .mc-dlg { width: 100%; max-width: none; min-height: 100%; margin: 0; border-radius: 0; }
   .mc-selects-2 { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Sa liste de souhaits, dans la collection d'un membre (idée 55) */
+.pv-souhaits { display: grid; gap: 12px; }
+.pv-souhaits .cz-group-head { margin: 0; }
+.pv-souhaits p { margin: 0; }
+.pvs-tout { display: flex; flex-wrap: wrap; gap: 10px; }
+.pv-souhaits .pv-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.pv-souhaits .pv-tags { margin: 0; }
+.pvs-btn { min-height: 44px; width: min(100%, 168px); }
+
+/* Il te manque N cartes pour finir la série (idée 57) */
+.mq { display: grid; gap: 12px; border: 2px solid var(--sand); }
+.mq-tete { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; }
+.mq-titre { margin: 0; font-size: 20px; font-weight: 800; }
+.mq-titre:focus { outline: none; }
+.mq-titre:focus-visible { outline: 2px solid var(--sand); outline-offset: 4px; }
+.mq-sous { margin: 0; font: 400 12px var(--font-pixel); letter-spacing: 1px; color: var(--muted); text-transform: uppercase; }
+.mq-liste { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+.mq-ligne { display: flex; gap: 14px; align-items: flex-start; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); min-width: 0; }
+.mq-carte { flex: none; width: 96px; container-type: inline-size; }
+.mq-carte .hgc { --w: 100cqw; width: 100%; }
+.mq-txt { flex: 1 1 auto; min-width: 0; display: grid; gap: 4px; align-content: start; }
+.mq-txt strong { font-size: 16px; overflow-wrap: anywhere; }
+.mq-meta { font-size: 13px; color: var(--muted); }
+.mq-qui { margin: 4px 0 0; font-size: 14px; }
+.mq-ligne.is-seule .mq-qui { color: var(--muted); }
+.mq-act { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.mq-btn { min-height: 44px; white-space: nowrap; }
+.mq-nb { white-space: nowrap; }
+.mq-act .cd-wish { margin: 0; }
+.mq-pied { margin: 0; }
+.mq-sk { height: 120px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.mq-erreur { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.mq-erreur p { margin: 0; color: var(--muted); }
+.mq-rappel { flex-basis: 100%; text-align: left; font-size: 14px; color: var(--sand); }
+html[data-mode="clair"] .mq-rappel { color: var(--text); }
+@media (max-width: 600px) {
+  .mq-liste { grid-template-columns: minmax(0, 1fr); }
+  .mq-carte { width: 72px; }
+  .mq-ligne { gap: 12px; padding: 10px; }
+  .mq-act .btn, .mq-act .cd-wish { flex: 1 1 100%; justify-content: center; }
+}

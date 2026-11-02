@@ -7,6 +7,8 @@
  * la 3e à la 1re, un tampon tombe sur ma marche (VICTOIRE, ou ma place en gris ; jamais sur un autre joueur), le podium encaisse
  * le coup, puis les Paillettes défilent. Elle n'est jouée qu'une fois : ouverture directe, rechargement, onglet masqué : le
  * résultat s'affiche d'un bloc, tampon compris. Mouvement réduit : pas d'animation, sons conservés.
+ * Place tenue par un robot à la fin (joueur parti, migration 211) : étiquette « robot » dans le tableau et note sous celui-ci ; si c'est
+ * ma place, aucune Paillette et pas de revanche proposée ; si le robot a vidé la main, personne ne gagne.
  * Dépendances : core.js (esc, avatarHtml, toast), uno/api.js (uno, erreurTexte, estInvite), uno/effets.js.
  * Exporte : creer.
  */
@@ -115,7 +117,8 @@ export function creer(root, ctx) {
     const annulee = p.statut === 'annulee';
     const titre = annulee
       ? 'La partie a été arrêtée'
-      : (gagnant ? `${gagnant.pseudo} gagne la manche !` : 'Manche terminée');
+      : (gagnant?.parti && !gagnant.gagne ? `Personne ne gagne : le robot a vidé la main de ${gagnant.pseudo}.`
+        : gagnant ? `${gagnant.pseudo} gagne la manche !` : 'Manche terminée');
     const modeTxt = p.mode === 'points' ? 'Mode points' : 'Mode manche simple';
     const sous = [p.nom, code, `${joueurs.length} joueurs`, modeTxt].filter(Boolean).join(' · ');
     const html = `
@@ -162,18 +165,23 @@ export function creer(root, ctx) {
     const lignes = joueurs.map((j) => {
       const points = enPoints ? (j.points ?? 0) : (j.main_points ?? 0);
       return `<tr>
-        <th scope="row">${pseudoHtml(j)}</th>
+        <th scope="row">${pseudoHtml(j)}${j.parti ? ' <span class="uno-tag rb-tag">robot</span>' : ''}</th>
         <td class="num">${esc(j.nb_cartes ?? 0)}</td>
         <td class="num"><strong>${esc(points)}</strong></td>
       </tr>`;
+    }).join('');
+    // Places tenues par un robot à la fin : une note par joueur parti.
+    const notes = joueurs.filter((j) => j.parti).map((j) => {
+      const n = Number(j.tours_robot || 0);
+      return `<p class="small muted rb-note">${esc(j.pseudo || '?')} est parti : un robot a joué ${n === 1 ? 'son dernier tour' : `ses ${n} derniers tours`}. Sa main ne gagne ni Paillettes ni victoire.</p>`;
     }).join('');
     const html = `
       <table class="uno-tableau">
         <caption class="small muted">${enPoints ? 'Cartes restantes et cumul de points de la partie' : 'Cartes restantes et points de la manche'}</caption>
         <thead><tr><th scope="col">Joueur</th><th scope="col" class="num">Cartes</th><th scope="col" class="num">${enPoints ? 'Cumul' : 'Points'}</th></tr></thead>
         <tbody>${lignes}</tbody>
-      </table>`;
-    zone(zTableau, JSON.stringify([enPoints, joueurs.map((j) => [j.user_id, j.nb_cartes, j.points, j.main_points, j.pseudo])]), html);
+      </table>${notes}`;
+    zone(zTableau, JSON.stringify([enPoints, joueurs.map((j) => [j.user_id, j.nb_cartes, j.points, j.main_points, j.pseudo, j.parti, j.tours_robot])]), html);
   }
 
   function rendreRecompense(e) {
@@ -187,18 +195,22 @@ export function creer(root, ctx) {
     const badgesTxt = badges.length
       ? `, et ${badges.length > 1 ? 'les badges' : 'le badge'} <strong class="uno-or">${badges.map((b) => esc(b.nom)).join(', ')}</strong> ${badges.length > 1 ? 'viennent' : 'vient'} d'être débloqué${badges.length > 1 ? 's' : ''}`
       : '';
-    const texte = pailles > 0 || badges.length
-      ? `${pailles > 0 ? `${pailles} Paillette${pailles > 1 ? 's' : ''} gagnée${pailles > 1 ? 's' : ''}` : 'Partie terminée'}${badgesTxt}.`
-      : 'Partie terminée. Aucune Paillette cette fois.';
+    // Un robot tenait ma place à la fin : rien, et la raison.
+    const robot = !!mon.parti;
+    const texte = robot ? 'Aucune Paillette : tu n’étais pas revenu à la fin, le robot a fini la partie à ta place.'
+      : pailles > 0 || badges.length
+        ? `${pailles > 0 ? `${pailles} Paillette${pailles > 1 ? 's' : ''} gagnée${pailles > 1 ? 's' : ''}` : 'Partie terminée'}${badgesTxt}.`
+        : 'Partie terminée. Aucune Paillette cette fois.';
     const html = `
       <section class="card uno-fin-recompense" aria-labelledby="uno-fin-gain-titre">
         <div class="uno-fin-recompense-texte">
           <h2 id="uno-fin-gain-titre">Tes gains</h2>
           <p>${texte}</p>
         </div>
-        ${pailles > 0 ? `<span class="uno-fin-pailles" aria-label="${esc(pailles)} Paillettes" data-gain="${esc(pailles)}">+${gainMontre ? esc(pailles) : 0}</span>` : ''}
+        ${robot ? '<span class="uno-fin-pailles rb-zero" aria-label="0 Paillette">+0</span>'
+    : pailles > 0 ? `<span class="uno-fin-pailles" aria-label="${esc(pailles)} Paillettes" data-gain="${esc(pailles)}">+${gainMontre ? esc(pailles) : 0}</span>` : ''}
       </section>`;
-    zone(zRecompense, JSON.stringify([pailles, badges.map((b) => b.code)]), html);
+    zone(zRecompense, JSON.stringify([pailles, badges.map((b) => b.code), robot]), html);
   }
 
   function rendreActions(e) {
@@ -206,8 +218,16 @@ export function creer(root, ctx) {
     const moi = e.moi || {};
     const hote = !!moi.hote;
     const suite = p.suite || null;
+    // Un robot tenait ma place : pas de revanche proposée d'ici (rejoindre celle des autres reste possible).
+    const robot = !!(e.joueurs || []).find((j) => j.user_id === moi.user_id)?.parti;
+    // Spectateur (migration 214) : pas de revanche à lancer ; il peut rejoindre celle des joueurs si elle est publique.
+    const spectateur = moi.joue === false;
     let rejouerHtml;
-    if (suite) {
+    if (spectateur && !suite) {
+      rejouerHtml = '';
+    } else if (robot && !suite) {
+      rejouerHtml = '';
+    } else if (suite) {
       rejouerHtml = `<a class="btn btn-primary" href="/pages/jeux/uno.html#rejoindre/${encodeURIComponent(suite)}">Rejoindre la revanche</a>`;
     } else if (hote) {
       rejouerHtml = `<button type="button" class="btn btn-primary" data-rejouer>Rejouer avec la même table</button>`;
@@ -218,7 +238,7 @@ export function creer(root, ctx) {
     }
     const accueil = invite ? '' : '<a class="btn btn-ghost" href="/pages/jeux/uno.html">Retour à l\'accueil</a>';
     // Le bouton hôte peut être désactivé pendant une requête : on le reconstruit seulement si la clé change.
-    zone(zActions, JSON.stringify([hote, suite, invite]), `${rejouerHtml}${accueil}`);
+    zone(zActions, JSON.stringify([hote, suite, invite, robot, spectateur]), `${rejouerHtml}${accueil}`);
   }
 
   function maj(e) {

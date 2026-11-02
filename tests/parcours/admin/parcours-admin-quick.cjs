@@ -1,6 +1,6 @@
 // Parcours : actions rapides du plateau du panel (assets/espaces/admin/quick.js). Le plateau envoie
 // document.dispatchEvent(new CustomEvent('hg:quick', { detail: { action } })) ; ici on déclenche l'événement dans la page.
-// Give (panier, hg_cards_admin_give_panier ; détail dans parcours-admin-give-panier.cjs), Nouvelle enchère (hg_auction_create), Lancer un drop (hg_drop_create + hg-notify card_drop).
+// Give (panier, hg_cards_admin_give_panier ; détail dans parcours-admin-give-panier.cjs), Nouvelle enchère (lot en panier, hg_auction_create), Lancer un drop (hg_drop_create + hg-notify card_drop).
 // Contrôles : fenêtre modale, Échap ferme et rend le focus, Tab reste dans la fenêtre, validation, appel RPC avec les bons
 // arguments (journal window.__LOG du faux client), absence de permission (pas de preventDefault), 390 px sans défilement
 // horizontal, aucune erreur JavaScript.
@@ -134,17 +134,22 @@ const focusTrigger = (p) => p.evaluate(() => { let b = document.getElementById('
   check(await p.evaluate(() => !!document.activeElement?.closest('dialog.qk-dlg')), 'focus piégé : Maj+Tab reste dans la fenêtre');
   await p.ctx.close();
 
-  // 5. Nouvelle enchère : carte unique C14, règles par défaut, confirmation, hg_auction_create.
+  // 5. Nouvelle enchère (lot en panier, migration 215) : carte unique C14 et 200 Paillettes, nom du lot, règles par défaut,
+  // confirmation (fenêtre du give), hg_auction_create.
   p = await openPage(browser, { page: 'admin', fixture: FIX, width: 1280, height: 900, scenario: { uniques: true } });
   await focusTrigger(p);
   notPrevented = await quick(p, 'enchere');
   check(notPrevented === false, 'enchère : événement annulé');
   await waitDlg(p);
   check((await p.textContent('dialog.qk-dlg[open] .qk-title')) === 'Nouvelle enchère', 'enchère : titre « Nouvelle enchère »');
-  check(await p.isVisible('dialog.qk-dlg[open] a.qk-link[href="/pages/admin/admin.html#fabrique/encheres"]'), 'enchère : lien vers Fabrique › Enchères');
-  await p.waitForSelector('#qk-a-card option[value="C14"]', { timeout: 5000, state: 'attached' });
+  check(await p.isVisible('dialog.qk-dlg[open] a.qk-link[href="/pages/admin/admin.html#ventes/encheres"]'), 'enchère : lien vers Ventes › Enchères');
+  await p.waitForSelector('#qk-a-panier [data-vp-card="C14"]', { timeout: 5000 });
   check((await p.inputValue('#qk-a-start')) !== '' && (await p.inputValue('#qk-a-end')) !== '', 'enchère : début et fin pré-remplis (week-end)');
-  check((await p.inputValue('#qk-auc-min_bid')) === '500' && (await p.inputValue('#qk-auc-step')) === '50', 'enchère : mise 500 et pas 50 par défaut');
+  check((await p.inputValue('#qk-a-mise')) === '500' && (await p.inputValue('#qk-a-new-step')) === '50', 'enchère : mise 500 et pas 50 par défaut');
+  check(!(await p.$('#qk-a-new-min_bid')), 'enchère : la mise de départ n’est pas répétée dans les autres règles');
+  await p.click('#qk-a-panier [data-vp-card="C14"]');
+  await p.fill('#qk-a-paill', '200');
+  await p.fill('#qk-a-motif', 'Le gobelet et sa monnaie');
   // Fin avant le début : refusé avant l'envoi
   await p.fill('#qk-a-end', await p.inputValue('#qk-a-start'));
   await p.click('dialog.qk-dlg[open] [data-qk-submit]');
@@ -154,24 +159,30 @@ const focusTrigger = (p) => p.evaluate(() => { let b = document.getElementById('
   await p.fill('#qk-a-end', '2030-01-06T18:00');
   await p.fill('#qk-a-start', '2030-01-04T18:00');
   await p.click('dialog.qk-dlg[open] [data-qk-submit]');
-  await p.waitForSelector('dialog.qk-dlg[open] [data-qk-confirm]', { timeout: 3000 });
-  await p.click('dialog.qk-dlg[open] [data-qk-confirm]');
+  await p.waitForSelector('dialog.gv-confirm[open] [data-gv-ok]', { timeout: 3000 });
+  check(/« Le gobelet et sa monnaie » aux enchères du/.test(await p.textContent('dialog.gv-confirm[open] [data-gv-confirm-sum]')), 'enchère : confirmation (nom du lot, dates)');
+  await p.click('dialog.gv-confirm[open] [data-gv-ok]');
   await waitClosed(p);
   calls = await rpcCalls(p, 'hg_auction_create');
   const a = calls[0]?.p || {};
   check(calls.length === 1, 'enchère : hg_auction_create appelée une fois');
-  check(a.card_id === 'C14', 'enchère : carte C14');
+  check(!a.card_id && a.nom === 'Le gobelet et sa monnaie' && a.paillettes === 200 && a.lignes?.length === 1 && a.lignes[0].card === 'C14' && a.lignes[0].type === 'carte', 'enchère : lot envoyé (C14, 200 Paillettes, nom)');
   check(a.starts_at === new Date('2030-01-04T18:00').toISOString() && a.ends_at === new Date('2030-01-06T18:00').toISOString(), 'enchère : dates envoyées en ISO (heure locale saisie)');
   check(a.min_bid === '500' && a.step === '50' && a.block_last_winner === true && a.extend_min === '5', 'enchère : règles par défaut transmises (min_bid, step, block_last_winner, extend_min)');
   check(!p.errs.length, 'enchère : aucune erreur JS' + (p.errs.length ? ' (' + p.errs.join(' | ') + ')' : ''));
   await p.ctx.close();
 
-  // 6. Enchère sans carte unique disponible (fixture par défaut) : message, pas de formulaire.
+  // 6. Lot fait seulement de Paillettes : refusé avant l'envoi, message dans la fenêtre.
   p = await openPage(browser, { page: 'admin', fixture: FIX, width: 1280, height: 900 });
   await quick(p, 'enchere');
   await waitDlg(p);
-  await p.waitForSelector('dialog.qk-dlg[open] .qk-empty', { timeout: 5000 });
-  check((await p.textContent('dialog.qk-dlg[open] .qk-empty')).includes('Aucune carte unique disponible'), 'enchère sans carte unique : message et pas de formulaire');
+  await p.waitForSelector('#qk-a-paill', { timeout: 5000 });
+  await p.fill('#qk-a-paill', '300');
+  await p.fill('#qk-a-motif', 'Rien que des Paillettes');
+  await p.click('dialog.qk-dlg[open] [data-qk-submit]');
+  await p.waitForSelector('dialog.qk-dlg[open] .qk-err:not([hidden])', { timeout: 3000 }).catch(() => {});
+  check((await p.textContent('dialog.qk-dlg[open] .qk-err')).includes('Un lot fait seulement de Paillettes'), 'enchère : lot de Paillettes seules refusé');
+  check((await rpcCalls(p, 'hg_auction_create')).length === 0 && !(await p.$('dialog.gv-confirm')), 'enchère : ni confirmation ni appel');
   await p.keyboard.press('Escape');
   await waitClosed(p);
   await p.ctx.close();

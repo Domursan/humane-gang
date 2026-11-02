@@ -68,11 +68,12 @@ begin
   perform t_ok((select nb_cartes from hg_uno_joueurs where partie = v_id and user_id = u2) = 3, 'contré : 2 cartes de pénalité');
   perform t_ok(t_err(1, format('hg_uno_contrer(%L, %L)', v_code, u2)) like 'Trop tard%', 'on ne contre pas deux fois');
 
-  -- Sortie d'un joueur en cours de partie : ses cartes reviennent dans la pioche
+  -- Sortie d'un joueur en cours de partie : il garde sa place et sa main, un robot joue pour lui (migration 211, détail : t4_robot.sql)
   perform t_call(3, format('hg_uno_quitter(%L)', v_code));
-  perform t_ok((select exclu from hg_uno_joueurs where partie = v_id and user_id = u3), 'le joueur 3 a quitté la table');
+  perform t_ok((select parti and not exclu from hg_uno_joueurs where partie = v_id and user_id = u3), 'le joueur 3 a quitté la table : un robot tient sa place');
   perform t_ok(t_invariants(v_id) is null, 'cartes et compteurs cohérents après la sortie');
-  perform t_ok((select tour from hg_uno_parties where id = v_id) in (u1, u2), 'le tour reste à un joueur présent');
+  perform t_ok((select tour from hg_uno_parties where id = v_id) in (u1, u2)
+    or (select tour_fin from hg_uno_parties where id = v_id) <= now() + interval '3 seconds', 'le tour reste à un joueur présent, ou le robot joue dans 3 secondes');
 
   -- Robot : tours manqués -> le jeu avance seul jusqu'à la fin
   -- Migration 191 : le paiement exige une manche finie et 3 minutes de jeu, conditions posées ici.

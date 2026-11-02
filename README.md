@@ -18,7 +18,7 @@ Le site du Humane Gang : le QG du groupe pour le Secret Santa, les sorties IRL, 
 | Sorties IRL | Membres | Propositions de sorties, sondages de date, réponses, carte des lieux |
 | Historique | Membres | Frise des rencontres passées, éditions du Secret Santa, albums photo |
 | Messages | Membres | Messagerie privée entre membres (et avec son Santa, anonymement) |
-| Jeu de cartes | Membres | Boosters, collection, échanges, fabrication, drops, classement, Arène |
+| Jeu de cartes | Membres | Boosters, collection, échanges, enchères entre membres, fabrication, drops, classement, Arène |
 | Jeux | Membres | Missions quotidiennes, jeux quotidiens (GeoGuessr, « Qui a dit ça ? », question du jour, Sutom, Framed, Heardle…), jeux flash (Arcade) |
 | Événements | Membres | Images à attraper qui traversent le site pendant un événement |
 | Calendrier et ciné | Membres | Calendrier du gang, séances du ciné-club, playlist |

@@ -151,6 +151,11 @@ if (S.cardImages) for (const id of ['C1', 'C2', 'C3', 'C4', 'C7']) { const k = c
     DB.hg_card_copies.push(cpa(101,'C1'), cpa(102,'C1'), cpa(103,'C5'), cpa(104,'C8', { serial: 3 }), cpa(105,'C13'), cpa(106,'C12'), cpa(107,'C12'), cpa(108,'C9', { shiny: true }),
       { id: 12, card_id: 'C13', owner_id: ME, shiny: false, serial: null, source: 'booster', obtained_at: iso(-2), locked_trade: null, recycled_at: null });
   }
+  // S.souhaitsAlice = ['C1', …] : liste de souhaits d'Alice (U(2)), lue dans sa collection (idée 55, « Tu l'as en double »).
+  if (S.souhaitsAlice) for (const card_id of S.souhaitsAlice) DB.hg_card_wishlist.push({ user_id: U(2), card_id, created_at: iso(-1) });
+  // Idée 57 : S.copiesEnPlus = [{ id, card_id, owner_id }] ajoute des exemplaires (autres membres) ; S.sansMesCopies = ['C1', …] retire les miens.
+  if (S.copiesEnPlus) for (const x of S.copiesEnPlus) DB.hg_card_copies.push({ shiny: false, serial: null, source: 'booster', obtained_at: iso(-2), locked_trade: null, recycled_at: null, ...x });
+  if (S.sansMesCopies) DB.hg_card_copies = DB.hg_card_copies.filter((c) => !(c.owner_id === ME && S.sansMesCopies.includes(c.card_id)));
   // Scénario « bigTrade » (parcours-echanges-filtres.cjs, idée Q5) : Alice a 400 exemplaires de plus (12 cartes en
   // rotation). Son côté « Ses cartes » dans l'éditeur dépasse le seuil de lots (300) : dessin par lots de 120.
   if (S.bigTrade) for (let i = 0; i < 400; i++) DB.hg_card_copies.push({ id: 30000 + i, card_id: 'C' + (1 + (i % 12)), owner_id: U(2), shiny: false, serial: null, source: 'booster', obtained_at: iso(-2), locked_trade: null, recycled_at: null });
@@ -481,7 +486,7 @@ class Q {
   constructor(t) { this.t = t; this.f = []; this.one = false; this.op = 'select'; this.payload = null; this.ret = false; }
   /** Choisit les colonnes : sans effet ici, toutes les colonnes sont renvoyées. */
   // o.head : seulement le nombre de lignes (count), comme PostgREST avec { count: 'exact', head: true }
-  select(_c, o) { if (this.op !== 'select') this.ret = true; this.head = !!o?.head; return this; }
+  select(_c, o) { if (this.op !== 'select') this.ret = true; this.head = !!o?.head; this.cols = String(_c || ''); return this; }
   /** Filtre : la colonne c vaut v. */
   eq(c, v) { this.f.push((r) => getv(r, c) === v); return this; }
   /** Filtre : la colonne c ne vaut pas v. */
@@ -542,6 +547,7 @@ class Q {
     // Lecture : les lignes qui respectent les filtres ; une seule si maybeSingle ou single.
     let out = tab.filter(match);
     if (this.rg) out = out.slice(this.rg[0], this.rg[1] + 1); // pagination (fetchAllRows : pages de 1 000 lignes)
+    out = imbrique(this.t, this.cols, out); // ressources imbriquées de la vitrine (idée 58)
     if (this.head) return { data: null, error: null, count: out.length };
     return this.one ? { data: out[0] ?? null, error: null } : { data: out, error: null };
   }
@@ -705,6 +711,44 @@ if (S.c2) {
     inputs: r.inputs.map((i) => (i.card ? { card: i.card, qty: i.qty } : { tag: i.tag, qty: i.qty })) }));
   C2.auctionsAdmin = [{ id: 'A1', card_id: 'CU1', card_name: 'Le gobelet du RDV n° 1', starts_at: iso(-1), ends_at: C2.auction.ends_at, min_bid: 500, step: 50, status: 'ouverte', price: null, winner: null, top: 1300, top_pseudo: 'Alice', bids: 4 }];
 }
+/* Enchère du Staff dont le lot est un panier (migration 215), avec S.c2 : S.lotEnchere = 'cours' (ouverte, meilleure offre
+   4 200 d'Alice), 'prevue', 'createur' (ouverte, créée par moi), 'gagne' (close, gagnée par moi, remise du lot) ou 'vide'
+   (close sans offre). Lot : 2 000 Paillettes, La méga-usine du gang brillante, 2 cartes épiques, toute la série « Le gang
+   joue » (9 cartes), 2 boosters Doré et 1 Diamant. L'admin liste aussi une enchère prévue (avec la carte unique C14
+   réservée, si S.uniques) et une terminée sans offre. hg_auction_create garde le lot reçu (C2.auctionsAdmin). */
+if (S.c2 && S.lotEnchere) {
+  const k = (id) => { const c = DB.hg_cards.find((x) => x.id === id); return { id: c.id, name: c.name, rarity: c.rarity, family: c.family, image_url: null, number: c.number, set_id: c.set_id, set_name: 'Le gang joue' }; };
+  const tb = (id) => { const t = DB.hg_booster_types.find((x) => x.id === id); return { id: t.id, name: t.name, size: t.size, style: t.style }; };
+  const lot = { nom: 'Le coffre d’automne', paillettes: 2000, cartes: 12, boosters: 3, lignes: [
+    { type: 'carte', qte: 1, shiny: true, titre: 'La méga-usine du gang brillante', card: k('J9') },
+    { type: 'carte', qte: 1, shiny: false, titre: 'Le coffre des trouvailles', card: k('J4') },
+    { type: 'carte', qte: 1, shiny: false, titre: 'La balise de vision', card: k('J8') },
+    { type: 'lot', set: 'SETJ', qte: 1, shiny: false, titre: 'Toute la série « Le gang joue »', n: 9 },
+    { type: 'booster', booster: 'dore', qte: 2, titre: 'Doré', type_booster: tb('dore') },
+    { type: 'booster', booster: 'diamant', qte: 1, titre: 'Diamant', type_booster: tb('diamant') }] };
+  const e = S.lotEnchere, fini = e === 'gagne' || e === 'vide';
+  const fin = fini ? new Date(Date.now() - 3600e3 + 3 * 60e3).toISOString() : e === 'prevue' ? iso(3) : new Date(Date.now() + 28 * 3600e3).toISOString();
+  const finPrevue = fini ? new Date(Date.now() - 3600e3).toISOString() : fin;
+  C2.rules = { min_bid: 2500, step: 50, max_bid: null, cap_pct: 50, extend_min: 5, extend_cap_min: 60, max_bids_user: null, block_last_winner: true };
+  C2.cap = 6150;
+  C2.createur = e === 'createur';
+  C2.auction = { id: 'A1', status: fini ? 'close' : e === 'prevue' ? 'prevue' : 'ouverte', starts_at: e === 'prevue' ? iso(1) : iso(-1), ends_at: fin,
+    hard_end_at: new Date(new Date(finPrevue).getTime() + 60 * 60e3).toISOString(), min_bid: 2500, step: 50, card: null, lot,
+    winner: e === 'gagne' ? 'Ethan' : null, won: e === 'gagne', price: e === 'gagne' ? 5100 : null,
+    remise: e === 'gagne' ? { paillettes: 2000, cartes: 12, boosters: 3, nouvelles: 7, series: ['Le gang joue'] } : null };
+  const t = (min) => new Date(Date.now() - min * 60e3).toISOString();
+  C2.bids = e === 'prevue' || e === 'vide' ? [] : e === 'gagne'
+    ? [{ uid: ME, amount: 5100, created_at: t(62) }, { uid: U(2), amount: 4200, created_at: t(70) }, { uid: U(4), amount: 4000, created_at: t(90) }]
+    : [{ uid: U(2), amount: 4200, created_at: t(2) }, { uid: U(4), amount: 4000, created_at: t(9) }, { uid: U(5), amount: 3600, created_at: t(60) }, { uid: U(2), amount: 3000, created_at: t(180) }, { uid: U(4), amount: 2500, created_at: t(1500) }];
+  const malle = { nom: 'La malle de Noël', paillettes: 1000, cartes: 12, boosters: 5, lignes: [{ type: 'carte', qte: 1, shiny: false, titre: 'La Carte unique', card: null }] };
+  C2.auctionsAdmin = [
+    { id: 'A2', card_id: null, card_name: 'La malle de Noël', starts_at: iso(8), ends_at: iso(10), min_bid: 1500, step: 50, status: 'prevue', started: false, price: null, winner: null, top: null, bids: 0,
+      lot: malle, lot_uniques: S.uniques ? ['C14'] : [], rules: { ...C2.rules, min_bid: 1500 } },
+    { id: 'A1', card_id: null, card_name: lot.nom, starts_at: C2.auction.starts_at, ends_at: fin, min_bid: 2500, step: 50, status: C2.auction.status, started: e !== 'prevue',
+      price: C2.auction.price, winner: C2.auction.winner, top: C2.bids[0]?.amount ?? null, top_pseudo: C2.bids[0] ? DB.hg_profiles.find((p) => p.id === C2.bids[0].uid)?.pseudo : null, bids: C2.bids.length, lot, lot_uniques: [], rules: C2.rules },
+    { id: 'A0', card_id: null, card_name: 'Le sac de la Toussaint', starts_at: iso(-9), ends_at: iso(-7), min_bid: 800, step: 50, status: 'close', started: true, price: null, winner: null, top: null, bids: 0,
+      lot: { nom: 'Le sac de la Toussaint', paillettes: 500, cartes: 3, boosters: 2, lignes: [] }, lot_uniques: [], rules: { ...C2.rules, min_bid: 800 } }];
+}
 const pseudoOf = (id) => DB.hg_profiles.find((p) => p.id === id)?.pseudo || 'membre';
 /** Lot d'un code connu du scénario (forme normalisée), ou null. */
 function lotOf(n) {
@@ -714,6 +758,43 @@ function lotOf(n) {
   return null;
 }
 const normCode = (v) => { let x = String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); if (x.length === 10 && x.startsWith('HG')) x = x.slice(2); return x; };
+/* Défi de collection (idée 62, migration 210). scenario.defi = 'cours' (3/5), 'fini' (5/5, à réclamer), 'recu' (déjà reçu),
+   'echange' (défi d'échange 1/2) ou 'aucun' (pas de défi). hg_card_quests_me renvoie deux quêtes et le défi ;
+   hg_card_defi_claim met 1 booster en stock (DB.hg_booster_stock), une seule fois. État : window.__DB.defi. */
+DB.defi = S.defi === 'aucun' ? null : S.defi === 'echange'
+  ? { code: 'defi_partenaires_2', label: 'Échange des cartes avec 2 membres différents', metric: 'partenaires_echange', target: 2, progress: 1, done: false, claimed: false, booster: 'classique', booster_name: 'Classique' }
+  : { code: 'defi_serie_5', label: 'Obtiens 5 cartes de la série « Espace et planètes »', metric: 'cartes_serie', target: 5, progress: S.defi === 'cours' ? 3 : 5,
+    done: S.defi !== 'cours', claimed: S.defi === 'recu', set_name: 'Espace et planètes', booster: 'serie', booster_name: 'Série' };
+/* Vitrine (idée 58) : S.vitrine = [copy_id, …] remplit hg_card_showcase du membre connecté (emplacements 1, 2, 3).
+   imbrique() simule les ressources imbriquées que lit la vitrine : hg_card_copies(…, hg_cards(…)) sous hg_card_showcase,
+   hg_cards(…) sous hg_card_copies. Sans « hg_cards( » dans les colonnes demandées, rien ne change. */
+DB.hg_card_showcase = (S.vitrine || []).map((copy_id, i) => ({ user_id: ME, slot: i + 1, copy_id }));
+function imbrique(t, cols, rows) {
+  if (!cols || !cols.includes('hg_cards(')) return rows;
+  const carte = (c) => (c ? { ...c, hg_cards: DB.hg_cards.find((k) => k.id === c.card_id) || null } : null);
+  if (t === 'hg_card_copies') return rows.map(carte);
+  if (t === 'hg_card_showcase') return rows.map((r) => ({ ...r, hg_card_copies: carte(DB.hg_card_copies.find((x) => x.id === r.copy_id)) }));
+  return rows;
+}
+/** Réponses de hg_card_quests_me et hg_card_defi_claim pour le scénario defi. */
+function rpcDefi(fn) {
+  if (fn === 'hg_card_quests_me') {
+    // Fin de semaine : lundi prochain, minuit (heure suisse approchée).
+    const fin = new Date(); fin.setUTCDate(fin.getUTCDate() + ((8 - fin.getUTCDay()) % 7 || 7)); fin.setUTCHours(-1, 0, 0, 0);
+    return { data: { week: '2026-11-02', ends_at: fin.toISOString(), defi: DB.defi, quests: [
+      { code: 'q_boosters_3', label: 'Ouvrir 3 boosters', metric: 'boosters_ouverts', target: 3, progress: 1, reward: 225, done: false, claimed: false, proof: false },
+      { code: 'q_souhaits_3', label: 'Ajouter 3 cartes à ta liste de souhaits', metric: 'souhaits_ajoutes', target: 3, progress: 3, reward: 75, done: true, claimed: true, proof: false },
+    ] }, error: null };
+  }
+  const d = DB.defi;
+  if (!d) return { data: null, error: { message: 'Pas de défi de collection cette semaine' } };
+  if (!d.done) return { data: null, error: { message: `Défi pas encore réussi (${d.progress} sur ${d.target})` } };
+  if (d.claimed) return { data: null, error: { message: 'Tu as déjà reçu le booster de ce défi' } };
+  d.claimed = true;
+  const row = DB.hg_booster_stock.find((x) => x.type_id === d.booster);
+  if (row) row.qty += 1; else DB.hg_booster_stock.push({ user_id: ME, type_id: d.booster, qty: 1 });
+  return { data: { code: d.code, booster: d.booster, booster_name: d.booster_name }, error: null };
+}
 /** Réponses des RPC de la migration 081 (null : pas une RPC de ce paquet). */
 function rpcC2(fn, a = {}) {
   const ok = (data) => ({ data, error: null });
@@ -764,14 +845,16 @@ function rpcC2(fn, a = {}) {
       const x = { ...C2.auction, next_min: top ? top.amount + C2.auction.step : C2.auction.min_bid,
         top: top ? { amount: top.amount, mine: top.uid === ME, pseudo: pseudoOf(top.uid), avatar_url: null, color: '#E2C77E' } : null };
       return ok({ auction: x, bids: bids.map((b) => ({ amount: b.amount, created_at: b.created_at, mine: b.uid === ME, pseudo: pseudoOf(b.uid), avatar_url: null, color: '#E2C77E' })),
-        me: { cap: 4100, last_winner: false, balance: DB.hg_wallets[0].paillettes } });
+        ...(C2.rules ? { rules: C2.rules } : {}),
+        me: { cap: C2.cap || 4100, last_winner: false, createur: !!C2.createur, balance: DB.hg_wallets[0].paillettes } });
     }
     case 'hg_auction_bid': {
       const top = C2.bid || C2.bids[0];
       const min = top ? top.amount + C2.auction.step : C2.auction.min_bid;
       if (top?.uid === ME) return ko('Tu as déjà la meilleure offre');
       if (a.p_amount < min) return ko(`L’offre minimale est de ${min} Paillettes`);
-      if (a.p_amount > 4100) return ko('Plafond : 4100 Paillettes (la moitié de ton solde de lundi)');
+      if (C2.createur) return ko('Tu as créé cette enchère : tu ne peux pas enchérir dessus');
+      if (a.p_amount > (C2.cap || 4100)) return ko(`Plafond : ${C2.cap || 4100} Paillettes (la moitié de ton solde de lundi)`);
       C2.bid = { uid: ME, amount: a.p_amount, created_at: new Date().toISOString() };
       DB.hg_wallets[0].paillettes -= a.p_amount;
       return ok({ bid: 1, amount: a.p_amount, ends_at: C2.auction.ends_at, outbid: top?.uid || null });
@@ -808,8 +891,105 @@ function rpcC2(fn, a = {}) {
       return ok('R9');
     }
     case 'hg_auctions_admin': return ok(C2.auctionsAdmin || S.gestionEncheres || []); // S.gestionEncheres : enchères de la Gestion globale
-    case 'hg_auction_create': (C2.auctionsAdmin ||= []).unshift({ id: 'A9', card_id: a.p.card_id, card_name: DB.hg_cards.find((c) => c.id === a.p.card_id)?.name, starts_at: a.p.starts_at, ends_at: a.p.ends_at, min_bid: a.p.min_bid, step: a.p.step, status: 'prevue', bids: 0 }); return ok('A9');
+    case 'hg_auction_create': {
+      // 215 : lot en panier (p.nom, p.paillettes, p.lignes) ; mêmes refus que le serveur pour un lot de Paillettes seules et une mise trop basse.
+      if (a.p.lignes) {
+        const paill = Number(a.p.paillettes) || 0;
+        if (!a.p.lignes.length) return ko(paill ? 'Un lot fait seulement de Paillettes n’est pas accepté : ajoute au moins une carte ou un booster.' : 'Le lot est vide : ajoute des cartes, des boosters ou des Paillettes.');
+        if (paill >= Number(a.p.min_bid)) return ko(`La mise de départ doit dépasser les Paillettes du lot (${paill} Paillettes) : sinon le gagnant repart avec plus de Paillettes qu’il n’en a payé.`);
+        if (S.lotCourse) return ko('« La Carte unique » a été attribuée entre-temps : une carte unique déjà attribuée ne se met pas aux enchères. Retire-la du lot.');
+      }
+      const unique = a.p.lignes ? null : DB.hg_cards.find((c) => c.id === a.p.card_id);
+      (C2.auctionsAdmin ||= []).unshift({ id: 'A9', card_id: a.p.card_id || null, card_name: a.p.nom || unique?.name, starts_at: a.p.starts_at, ends_at: a.p.ends_at, min_bid: a.p.min_bid, step: a.p.step, status: 'prevue', bids: 0,
+        lot: a.p.lignes ? { nom: a.p.nom, paillettes: Number(a.p.paillettes) || 0, cartes: 0, boosters: 0, lignes: [] } : null, lot_uniques: [] });
+      return ok('A9');
+    }
     case 'hg_auction_cancel': { const x = (C2.auctionsAdmin || []).find((y) => y.id === a.p_id); if (x) x.status = 'annulee'; return ok(null); }
+    default: return null;
+  }
+}
+
+/* Enchères entre membres (idée 33, migration 212), seulement avec S.encheres (parcours-encheres-membres.cjs).
+   E1 Alice (24 h), E2 Bruno (fin dans 50 s, Chloé m'a dépassé), E3 ma carte sans offre, E4 David prolongée (j'ai la meilleure offre) ;
+   terminées : E5 gagnée, E6 ma carte vendue, E7 ma carte sans offre, E8 perdue. S.encheresVide : aucune enchère ouverte. */
+const EID = (n) => `eeeeeeee-0000-4000-8000-00000000000${n}`; // identifiants des enchères E1 à E9
+const ENC = S.encheres ? (() => {
+  const t = (s) => new Date(Date.now() + s * 1000).toISOString();
+  const carte = (id) => { const k = DB.hg_cards.find((c) => c.id === id) || {}; return { id: k.id, name: k.name, rarity: k.rarity, family: k.family, image_url: k.image_url, number: k.number, set_id: k.set_id, shiny: false }; };
+  const vend = (n) => ({ id: n === 1 ? ME : U(n), pseudo: people[n - 1][0], avatar_url: null, color: '#4F6A8F' });
+  const a = (id, c, v, s, o = {}) => ({ id, card: carte(c), vendeur: vend(v), mine: v === 1, status: 'ouverte', duree_min: 1440, min_bid: 50, step: 10,
+    fin_prevue: t(s), ends_at: t(s), closed_at: null, bids: [], ...o });
+  const b = (n, amount, s) => ({ uid: n === 1 ? ME : U(n), pseudo: people[n - 1][0], amount, created_at: t(-s), avatar_url: null, color: '#4F6A8F' });
+  const L = S.encheresVide ? [] : [
+    a(EID(1), 'C4', 2, 18 * 3600, { bids: [b(3, 120, 600), b(4, 80, 900)] }),
+    a(EID(2), 'C7', 3, 50, { duree_min: 10, bids: [b(4, 260, 20), b(1, 240, 60)] }),
+    a(EID(3), 'C2', 1, 6 * 60 + 10, { duree_min: 10, copy_id: 4 }),
+    a(EID(4), 'C3', 5, 25, { duree_min: 5, fin_prevue: t(-5), bids: [b(1, 150, 4), b(6, 120, 100)] }),
+  ];
+  L.push(a(EID(5), 'C5', 2, -3600, { status: 'vendue', price: 300, net: 270, winner: 'Ethan', won: true, closed_at: t(-3600), bids: [b(1, 300, 4000)] }),
+    a(EID(6), 'C1', 1, -7200, { status: 'vendue', price: 200, net: 180, winner: 'Alice', closed_at: t(-7200), bids: [b(2, 200, 8000)] }),
+    a(EID(7), 'C3', 1, -86400, { status: 'sans_offre', closed_at: t(-86400) }),
+    a(EID(8), 'C7', 4, -9000, { status: 'vendue', price: 400, net: 360, winner: 'Bruno', closed_at: t(-9000), bids: [b(3, 400, 9100), b(1, 380, 9200)] }));
+  if (!S.encheresVide) { const cp = DB.hg_card_copies.find((x) => x.id === 4); if (cp) cp.locked_trade = EID(3); }
+  return { L, cap: 800 };
+})() : null;
+function rpcEncheres(fn, p = {}) {
+  const ok = (data) => ({ data, error: null });
+  const ko = (message) => ({ data: null, error: { message } });
+  const top = (x) => x.bids[0] || null;
+  const ouv = ENC.L.filter((x) => x.status === 'ouverte');
+  const moi = (x) => x.bids.find((y) => y.uid === ME);
+  switch (fn) {
+    case 'hg_encheres_liste': return ok({ now: new Date().toISOString(), semaine: { name: 'La Carte unique', ends_at: new Date(Date.now() + 2 * 864e5).toISOString(), top: 900,
+        ...(S.lotEnchere ? { name: 'Le coffre d’automne', top: 4200, lot: { paillettes: 2000, cartes: 12, boosters: 3 } } : {}) }, // 215 : lot en panier
+      encheres: ouv.map((x) => ({ id: x.id, card: x.card, vendeur: x.vendeur, mine: x.mine, ends_at: x.ends_at, fin_prevue: x.fin_prevue, duree_min: x.duree_min, min_bid: x.min_bid,
+        top: top(x) ? { amount: top(x).amount, pseudo: top(x).pseudo, mine: top(x).uid === ME } : null, n: x.bids.length })),
+      me: { ventes: ouv.filter((x) => x.mine).map((x) => ({ id: x.id, copy_id: x.copy_id })) } });
+    case 'hg_enchere_vue': {
+      const x = ENC.L.find((y) => y.id === p.p_id);
+      if (!x) return ko('Cette enchère n’existe pas');
+      const tp = top(x), mb = moi(x);
+      return ok({ now: new Date().toISOString(),
+        enchere: { ...x, bids: undefined, next_min: tp ? tp.amount + x.step : x.min_bid, top: tp ? { amount: tp.amount, pseudo: tp.pseudo, mine: tp.uid === ME, avatar_url: null, color: '#4F6A8F' } : null },
+        bids: x.bids.map((y) => ({ amount: y.amount, created_at: y.created_at, pseudo: y.pseudo, mine: y.uid === ME, avatar_url: null, color: '#4F6A8F' })),
+        me: { cap: ENC.cap, balance: DB.hg_wallets[0].paillettes, depasse: mb && tp?.uid !== ME ? { amount: mb.amount } : null } });
+    }
+    case 'hg_enchere_offre': {
+      const x = ENC.L.find((y) => y.id === p.p_id);
+      if (!x || x.status !== 'ouverte') return ko('Cette enchère est terminée');
+      if (x.mine) return ko('Tu ne peux pas enchérir sur ta propre carte');
+      const tp = top(x), min = tp ? tp.amount + x.step : x.min_bid;
+      if (p.p_montant < min) return ko(`L’offre minimale est de ${min} Paillettes`);
+      const prolongee = new Date(x.ends_at).getTime() - Date.now() < 30000;
+      if (prolongee) x.ends_at = new Date(new Date(x.ends_at).getTime() + 30000).toISOString();
+      x.bids.unshift({ uid: ME, pseudo: 'Ethan', amount: p.p_montant, created_at: new Date().toISOString(), avatar_url: null, color: '#4F6A8F' });
+      DB.hg_wallets[0].paillettes -= p.p_montant;
+      return ok({ bid: 99, amount: p.p_montant, ends_at: x.ends_at, prolongee });
+    }
+    case 'hg_enchere_vendre': {
+      if (!(p.p_depart >= 10)) return ko('La mise de départ est de 10 Paillettes au moins');
+      if (ouv.filter((x) => x.mine).length >= 2) return ko('Tu as déjà 2 cartes en vente : attends la fin de l’une d’elles');
+      const cp = DB.hg_card_copies.find((x) => Number(x.id) === Number(p.p_copy));
+      if (!cp || cp.locked_trade) return ko('Cet exemplaire n’est pas disponible');
+      cp.locked_trade = EID(9);
+      ENC.L.push({ id: EID(9), card: (() => { const k = DB.hg_cards.find((c) => c.id === cp.card_id); return { id: k.id, name: k.name, rarity: k.rarity, family: k.family, image_url: null, number: k.number, set_id: k.set_id }; })(),
+        vendeur: { id: ME, pseudo: 'Ethan' }, mine: true, status: 'ouverte', duree_min: p.p_duree, min_bid: p.p_depart, step: 10, copy_id: cp.id,
+        fin_prevue: new Date(Date.now() + p.p_duree * 60000).toISOString(), ends_at: new Date(Date.now() + p.p_duree * 60000).toISOString(), closed_at: null, bids: [] });
+      return ok(EID(9));
+    }
+    case 'hg_enchere_retirer': {
+      const x = ENC.L.find((y) => y.id === p.p_id);
+      if (!x?.mine || x.bids.length) return ko('Une offre a été faite : tu ne peux plus retirer ta carte');
+      x.status = 'retiree'; x.closed_at = new Date().toISOString();
+      const cp = DB.hg_card_copies.find((y) => Number(y.id) === Number(x.copy_id)); if (cp) cp.locked_trade = null;
+      return ok(null);
+    }
+    case 'hg_encheres_historique': return ok(ENC.L.filter((x) => x.mine || moi(x)).map((x) => ({ id: x.id, card: x.card, status: x.status, role: x.mine ? 'vendeur' : 'acheteur',
+      quand: x.closed_at || x.ends_at, price: x.price ?? null, net: x.net ?? null, won: !!x.won, vendeur: x.vendeur.pseudo, winner: x.winner || null,
+      top: top(x)?.amount ?? null, top_mine: top(x)?.uid === ME, mon_offre: moi(x)?.amount ?? null })));
+    case 'hg_encheres_admin': return ok(ENC.L.map((x) => ({ id: x.id, card_name: x.card.name, status: x.status, seller: x.vendeur.pseudo, created_at: x.fin_prevue, ends_at: x.ends_at,
+      min_bid: x.min_bid, price: x.price ?? null, fee: x.price ? x.price - x.net : null, winner: x.winner || null,
+      bids: x.bids.map((y, i) => ({ pseudo: y.pseudo, amount: y.amount, created_at: y.created_at, refunded: i > 0 })) })));
     default: return null;
   }
 }
@@ -833,7 +1013,10 @@ export function createClient() {
       if (S.offline) window.__LOG.push(['offline-req', 'rpc', fn]);
       // Idées C13 à C17 (migration 082), seulement avec le scénario correspondant ; sinon la fonction « n'existe pas ».
       if (fn in IDEES_C3) return IDEES_C3[fn](args);
+      // Défi de collection (idée 62, migration 210), seulement avec scenario.defi : voir DEFI plus bas.
+      if (S.defi && (fn === 'hg_card_quests_me' || fn === 'hg_card_defi_claim')) return rpcDefi(fn);
 
+      if (ENC) { const en = rpcEncheres(fn, args); if (en) return en; } // idée 33 (migration 212), scénario S.encheres
       { const c2 = rpcC2(fn, args); if (c2) return c2; } // idées C2 (migration 081)
       // Secrets cachés (migration 062) : la secousse offre un booster ; l'appel reste dans window.__LOG.
       if (fn === 'hg_egg_found') return { data: { new: true, reward: 0, message: 'Un booster offert t\'attend sur la page Cartes.', card: null, badge: null, found: 1 }, error: null };
@@ -983,6 +1166,23 @@ export function createClient() {
         const RK = ['commune', 'peu_commune', 'rare', 'epique', 'legendaire', 'mythique'];
         w.pity_epique = RK.indexOf('legendaire') >= 3 ? 0 : w.pity_epique + 1;
         return { data: { cards, best: 'legendaire' }, error: null }; }
+      // « Il te manque N cartes » (migration 209), même règle que la RPC : cartes actives hors Identité que je n'ai pas,
+      // et pour chacune les membres (pas fantômes) qui en ont au moins 2 exemplaires libres. Rien au-delà de 5 manquantes.
+      // S.mqFail : erreur ; S.mqDelay : délai en ms (état de chargement).
+      if (fn === 'hg_serie_manquantes') {
+        if (S.mqDelay) await new Promise((r) => setTimeout(r, S.mqDelay));
+        if (S.mqFail) return { data: null, error: { message: 'Erreur réseau' } };
+        const vivant = (c) => !c.recycled_at;
+        const manq = DB.hg_cards.filter((k) => k.set_id === args.p_set && k.active !== false && !['identite', 'unique'].includes(k.rarity)
+          && !DB.hg_card_copies.some((c) => vivant(c) && c.owner_id === ME && c.card_id === k.id)).sort((a, b) => a.number - b.number);
+        if (!manq.length || manq.length > 5) return { data: { manquantes: manq.length, cartes: [] }, error: null };
+        const actifs = DB.hg_profiles.filter((p) => !p.is_ghost && p.id !== ME);
+        const cartes = manq.map((k) => ({ card_id: k.id, chez: !k.tradeable ? [] : actifs.map((p) => {
+          const libres = DB.hg_card_copies.filter((c) => vivant(c) && !c.locked_trade && c.owner_id === p.id && c.card_id === k.id);
+          return { user_id: p.id, pseudo: p.pseudo, n: libres.length, copy_id: libres.length ? Math.min(...libres.map((c) => Number(c.id))) : null };
+        }).filter((x) => x.n >= 2).sort((a, b) => b.n - a.n || a.pseudo.localeCompare(b.pseudo)).slice(0, 5) }));
+        return { data: { manquantes: manq.length, cartes }, error: null };
+      }
       // Échanges possibles (migration 058) : suggestions du membre connecté, dans le format de la RPC réelle.
       // S.suggestions remplace le résultat (scénario de test) ; S.suggFail simule une fonction absente (repli client).
       if (fn === 'hg_trade_suggestions') {
@@ -1116,7 +1316,7 @@ export function createClient() {
       return { data: null, error: null };
     },
     // Canal temps réel factice : aucun événement n'est émis.
-    channel: () => ({ on() { return this; }, subscribe() { return this; } }), removeChannel() {}, removeAllChannels() {},
+    channel: (n) => { if (ENC) window.__LOG.push(['channel', n]); return { on() { return this; }, subscribe() { return this; } }; }, removeChannel() {}, removeAllChannels() {}, // ENC : idée 33
     // Stockage factice : URL publique en cercle doré, images signées vides.
     storage: { from: () => ({
       getPublicUrl: (p) => ({ data: { publicUrl: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="gold"/></svg>') } }),

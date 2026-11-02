@@ -59,6 +59,10 @@ export const plat = Object.assign(commun, {
     (code, action, args = {}) => rpcInvite('agir', code, { action, args })),
   message: deux((code, texte) => rpc('hg_plat_message', { p_code: code, p_texte: texte }), (code, texte) => rpcInvite('message', code, { texte })),
   publiques: () => rpc('hg_plat_publiques', { p_jeu: JEU.id }),
+  /** Parties publiques en cours qui admettent les spectateurs, hors les miennes (migration 214 ; Blackjack, Monopoly, Destins). */
+  enDirect: () => rpc('hg_plat_en_direct', { p_jeu: JEU.id }),
+  /** Spectateur : arrête de regarder la partie (id). */
+  arreterDeRegarder: (partieId) => rpc('hg_spect_arreter', { p_partie: partieId }),
   mesParties: () => rpc('hg_plat_mes_parties', { p_jeu: JEU.id }),
   stats: (user = null) => rpc('hg_plat_stats', { p_jeu: JEU.id, p_user: user }),
   // Administration (/assets/espaces/admin/admin-plateaux.js)

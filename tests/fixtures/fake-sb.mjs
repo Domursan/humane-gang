@@ -1030,10 +1030,30 @@ export function createClient(_url, _key, opts = {}) {
         if (S.mesPartiesAttente) await new Promise((r) => { window.__HG_LIBERE = r; });
         return S.mesPartiesKo ? { data: null, error: { message: 'Failed to fetch' } } : { data: S.mesParties || [], error: null };
       }
+      // Bloc « En direct » de la page Jeux (migration 214). S.enDirect : les lignes (sans : aucune, le bloc n'existe pas).
+      if (fn === 'hg_jeux_en_direct') return { data: S.enDirect || [], error: null };
+      // Séries des jeux du jour et joker payant (migrations 206 et 207). S.series : { solde, jeux: { <clé>: { n, joue, bascule, dans
+      // (heures avant la bascule) ou fin, joker? } } } ; sans S.series, null (pas de pastille). Le joker payé relie la série et débite le solde.
+      if (fn === 'hg_jeux_series') {
+        if (!S.series) return { data: null, error: null };
+        const jeux = Object.fromEntries(Object.entries(S.series.jeux || {}).map(([k, v]) => [k, { bascule: 'minuit', joue: false, n: 0, joker: null, ...v,
+          fin: v.fin || new Date(Date.now() + (v.dans ?? 8) * 3600e3).toISOString() }]));
+        return { data: JSON.parse(JSON.stringify({ solde: S.series.solde ?? 0, jeux })), error: null };
+      }
+      if (fn === 'hg_jeux_joker_payer') {
+        const s = S.series?.jeux?.[args?.p_jeu], k = s?.joker;
+        if (!k) return { data: null, error: { message: 'Rien à sauver : ta série tient toujours' } };
+        if (k.deja) return { data: null, error: { message: 'Un seul joker payant par semaine pour ce jeu' } };
+        if ((S.series.solde ?? 0) < k.prix) return { data: null, error: { message: `Pas assez de Paillettes (il en faut ${k.prix})` } };
+        S.series.solde -= k.prix;
+        s.n = k.serie + (s.joue ? 1 : 0); s.joker = null;
+        window.__LOG.push(['joker_paye', args.p_jeu, k.prix]);
+        return { data: { jeu: args.p_jeu, jour: k.jour, prix: k.prix, serie: s.n, solde: S.series.solde }, error: null };
+      }
       // Notifications par catégorie (idée Q6, migration 095) : liste blanche, heures 0 à 23, une ligne par membre.
       if (fn === 'hg_set_notif_prefs') {
         const uid = S.uid || ME;
-        const ok = /^((messages|sorties|echanges|souhaits|santa|anniversaires|quiz|tours)\.(push|discord)|carte_proposee\.site)$/;
+        const ok = /^((messages|sorties|echanges|souhaits|santa|anniversaires|quiz|tours)\.(push|discord)|carte_proposee\.site|anniversaires\.site)$/;
         const pr = args?.p_prefs || {};
         if (Object.entries(pr).some(([k, v]) => !ok.test(k) || typeof v !== 'boolean')) return { data: null, error: { message: 'Catégorie inconnue' } };
         const qs = args?.p_quiet_start ?? null, qe = args?.p_quiet_end ?? null;
@@ -1174,21 +1194,61 @@ export function createClient(_url, _key, opts = {}) {
         return { data: mine.map((c) => {
           const msgs = (DB.hg_messages || []).filter((x) => x.conversation_id === c.id);
           const last = msgs[msgs.length - 1];
-          const other = (S.convMembers || []).find((m) => m.conversation_id === c.id && m.user_id !== me)?.user_id || null;
-          return { id: c.id, kind: c.kind, title: c.kind === 'support' ? c.title : (DB.hg_profiles.find((p) => p.id === other)?.pseudo || 'Conversation'),
+          // Secret Santa vu par sa cible : « Ton Santa », sans identifiant (comme hg_conv_title)
+          const cible = c.kind === 'santa' && me === c.target_id;
+          const other = cible ? null : (S.convMembers || []).find((m) => m.conversation_id === c.id && m.user_id !== me)?.user_id || null;
+          return { id: c.id, kind: c.kind, title: c.kind === 'support' ? c.title : cible ? 'Ton Santa' : (DB.hg_profiles.find((p) => p.id === other)?.pseudo || 'Conversation'),
             other_id: other, last_message_at: c.last_message_at, last_body: last?.body ?? null, last_mine: last ? last.sender_id === me : null, unread: 0 };
         }), error: null };
       }
       if (fn === 'hg_get_messages') {
         const me = uidNow();
         return { data: (DB.hg_messages || []).filter((x) => x.conversation_id === args.p_conv && x.id > (args.p_after || 0))
-          .map((x) => ({ id: x.id, mine: x.sender_id === me, sender_label: x.sender_id === me ? 'Moi' : (DB.hg_profiles.find((p) => p.id === x.sender_id)?.pseudo || 'Ancien membre'), body: x.body, created_at: x.created_at })), error: null };
+          .map((x) => ({ id: x.id, mine: x.sender_id === me, body: x.body, created_at: x.created_at, system: !!x.system,
+            sender_label: x.sender_id === me ? 'Moi' : (DB.hg_conversations || []).some((c) => c.id === args.p_conv && c.kind === 'santa' && c.santa_id === x.sender_id) ? 'Ton Santa'
+              : (DB.hg_profiles.find((p) => p.id === x.sender_id)?.pseudo || 'Ancien membre') })), error: null };
       }
       if (fn === 'hg_mark_read') return { data: null, error: null };
       if (fn === 'hg_send_message') {
         const id = 1 + Math.max(0, ...(DB.hg_messages || []).map((x) => x.id || 0));
         DB.hg_messages.push({ id, conversation_id: args.p_conv, sender_id: uidNow(), body: args.p_body, created_at: new Date().toISOString() });
         return { data: id, error: null };
+      }
+      // Recherche et réactions (migrations 203 et 204) : mes conversations seulement, ni messages masqués ni système ;
+      // le Santa reste « Ton Santa » ; pas de réactions dans l'assistance. S.searchError / S.reactError simulent un refus.
+      if (fn === 'hg_search_messages' || fn === 'hg_message_reactions_get' || fn === 'hg_message_react') {
+        const me = uidNow();
+        const convs = new Set((S.convMembers || []).filter((m) => m.user_id === me).map((m) => m.conversation_id));
+        const conv = (id) => (DB.hg_conversations || []).find((c) => c.id === id);
+        const label = (c, u) => (u === me ? 'Moi' : c?.kind === 'santa' && u === c.santa_id ? 'Ton Santa' : DB.hg_profiles.find((p) => p.id === u)?.pseudo || 'Ancien membre');
+        const plie = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+        DB.hg_message_reactions = DB.hg_message_reactions || S.messageReactions || [];
+        if (fn === 'hg_search_messages') {
+          if (S.searchError) return { data: null, error: { message: S.searchError } };
+          const q = String(args.p_q || '').trim();
+          if (q.length < 3) return { data: [], error: null };
+          return { data: (DB.hg_messages || []).filter((x) => convs.has(x.conversation_id) && (!args.p_conv || x.conversation_id === args.p_conv)
+            && !x.hidden_at && !x.system && plie(x.body).includes(plie(q)))
+            .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || b.id - a.id).slice(0, 50)
+            .map((x) => { const c = conv(x.conversation_id); return { conversation_id: x.conversation_id, message_id: x.id, conv_kind: c?.kind, conv_title: c?.title || 'Conversation',
+              mine: x.sender_id === me, sender_label: label(c, x.sender_id), body: x.body, created_at: x.created_at }; }), error: null };
+        }
+        if (fn === 'hg_message_reactions_get') {
+          const c = conv(args.p_conv);
+          if (!c || c.kind === 'support' || !convs.has(c.id)) return { data: [], error: null };
+          const ids = new Set((DB.hg_messages || []).filter((x) => x.conversation_id === c.id && !x.hidden_at && !x.system).map((x) => x.id));
+          return { data: DB.hg_message_reactions.filter((r) => ids.has(r.message_id))
+            .map((r) => ({ message_id: r.message_id, emoji: r.emoji, mine: r.user_id === me, label: r.user_id === me ? 'toi' : label(c, r.user_id) })), error: null };
+        }
+        if (S.reactError) return { data: null, error: { message: S.reactError } };
+        const x = (DB.hg_messages || []).find((m) => m.id === args.p_message), c = conv(x?.conversation_id);
+        if (!x || !convs.has(c?.id)) return { data: null, error: { message: 'Message introuvable' } };
+        if (c.kind === 'support') return { data: null, error: { message: 'Pas de réactions dans l’assistance' } };
+        if (!['❤️', '😂', '👍', '😮', '🔥', '🎉'].includes(args.p_emoji)) return { data: null, error: { message: 'Réaction inconnue' } };
+        const i = DB.hg_message_reactions.findIndex((r) => r.message_id === x.id && r.user_id === me && r.emoji === args.p_emoji);
+        if (i >= 0) { DB.hg_message_reactions.splice(i, 1); return { data: false, error: null }; }
+        DB.hg_message_reactions.push({ message_id: x.id, user_id: me, emoji: args.p_emoji });
+        return { data: true, error: null };
       }
       if (fn === 'hg_support_summary') {
         const c = (DB.hg_conversations || []).find((x) => x.id === args.p_conv);
@@ -1218,6 +1278,13 @@ export function createClient(_url, _key, opts = {}) {
       if (fn === 'hg_admin_read_conversation') { // lecture journalisée : chaque appel est tracé dans le journal du faux client
         window.__READS = (window.__READS || 0) + 1;
         return { data: DB.hg_messages.filter((m) => m.conversation_id === args.p_conv && m.id > args.p_after).slice(0, args.p_limit), error: null };
+      }
+      // Réactions vues par l'admin (migration 204) : lecture journalisée elle aussi, vrai membre et pseudo.
+      if (fn === 'hg_admin_message_reactions') {
+        window.__READS = (window.__READS || 0) + 1;
+        const ids = new Set((DB.hg_messages || []).filter((m) => m.conversation_id === args.p_conv).map((m) => m.id));
+        return { data: (DB.hg_message_reactions || S.messageReactions || []).filter((r) => ids.has(r.message_id))
+          .map((r) => ({ message_id: r.message_id, emoji: r.emoji, user_id: r.user_id, pseudo: DB.hg_profiles.find((p) => p.id === r.user_id)?.pseudo || 'Ancien membre' })), error: null };
       }
       // Inscription : S.joinError simule un refus de hg_join (ex. pseudo réservé à un fantôme, migration 073).
       if (fn === 'hg_join' && S.joinError) return { data: null, error: { message: S.joinError, code: 'P0001' } };

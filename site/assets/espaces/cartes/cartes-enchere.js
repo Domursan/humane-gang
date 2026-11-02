@@ -5,11 +5,14 @@
 // Mise à jour : relecture toutes les 20 s quand la Boutique est affichée, compte à rebours chaque seconde.
 // Règles propres à chaque enchère (migration 097) affichées aux membres ; le Staff « cartes » les règle ici même
 // (« Régler cette enchère », formulaire partagé enchere-regles.js).
+// Lot en panier (migration 215) : l'encart et la vue montrent le lot (enchere-lot.js) ; à la fin, le gagnant voit ce
+// qu'il a reçu (auction.remise). Le Staff qui a créé l'enchère ne peut pas enchérir dessus (me.createur).
 // RPC : hg_auction_current (clôt aussi les enchères échues), hg_auction_bid, hg_auction_update.
 // Exporte : initEnchere(ctx), drawEnchere(). ctx = { app, visible: () => boolean, refresh: async () => {} }.
 import { sb, esc, toast, errMsg, avatarHtml } from '../../commun/core.js';
 import { cardHtml, fmtP } from './cartes-ui.js';
 import { rulesFieldsHtml, readRules, rulesSummary } from './enchere-regles.js';
+import { ensureLotCss, lotTeaserHtml, lotItemsHtml } from './enchere-lot.js';
 
 let C = null;
 const E = { data: null, detail: false, busy: false, err: '', amount: '', timer: null, tick: null, edit: false };
@@ -48,6 +51,10 @@ function teaserHtml(x) {
   const state = x.status === 'ouverte' ? `Fin dans <strong data-c2-left>${esc(remaining(new Date(x.ends_at) - Date.now()))}</strong>`
     : x.status === 'prevue' ? `Ouverture ${esc(when(x.starts_at))}`
     : x.winner ? `Remportée par ${esc(x.winner)} pour ${esc(fmtP(x.price))}` : 'Terminée sans offre';
+  if (x.lot) {
+    const topTxt = x.status === 'close' ? '' : x.top ? `${fmtP(x.top.amount)} · ${x.top.pseudo || 'membre'}` : 'aucune offre';
+    return lotTeaserHtml(x.lot, { etatHtml: state, top: topTxt, bouton: x.status === 'ouverte' ? 'Voir l’enchère' : 'Voir' });
+  }
   return `<section class="card c2-auc-teaser" aria-labelledby="c2-auc-t">
       <div class="c2-auc-mini">${cardHtml(x.card || {}, { size: 'sm' })}</div>
       <div class="c2-auc-tinfo">
@@ -70,11 +77,12 @@ function detailHtml(x) {
   const min = Number(x.next_min) || 0;
   const rules = E.data.rules || null;
   const noBidsLeft = me.bids_left === 0;
-  const blockMsg = !open() ? '' : me.last_winner ? 'Tu as gagné la dernière enchère : laisse sa chance aux autres cette fois.'
+  const blockMsg = !open() ? '' : me.createur ? 'Tu as créé cette enchère : tu ne peux pas enchérir dessus.'
+    : me.last_winner ? 'Tu as gagné la dernière enchère : laisse sa chance aux autres cette fois.'
     : lead ? 'Tu as la meilleure offre. Tes Paillettes te seront rendues si quelqu’un fait mieux.'
     : noBidsLeft ? 'Tu as utilisé toutes tes offres pour cette enchère.'
     : cap < min ? `Ton maximum (${fmtP(cap)}) est sous l’offre minimale.` : '';
-  const canBid = open() && !me.last_winner && !lead && !noBidsLeft && cap >= min && !E.busy;
+  const canBid = open() && !me.createur && !me.last_winner && !lead && !noBidsLeft && cap >= min && !E.busy;
   const form = open() ? `<form class="card c2-auc-form" data-c2-form="bid" novalidate>
         <label for="c2-auc-amount" class="c2-auc-lab">Ton offre · minimum ${esc(fmtP(min))}</label>
         <div class="c2-auc-row">
@@ -85,14 +93,15 @@ function detailHtml(x) {
         ${E.err ? `<p class="c2-auc-err" id="c2-auc-err" role="alert">${esc(E.err)}</p>` : ''}
         ${blockMsg ? `<p class="small c2-auc-note" role="status">${esc(blockMsg)}</p>` : ''}
         <p class="small muted" id="c2-auc-help">Tes Paillettes sont bloquées tout de suite et rendues si quelqu’un fait mieux. Ton maximum : ${esc(fmtP(cap))}${me.bids_left != null ? ` · offres restantes : ${esc(String(me.bids_left))}` : ''}.</p>
-      </form>` : `<p class="card c2-auc-done">${x.status === 'prevue' ? `L’enchère ouvre ${esc(when(x.starts_at))}.`
+      </form>` : x.lot ? finLotHtml(x) : `<p class="card c2-auc-done">${x.status === 'prevue' ? `L’enchère ouvre ${esc(when(x.starts_at))}.`
         : x.winner ? `${x.won ? 'Tu as remporté' : `${esc(x.winner)} a remporté`} « ${esc(x.card?.name || '')} » pour ${esc(fmtP(x.price))}.` : 'Enchère terminée sans offre : la carte reste en réserve.'}</p>`;
   const bids = (E.data.bids || []).map((b) => `<li class="c2-auc-bid">${avatarHtml(b, 24)}<span class="c2-auc-who">${esc(b.pseudo || 'membre')}${b.mine ? ' <span class="muted small">(toi)</span>' : ''}</span>
       <strong>${esc(fmtP(b.amount))}</strong><span class="muted small">${esc(ago(b.created_at))}</span></li>`).join('');
-  return `<section class="c2-auc" aria-labelledby="c2-auc-h">
+  const regles = rules ? [...rulesSummary(rules), ...(x.lot ? ['À la fin, le lot est créé et donné au gagnant : cartes dans sa collection, boosters dans son stock, Paillettes sur son solde. Les Paillettes de l’offre gagnante sont détruites.'] : [])] : [];
+  return `<section class="c2-auc${x.lot ? ' enp-auc' : ''}" aria-labelledby="c2-auc-h">
       <button type="button" class="c2-back" data-c2="auc-close"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Boutique</button>
-      <div class="c2-auc-title"><div><p class="eyebrow">Enchère de la semaine</p><h2 id="c2-auc-h" class="c2-auc-name">${esc(x.card?.name || '')}</h2></div><span class="pill pill-sand">Unique</span></div>
-      <div class="c2-auc-top">
+      <div class="c2-auc-title"><div><p class="eyebrow">Enchère de la semaine</p><h2 id="c2-auc-h" class="c2-auc-name">${esc(x.lot ? x.lot.nom : x.card?.name || '')}</h2></div><span class="pill pill-sand">${x.lot ? 'Lot' : 'Unique'}</span></div>
+      ${x.lot ? `${lotItemsHtml(x.lot)}${boitesLotHtml(x, left)}` : `<div class="c2-auc-top">
         <div class="c2-auc-card">${cardHtml(x.card || {}, { size: 'md', serial: x.status === 'close' && x.winner ? 1 : null })}</div>
         <div class="c2-auc-boxes">
           <div class="card c2-auc-box"><p class="small muted">${open() ? 'Fin dans' : x.status === 'prevue' ? 'Ouverture' : 'Terminée'}</p>
@@ -102,14 +111,58 @@ function detailHtml(x) {
             <p class="c2-auc-big c2-auc-price" aria-live="polite">${top ? esc(fmtP(top.amount)) : '—'}</p>
             ${top ? `<p class="c2-auc-who">${avatarHtml(top, 22)}<span>${esc(top.pseudo || 'membre')}${top.mine ? ' (toi)' : ''}</span></p>` : `<p class="small muted">Mise de départ : ${esc(fmtP(x.min_bid))}</p>`}</div>
         </div>
-      </div>
+      </div>`}
       ${form}
       ${rules ? `<details class="card c2-auc-rulesbox"${E.data.can_admin ? ' open' : ''}><summary>Règles de cette enchère</summary>
-        <ul class="small c2-auc-rules">${rulesSummary(rules).map((t) => `<li>${esc(t)}</li>`).join('')}</ul></details>` : ''}
+        <ul class="small c2-auc-rules">${regles.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></details>` : ''}
       ${E.data.can_admin && (x.status === 'ouverte' || x.status === 'prevue') ? adminHtml(x, rules) : ''}
       <h3 class="c2-auc-sub">Dernières offres</h3>
       ${bids ? `<ul class="c2-auc-bids">${bids}</ul>` : '<p class="muted small">Aucune offre pour l’instant.</p>'}
     </section>`;
+}
+
+/** Nombre suivi du mot au singulier ou au pluriel. */
+const plur = (n, one, many) => `${nf.format(n)} ${n > 1 ? many : one}`;
+
+/** Lot : les deux cases (fin ou ouverture, meilleure offre ou prix final), sous le contenu du lot. */
+function boitesLotHtml(x, left) {
+  const top = x.top, fini = x.status === 'close';
+  // Prolongation : fin actuelle moins la fin prévue (fin au plus tard moins la prolongation totale permise).
+  const cap = Number(E.data.rules?.extend_cap_min) || 0;
+  const prolo = fini && x.hard_end_at ? Math.round((new Date(x.ends_at) - (new Date(x.hard_end_at) - cap * 60000)) / 60000) : 0;
+  const b1 = open() ? `<p class="small muted">Fin dans</p><p class="c2-auc-big" data-c2-left aria-live="off">${esc(remaining(left))}</p><p class="small muted">${esc(when(x.ends_at))}</p>`
+    : x.status === 'prevue' ? `<p class="small muted">Ouverture</p><p class="c2-auc-big">${esc(when(x.starts_at))}</p>`
+    : `<p class="small muted">Terminée</p><p class="c2-auc-big">${esc(when(x.ends_at))}</p>${prolo > 0 ? `<p class="small muted">Prolongée de ${esc(String(prolo))} min</p>` : ''}`;
+  const b2 = top ? `<p class="small muted">${fini ? 'Prix final' : 'Meilleure offre'}</p><p class="c2-auc-big c2-auc-price" aria-live="polite">${esc(fmtP(top.amount))}</p>
+      <p class="c2-auc-who">${avatarHtml(top, 22)}<span>${esc(top.pseudo || 'membre')}${top.mine ? ' (toi)' : ''}</span></p>`
+    : `<p class="small muted">Meilleure offre</p><p class="c2-auc-big c2-auc-price" aria-live="polite">—</p><p class="small muted">Mise de départ : ${esc(fmtP(x.min_bid))}</p>`;
+  return `<div class="c2-auc-boxes enp-boxes"><div class="card c2-auc-box">${b1}</div><div class="card c2-auc-box">${b2}</div></div>`;
+}
+
+/** Lot : ce que voit le membre quand l'enchère n'est pas ouverte (prévue, gagnée, remportée par un autre, sans offre). */
+function finLotHtml(x) {
+  const nom = x.lot.nom || '';
+  if (x.status === 'prevue') return `<p class="card c2-auc-done">L’enchère ouvre ${esc(when(x.starts_at))}.</p>`;
+  if (!x.winner) return '<p class="card c2-auc-done en-done" role="status">Enchère terminée sans offre : le lot n’est pas distribué. Rien n’a été créé, ni Paillettes, ni cartes, ni boosters. Le Staff pourra le remettre en vente.</p>';
+  if (!x.won) return `<p class="card c2-auc-done">${esc(x.winner)} a remporté « ${esc(nom)} » pour ${esc(fmtP(x.price))}.</p>`;
+  const r = x.remise || {};
+  const lignes = x.lot.lignes || [];
+  const li = [];
+  if (Number(r.paillettes) > 0) li.push(`<li><strong>${esc(plur(Number(r.paillettes), 'Paillette', 'Paillettes'))}</strong> ajoutées à ton solde</li>`);
+  if (Number(r.cartes) > 0) {
+    const vedette = lignes.find((l) => l.type === 'carte')?.titre;
+    const nouv = Number(r.nouvelles) || 0;
+    const dont = [vedette, nouv ? `${nf.format(nouv)} que tu n’avais pas` : ''].filter(Boolean).join(' et ');
+    li.push(`<li><strong>${esc(plur(Number(r.cartes), 'carte', 'cartes'))}</strong> dans ta collection${dont ? `, dont ${esc(dont)}` : ''}</li>`);
+  }
+  if (Number(r.boosters) > 0) {
+    const detail = lignes.filter((l) => l.type === 'booster').map((l) => `${nf.format(Number(l.qte) || 1)} ${l.type_booster?.name || l.titre}`).join(', ');
+    li.push(`<li><strong>${esc(plur(Number(r.boosters), 'booster', 'boosters'))}</strong>${detail ? ` (${esc(detail)})` : ''} à ouvrir quand tu veux</li>`);
+  }
+  for (const s of r.series || []) li.push(`<li>La série « ${esc(s)} » est complète : tu reçois aussi son <strong>bonus de série</strong></li>`);
+  return `<div class="card c2-auc-done en-done is-gagne enp-gagne" role="status"><p><strong>Tu as remporté « ${esc(nom)} » pour ${esc(fmtP(x.price))}.</strong> Tout est déjà chez toi :</p>
+      <ul class="enp-recu">${li.join('')}</ul></div>
+      <div class="btn-row">${Number(r.boosters) > 0 ? '<a class="btn btn-sand" href="#ouverture">Ouvrir mes boosters</a>' : ''}<a class="btn btn-ghost" href="#collection">Voir dans Mes cartes</a></div>`;
 }
 
 /** Staff « cartes » : réglage des règles de cette enchère, directement sur la page. */
@@ -145,6 +198,7 @@ export function drawEnchere() {
   const x = a();
   if (!x) { el.innerHTML = ''; el.hidden = true; return; }
   el.hidden = false;
+  if (x.lot) ensureLotCss();
   el.innerHTML = E.detail ? detailHtml(x) : teaserHtml(x);
   const shop = el.parentElement?.querySelector('.shop');
   if (shop) shop.hidden = E.detail;

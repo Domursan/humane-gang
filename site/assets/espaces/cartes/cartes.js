@@ -1,11 +1,12 @@
 // ===== Cartes à collectionner — page joueur =====
-// RPC : hg_cards_me, hg_cards_daily, hg_open_booster_req, hg_card_recycle, hg_card_craft, hg_card_leaderboard.
+// RPC : hg_cards_me, hg_cards_daily, hg_open_booster_req, hg_card_recycle, hg_card_craft, hg_card_leaderboard,
+// hg_serie_manquantes (migration 209 : « Il te manque N cartes », lue seulement pour une série choisie à 1-5 cartes de la fin).
 // Boosters typés (migration 069, SPEC booster-system) : hg_booster_types_me (types, stocks, limites), hg_booster_buy (p_type, p_qty : achat mis en stock),
 // hg_booster_open (p_type, p_mode stock|gratuit, p_set pour la série), hg_booster_gift (p_type : don à un membre), hg_booster_gifts_me (dons envoyés et reçus), hg_members.
 // Règle de conception : la Boutique n'achète que des boosters (ils vont dans l'inventaire) ; on les ouvre dans l'onglet Ouverture (un seul, ou plusieurs d'un coup).
 // Sans hg_booster_types_me (migration pas encore déployée), la page garde l'ancien mode : un seul booster classique et un stock générique (repli, voir typed()).
 // Lecture : hg_card_sets, hg_cards, hg_card_copies, hg_card_wishlist, hg_wallet_log. Rendu : cartes-ui.js.
-// Collection d'un autre membre (lecture seule) : /pages/cartes/cartes.html#collection/<id> ; RPC hg_members pour le pseudo.
+// Collection d'un autre membre (lecture seule) : /pages/cartes/cartes.html#collection/<id> ; RPC hg_members pour le pseudo, sa liste de souhaits (« Lui proposer »).
 // Paillettes (icône, solde LCD) : paillettes.js. Tout le texte de l'interface est en français ; tout texte venant de la base passe par esc().
 // Succès « Pentakill » (F9, migration 101) : hg_pentakill_check après un booster de 5 cartes ; bannière (cartes-pentakill.js).
 // Fichier de la page /pages/cartes/cartes.html : il n'exporte rien. boot() (en bas) lance la page.
@@ -23,6 +24,7 @@ import { createZoom, ICON_ZOOM, ICON_STAR, TINT as RARITY_TINT } from './cartes-
 import { keepPlace, holdHeight } from './cartes-place.js';
 import { isOffline, startOfflinePage, saveOffline, cacheCardImages, offlineAllowed, clearOffline, offlineBannerHtml } from '../../commun/offline-store.js'; // Q4 : collection hors ligne
 import { openProof, proofCss } from '../accueil/quest-proofs.js';
+import { defiHtml, claimDefi } from './cartes-defi.js';
 import { boosterStyleClass } from './booster-styles.js';
 import { themeDecor, playOpeningFx } from './booster-themes.js';
 import { onShelf, openNow, saleBadgeHtml, saleLimitHtml, closedBoxHtml, closedRowHtml, discountHtml } from './cartes-saisons.js';
@@ -75,6 +77,8 @@ const REASON_LABEL = {
   framed: 'Framed du ciné-club', heardle: 'Heardle du gang', bataille: 'Arène de cartes', bataille_def: 'Défense tenue (Arène)',
   cagnotte: 'Cagnotte du gang', cagnotte_remboursee: 'Cagnotte remboursée', cagnotte_annulee: 'Cagnotte annulée', // C13 (migration 082)
   code: 'Code cadeau', atelier: 'Atelier', enchere: 'Offre d’enchère', enchere_remboursee: 'Enchère dépassée (remboursée)',
+  enchere_vente: 'Carte vendue aux enchères', // idée 33 (migration 212) : prix moins 10 %
+  enchere_lot: 'Lot d’enchère remporté', // migration 215 : Paillettes du lot de l'enchère du Staff
 };
 // Couleur de lueur de l'écran de console selon la rareté (maquette « cartouche ») : table partagée avec cartes-zoom.js (RARITY_TINT = TINT).
 // Tint (couleur d'accent) de la console selon la rareté ; repli sur la couleur de l'identité.
@@ -1476,14 +1480,38 @@ function drawQuests() {
   if (!Q) { box.innerHTML = `${head}<p class="muted small">Chargement des quêtes…</p>${encart}`; return; }
   if (Q.error) { box.innerHTML = `${head}<p class="muted small">Quêtes indisponibles pour le moment.</p>${encart}`; return; }
   const list = Q.quests || [];
-  if (!list.length) { box.innerHTML = `${head}<p class="muted small">Aucune quête cette semaine.</p>${encart}`; return; }
+  // Défi de collection de la semaine (idée 62, cartes-defi.js) : en tête, le même pour tout le gang.
+  const defi = defiHtml(Q.defi && { ends_at: Q.ends_at, ...Q.defi }, S.busy);
+  if (!list.length) { box.innerHTML = `${head}${defi}<p class="muted small">Aucune quête cette semaine.</p>${encart}`; return; }
   const done = list.filter((q) => q.done).length;
   box.innerHTML = `${head}
     <p class="cartes-small">${nf.format(done)} sur ${nf.format(list.length)} terminée${done > 1 ? 's' : ''}${Q.ends_at ? ` · nouvelles quêtes le lundi suivant (${esc(fmtDate(Q.ends_at))})` : ''}.</p>
+    ${defi}
     <ul class="cq-list">${list.map(questHtml).join('')}</ul>
     ${encart}`;
 }
 const renderQuests = kept(drawQuests);
+
+/** Réclame le booster du défi de collection (hg_card_defi_claim), puis recharge le stock et les quêtes. */
+async function claimDefiBooster() {
+  if (S.busy) return;
+  S.busy = true;
+  renderQuests();
+  let nom;
+  try {
+    nom = await claimDefi(sb);
+  } catch (e) {
+    toast(errMsg(e), 'error');
+    S.busy = false;
+    await loadQuests();
+    return;
+  }
+  toast(`Défi réussi : 1 booster ${nom} ajouté à ton inventaire`, 'ok');
+  await refreshAfter(refreshData);
+  S.busy = false;
+  await loadQuests();
+  renderAll();
+}
 
 /**
  * Réclame la récompense d'une quête (hg_card_quest_claim), puis recharge les données.
@@ -2414,10 +2442,15 @@ function groupHtml(g, i) {
   const pct = g.scored ? Math.round(g.have / g.scored * 100) : 0;
   const hid = `cz-g-${i}`;
   if (g.extra) return `<section class="cz-group"${attrGroupe(cleGroupe(g), mesuresGroupes)} aria-labelledby="${hid}">${outsideHead(g, hid)}<div class="cartes-grid">${g.shown.map(cardCell).join('')}</div></section>`;
+  // Idée 57 : série à 1-5 cartes de la fin, un rappel qui ouvre la série (aucune lecture ici)
+  const manque = g.scored - g.have;
+  const rappel = !OFF && !S.offline && manque >= 1 && manque <= MQ_SEUIL
+    ? `<button type="button" class="mc-lien mq-rappel" data-action="mq-ouvrir" data-set="${esc(g.set.id)}">Il t’en manque ${nf.format(manque)} · qui les a en double ?</button>` : '';
   return `<section class="cz-group"${attrGroupe(cleGroupe(g), mesuresGroupes)} aria-labelledby="${hid}">
     <div class="cz-group-head">
       <h2 class="cz-group-title" id="${hid}">${esc(g.set.name)}</h2>
       <p class="cz-group-count">${nf.format(g.have)} / ${nf.format(g.scored)} possédées</p>
+      ${rappel}
     </div>
     ${g.set.code === 'hors-serie' ? HORS_SERIE_NOTE : ''}
     <div class="progress cz-group-bar" role="progressbar" aria-label="Progression de ${esc(g.set.name)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${pct}%"></span></div>
@@ -2515,6 +2548,8 @@ function drawCollection(focusId) {
       ? `<div class="cz-groups">${sl.groups.map(groupHtml).join('')}</div>`
       : `<div class="cartes-grid">${(sl.groups[0]?.shown || []).map(cardCell).join('')}</div>`) + moreHtml(sl, 'col');
   const vues = VUES.map(([id, label]) => [id, label, porteeCartes.filter((c) => passeVue(id, c)).length]);
+  // Idée 57 : une série ouverte choisie, à 1-5 cartes de la fin. L'encadré lit qui les a en double (une seule RPC, au besoin).
+  S.mqVue = !all && !outside && !OFF && !S.offline ? vueManquantes(groups[0]) : null;
   el.innerHTML = `
     <div class="mc-duo"><div id="cartes-luck-slot"></div><div id="cartes-atelier" hidden></div></div>
     <section class="card cartes-block">
@@ -2586,7 +2621,9 @@ function drawCollection(focusId) {
         <button type="button" class="btn btn-ghost" data-action="champion">Ma carte Champion</button>
       </div>
     </section>
+    ${manquantesHtml()}
     ${body}`;
+  if (S.mqVue && S.mq?.etat === 'charge' && !S.mq.lance) { S.mq.lance = true; chargerManquantes(S.mq.cle); }
   if (!OFF) import('./cartes-chance.js').then((m) => m.mountLuck($('#cartes-luck-slot'))).catch(() => {}); // « Ma chance » (C14)
   atelier?.drawAtelier(); // panneau de l'Atelier (idée C10)
   // Le focus revient au champ modifié sans faire défiler la page
@@ -2611,6 +2648,163 @@ function effacerFiltres() {
   S.setId = ALL;
   S.colLimit = 0;
   renderCollection('cartes-filtres-btn');
+}
+
+/* ---------- « Il te manque N cartes pour finir la série » (idée 57) ---------- */
+// Seulement quand une série ouverte est choisie et qu'il y manque 1 à MQ_SEUIL cartes. Une seule lecture (hg_serie_manquantes,
+// migration 209), refaite si les cartes manquantes changent. « Toutes les séries » ne lit rien : un rappel ouvre la série.
+// S.mq = { cle (série et cartes manquantes), set, etat : 'charge' | 'ok' | 'erreur', chez : Map carte → membres, lance } ;
+// S.mqVue = ce que l'encadré montre (série, compteurs, cartes manquantes), ou null.
+const MQ_SEUIL = 5;
+/** Membres qui ont la carte en double : « Demander à … » (deux au plus), une offre par carte. */
+const MQ_BOUTONS = 2;
+
+/**
+ * Prépare l'encadré d'une série ouverte : null hors du seuil. Change de clé (donc relit) si les cartes manquantes changent.
+ * @param {{set: object, scored: number, have: number, extra?: boolean}|undefined} g série affichée
+ * @returns {{set: object, have: number, total: number, manq: object[]}|null}
+ */
+function vueManquantes(g) {
+  if (!g || g.extra) return null;
+  const manq = S.cards.filter((c) => c.set_id === g.set.id && !['identite', 'unique'].includes(c.rarity) && !copiesOf(c.id).length);
+  if (!manq.length || manq.length > MQ_SEUIL) return null;
+  const cle = `${g.set.id}|${manq.map((c) => c.id).join(',')}`;
+  if (S.mq?.cle !== cle) S.mq = { cle, set: g.set.id, etat: 'charge' };
+  return { set: g.set, have: g.have, total: g.scored, manq };
+}
+
+/**
+ * Une carte manquante : son image et son nom (déjà visibles dans la collection de qui l'a), qui l'a en double, et les actions :
+ * « Demander à … », ou bien « Fabriquer » (tarif réel) et « Me prévenir » (liste de souhaits) si personne ne l'a en double.
+ * @param {object} c carte
+ * @param {object[]} chez membres qui l'ont en double (user_id, pseudo, n, copy_id)
+ * @returns {string}
+ */
+function ligneManquanteHtml(c, chez) {
+  const noms = chez.map((x) => esc(x.pseudo));
+  const qui = !chez.length ? 'Personne ne l’a en double pour l’instant.'
+    : `En double chez ${noms.length > 1 ? `${noms.slice(0, -1).join(', ')} et ${noms.at(-1)}` : noms[0]}.`;
+  const prix = tableVal('craft', c.rarity);
+  const fabricable = c.craftable && !['mythique', 'identite', 'unique'].includes(c.rarity) && prix != null;
+  const souhait = S.wish.has(c.id);
+  const act = chez.length
+    ? chez.slice(0, MQ_BOUTONS).map((x) => `<button type="button" class="btn btn-ghost mq-btn" data-action="mq-demander" data-card="${esc(c.id)}" data-to="${esc(x.user_id)}" data-copy="${esc(String(x.copy_id ?? ''))}" aria-label="Demander ${esc(c.name)} à ${esc(x.pseudo)}">Demander à ${esc(x.pseudo)}</button>`).join('')
+    : `${fabricable ? `<button type="button" class="btn btn-ghost mq-btn" data-action="open-card" data-card="${esc(c.id)}" aria-label="Fabriquer ${esc(c.name)} pour ${nf.format(prix)} Paillettes">Fabriquer · ${fmtPaillettes(prix)}</button>` : ''}
+       <button type="button" class="cd-wish mq-btn${souhait ? ' is-on' : ''}" data-action="mq-souhait" data-card="${esc(c.id)}" aria-pressed="${souhait}"><svg viewBox="0 0 24 24" width="18" height="18" fill="${souhait ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg><span>${souhait ? 'Tu seras prévenu' : 'Me prévenir'}</span></button>`;
+  return `<li class="mq-ligne${chez.length ? '' : ' is-seule'}">
+      <div class="mq-carte">${cardHtml(c, { size: 'sm' })}</div>
+      <div class="mq-txt"><strong>${esc(c.name)}</strong><span class="mq-meta">n° ${nf.format(c.number)} · ${esc(rarityLabel(c.rarity))}</span><p class="mq-qui">${qui}</p>
+        <div class="mq-act">${act}</div></div>
+    </li>`;
+}
+
+/** Encadré « Il te manque N cartes pour finir la série » (chargement, erreur ou liste), ou '' hors du seuil. */
+function manquantesHtml() {
+  const V = S.mqVue;
+  if (!V || !S.mq) return '';
+  const n = V.manq.length;
+  const tete = `<div class="mq-tete"><h2 class="mq-titre" id="mq-h" tabindex="-1">Il te manque ${nf.format(n)} carte${n > 1 ? 's' : ''} pour finir la série</h2>
+      <p class="mq-sous">${esc(V.set.name)} · <span class="mq-nb">${nf.format(V.have)} / ${nf.format(V.total)}</span></p></div>`;
+  let corps;
+  if (S.mq.etat === 'charge') corps = '<p class="muted small" aria-live="polite">Je cherche qui les a en double…</p><div class="mq-sk" aria-hidden="true"></div><div class="mq-sk" aria-hidden="true"></div>';
+  else if (S.mq.etat === 'erreur') corps = '<div class="mq-erreur" role="alert"><p>Impossible de savoir qui les a en double pour le moment.</p><button type="button" class="btn btn-ghost mq-btn" data-action="mq-reessayer">Réessayer</button></div>';
+  else {
+    const lignes = V.manq.map((c) => ({ c, chez: S.mq.chez.get(c.id) || [] }));
+    const trouv = lignes.some((x) => x.chez.length);
+    // La carte porte sa série et son rang (« 037/100 »), comme une carte vue seule
+    const total = S.cards.filter((k) => k.set_id === V.set.id).length;
+    corps = `<ul class="mq-liste">${lignes.map((x) => ligneManquanteHtml({ ...x.c, set_name: V.set.name, set_total: total }, x.chez)).join('')}</ul>
+      <p class="muted small mq-pied">${trouv ? 'Une offre par carte : dans l’offre, tu choisis ce que tu donnes en échange.' : 'Aucun membre ne les a en double. « Me prévenir » les ajoute à ta liste de souhaits : tu es averti dès qu’un membre en a une en double.'}</p>`;
+  }
+  return `<section class="card cartes-block mq" id="cartes-mq" aria-labelledby="mq-h">${tete}${corps}</section>`;
+}
+
+/** Redessine l'encadré seul (la grille ne bouge pas). Un focus qui était dedans y reste (sur le titre si son élément a disparu). */
+function redessinerManquantes() {
+  const box = $('#cartes-mq');
+  if (!box) return;
+  const actif = document.activeElement;
+  const dedans = !!actif && box.contains(actif);
+  keepPlace(() => { box.outerHTML = manquantesHtml(); });
+  if (dedans) ((actif.id && document.getElementById(actif.id)) || $('#mq-h'))?.focus({ preventScroll: true });
+}
+
+/**
+ * Lit qui a les cartes manquantes en double (hg_serie_manquantes), puis redessine l'encadré. Réponse ignorée si la série a changé.
+ * @param {string} cle clé de S.mq au moment de l'appel
+ */
+async function chargerManquantes(cle) {
+  let res;
+  try {
+    const { data, error } = await sb.rpc('hg_serie_manquantes', { p_set: S.mq.set });
+    if (error) throw error;
+    res = { etat: 'ok', chez: new Map((data?.cartes || []).map((x) => [x.card_id, Array.isArray(x.chez) ? x.chez : []])) };
+  } catch (e) {
+    console.warn('[manquantes]', e);
+    res = { etat: 'erreur' };
+  }
+  if (S.mq?.cle !== cle) return;
+  Object.assign(S.mq, res);
+  redessinerManquantes();
+}
+
+/** « Réessayer » après une erreur : chargement, puis nouvelle lecture. */
+function reessayerManquantes() {
+  if (!S.mq) return;
+  Object.assign(S.mq, { etat: 'charge', lance: true });
+  redessinerManquantes();
+  $('#mq-h')?.focus({ preventScroll: true });
+  chargerManquantes(S.mq.cle);
+}
+
+/**
+ * « Demander à … » : l'éditeur d'offre s'ouvre avec ce membre et son exemplaire coché dans « Je demande ».
+ * @param {string} to membre
+ * @param {string} copy son exemplaire libre (rendu par hg_serie_manquantes)
+ */
+async function demanderManquante(to, copy) {
+  let api = null;
+  try { await mountTradesOnce(); api = S.tradeApi; } catch { api = null; }
+  if (!api) return toast('Les échanges ne sont pas disponibles pour le moment.', 'error');
+  S.tab = 'echanges';
+  renderAll();
+  api.offer({ to, want: copy ? [copy] : [] });
+}
+
+/**
+ * « Me prévenir » : ajoute la carte à ma liste de souhaits (ou l'en retire), puis redessine la collection.
+ * @param {string} cardId carte
+ */
+async function souhaitManquante(cardId) {
+  if (S.busy) return;
+  S.busy = true;
+  try {
+    if (S.wish.has(cardId)) {
+      const { error } = await sb.from('hg_card_wishlist').delete().eq('user_id', me.id).eq('card_id', cardId);
+      if (error) throw error;
+      S.wish.delete(cardId);
+    } else {
+      const { error } = await sb.from('hg_card_wishlist').insert({ user_id: me.id, card_id: cardId });
+      if (error) throw error;
+      S.wish.add(cardId);
+      toast('Ajoutée à ta liste de souhaits.', 'ok');
+    }
+  } catch (e) {
+    toast(errMsg(e), 'error');
+  } finally {
+    S.busy = false;
+  }
+  renderCollection(); // compteur « Liste de souhaits » des filtres compris
+  $(`#cartes-mq [data-action="mq-souhait"][data-card="${CSS.escape(cardId)}"]`)?.focus({ preventScroll: true });
+}
+
+/** Rappel de « Toutes les séries » : ouvre la série, l'encadré reçoit le focus. */
+function ouvrirSerieManquante(setId) {
+  S.setId = setId;
+  S.colLimit = 0;
+  renderCollection();
+  const h = $('#mq-h');
+  if (h) { h.scrollIntoView({ block: 'start' }); h.focus({ preventScroll: true }); }
 }
 
 /* ---------- Recyclage de masse ---------- */
@@ -2674,6 +2868,7 @@ function openDetail(cardId) {
   renderDetail();
   const d = $('#cartes-detail');
   if (!d.open) d.showModal();
+  chargerVentes(cardId).catch(() => {}); // idée 33 : « Aux enchères » au lieu de « En échange »
 }
 
 /**
@@ -2687,10 +2882,51 @@ function copyRow(cp, k) {
   const val = recycleValue(cp, k);
   const parts = [cp.serial ? serialLabel(cp.serial, k.max_copies) : '', cp.shiny ? (cp.finish === 'fondue' ? 'Brillante fondue' : 'Brillante') : '', SOURCE_LABEL[cp.source] || cp.source, fmtDate(cp.obtained_at)].filter(Boolean);
   let action;
-  if (cp.locked_trade) action = '<span class="pill pill-todo">En échange</span>';
+  const vente = S.ventes?.get(String(cp.id)); // idée 33 : exemplaire bloqué par une de mes enchères
+  if (vente) action = `<button type="button" class="btn btn-ghost cd-btn" data-action="voir-vente" data-id="${esc(vente)}">Aux enchères · voir</button>`;
+  else if (cp.locked_trade) action = '<span class="pill pill-todo">En échange</span>';
   else if (k.rarity === 'identite' || k.rarity === 'unique') action = '<span class="muted small">Ne se recycle pas</span>';
   else action = `<button type="button" class="btn btn-ghost cd-btn" data-action="recycle" data-copy="${esc(String(cp.id))}" ${S.busy ? 'disabled' : ''}>Recycler · ${fmtPaillettes(val)}</button>`;
   return `<li><span>${parts.map(esc).join(' · ')}</span>${action}</li>`;
+}
+
+/* Enchères entre membres (idée 33, cartes-encheres.js) : une carte échangeable, ni identité ni carte d'un membre, se met en vente
+   depuis sa fiche. Un exemplaire part : libre (ni bloqué par un échange ou une enchère, ni en vitrine). */
+/** Vrai si la carte peut se mettre aux enchères (le serveur refait le contrôle). */
+const vendable = (k) => k.tradeable !== false && k.rarity !== 'identite' && !k.member_id && k.family !== 'membre';
+/** Exemplaires libres d'une carte pour une vente. */
+const libresPourVente = (cps) => { const vit = atelier?.vitrine() || new Set(); return cps.filter((cp) => !cp.locked_trade && !vit.has(Number(cp.id))); };
+/** Section « Enchères » de la fiche (vide si la carte ne se vend pas ou n'est pas possédée). */
+function venteSectionHtml(k, cps) {
+  if (!cps.length || !vendable(k)) return '';
+  const libres = libresPourVente(cps);
+  return `<section class="cd-sec">
+      <h3 class="cd-h">Enchères</h3>
+      ${libres.length
+        ? `<ul class="cartes-copies"><li><span>Vends un exemplaire aux autres membres : la plus haute offre gagne.</span><button type="button" class="btn btn-sand cd-btn" data-action="vendre" ${S.busy ? 'disabled' : ''}>Mettre aux enchères</button></li></ul>`
+        : '<p class="cd-empty">Tous tes exemplaires sont bloqués (échange, enchère ou vitrine).</p>'}
+    </section>`;
+}
+/** Ouvre la fenêtre de mise en vente ; une fois la carte en vente, la fiche se ferme sur la page de l'enchère. */
+async function ouvrirVente(from) {
+  const k = S.cardsById.get(S.detailId);
+  if (!k) return;
+  const cps = copiesOf(k.id);
+  const m = await import('./cartes-encheres.js');
+  m.openVente({ card: k, copies: libresPourVente(cps), total: cps.length,
+    onClose: () => { if (from?.isConnected) from.focus({ preventScroll: true }); },
+    onDone: async (id) => {
+      $('#cartes-detail')?.close();
+      try { await refreshData(); } catch (e) { console.warn('[cartes] vente', e); }
+      location.hash = `echanges/encheres/${id}`;
+    } });
+}
+/** Lit mes ventes en cours (exemplaire -> enchère) quand la fiche montre un exemplaire bloqué, puis la redessine. */
+async function chargerVentes(cardId) {
+  if (!copiesOf(cardId).some((cp) => cp.locked_trade)) return;
+  const m = await import('./cartes-encheres.js');
+  S.ventes = await m.mesVentes();
+  if (S.detailId === cardId && $('#cartes-detail')?.open) renderDetail();
 }
 
 /**
@@ -2730,6 +2966,7 @@ function renderDetail() {
       <h3 class="cd-h">Mes exemplaires</h3>
       ${n ? `<ul class="cartes-copies">${cps.map((cp) => copyRow(cp, k)).join('')}</ul>` : `<p class="cd-empty">${esc(uniqueStateOf(k) || 'Pas encore obtenue.')}</p>`}
     </section>
+    ${venteSectionHtml(k, cps)}
     <section class="cd-sec">
       <h3 class="cd-h">Fabriquer</h3>
       ${craftable
@@ -2839,7 +3076,7 @@ async function detailAction(action, el) {
 /* Vue ouverte par l'adresse #collection/<id> ou par un lien du classement (voir routeFromHash). */
 // Adresse : /pages/cartes/cartes.html#collection/<id>. Mêmes données et mêmes composants que « Collection » (cartes-zoom.js compris),
 // mais rien n'est modifiable : on voit ses cartes, on coche celles qu'on lui demande, puis on ouvre l'éditeur d'offre.
-// S.peer = { id, member, copies, byCard, loading, error, setId, filters, picks (Set de cartes demandées), shownIds }.
+// S.peer = { id, member, copies, byCard, souhaits (ses souhaits, null si illisibles), loading, error, setId, filters, picks (Set de cartes demandées), shownIds }.
 /** Forme de l'adresse d'une collection (#collection/<uuid>). */
 const PEER_RE = /^#collection\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 const PEER_OWNED = [['all', 'Toutes les cartes'], ['owned', 'Possédées par lui'], ['missing', 'Manquantes chez lui'],
@@ -2847,22 +3084,28 @@ const PEER_OWNED = [['all', 'Toutes les cartes'], ['owned', 'Possédées par lui
 /** Exemplaires du membre consulté pour une carte (tableau vide si aucun). */
 const peerCopies = (cardId) => S.peer?.byCard.get(cardId) || [];
 
-/** Exemplaires d'un membre, par carte. Une seule lecture (RLS : tout membre peut lire hg_card_copies, migration 018 c). */
+/**
+ * Exemplaires d'un membre, par carte, et sa liste de souhaits (RLS : tout membre peut lire hg_card_copies et hg_card_wishlist,
+ * migration 018 c). Une liste de souhaits illisible n'empêche pas d'afficher la collection : souhaits vaut alors null.
+ */
 async function loadPeer(id) {
-  const [mem, copies] = await Promise.all([
+  const [mem, copies, wi] = await Promise.all([
     sb.rpc('hg_members'),
     fetchAllRows(() => sb.from('hg_card_copies').select('id, card_id, owner_id, shiny, serial, source, obtained_at, locked_trade, finish')
       .eq('owner_id', id).is('recycled_at', null).order('obtained_at').order('id')),
+    sb.from('hg_card_wishlist').select('card_id').eq('user_id', id).then((r) => r, () => ({ error: true })),
   ]);
   if (mem.error) throw mem.error;
-  await loadOwnedOutside(copies.map((c) => c.card_id)); // ses cartes hors des séries ouvertes (drop, don…)
+  const souhaits = wi.error ? null : (wi.data || []).map((w) => w.card_id);
+  // ses cartes hors des séries ouvertes (drop, don…) et ses souhaits pas encore chargés
+  await loadOwnedOutside([...copies.map((c) => c.card_id), ...(souhaits || [])]);
   const byCard = new Map();
   for (const cp of copies) {
     if (!byCard.has(cp.card_id)) byCard.set(cp.card_id, []);
     byCard.get(cp.card_id).push(cp);
   }
   // Les fantômes ne figurent pas dans hg_members : leur collection reste invisible
-  return { member: (mem.data || []).find((m) => m.id === id) || null, copies, byCard };
+  return { member: (mem.data || []).find((m) => m.id === id) || null, copies, byCard, souhaits };
 }
 
 /**
@@ -2880,7 +3123,7 @@ async function openPeer(id) {
     return;
   }
   if (!S.peer) S.returnY = window.scrollY;
-  S.peer = { id, member: null, copies: [], byCard: new Map(), loading: true, error: '', setId: ALL,
+  S.peer = { id, member: null, copies: [], byCard: new Map(), souhaits: null, loading: true, error: '', setId: ALL,
     filters: { rarity: '', family: '', owned: 'all' }, picks: new Set(), shownIds: [], limit: 0 };
   applyView();
   renderPeer();
@@ -2912,8 +3155,10 @@ function cleanHash() {
   if (PEER_RE.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
 }
 
-/** Onglet demandé par l'adresse : #echanges/tableau (lien des alertes de la liste de souhaits) ouvre les Échanges, puis leur Tableau. */
-const ongletAdresse = () => (location.hash === '#echanges/tableau' ? 'echanges' : location.hash.slice(1));
+/** Onglet demandé par l'adresse : #echanges/tableau (lien des alertes de la liste de souhaits) ouvre les Échanges, puis leur Tableau ;
+    #echanges/encheres[/<id>] (idée 33) ouvre leurs Enchères, et l'enchère indiquée. */
+const ENCH_ADRESSE = /^#echanges\/encheres(?:\/([0-9a-f-]{36}))?$/i;
+const ongletAdresse = () => (location.hash === '#echanges/tableau' || ENCH_ADRESSE.test(location.hash) ? 'echanges' : location.hash.slice(1));
 
 /** Suit l'adresse : #collection/<id> ouvre la collection du membre, #<onglet> ouvre cet onglet, sinon la vue revient aux onglets. */
 function routeFromHash() {
@@ -2933,6 +3178,8 @@ function routeFromHash() {
     if (S.peer) leavePeer();
     if (S.tab !== onglet) setTab(onglet);
     if (location.hash === '#echanges/tableau') S.tradeApi?.onglet('tableau');
+    const ench = ENCH_ADRESSE.exec(location.hash);
+    if (ench) S.tradeApi?.onglet('encheres', ench[1] || null);
     return;
   }
   leavePeer();
@@ -3057,6 +3304,59 @@ function peerHead(P) {
     </section>`;
 }
 
+/* ---------- Sa liste de souhaits : « Tu l'as en double » (idée 55) ---------- */
+// La liste est lisible entre membres (règles de la base, onglet Correspondances) : pas d'option pour la cacher.
+/**
+ * Mon exemplaire à lui donner pour une carte : libre (pas en échange), simple plutôt que brillant, hors vitrine, le plus récent.
+ * @param {string} cardId identifiant de la carte
+ * @returns {object|null} exemplaire, ou null si aucun n'est libre
+ */
+function copieADonner(cardId) {
+  const vit = atelier?.vitrine() || new Set();
+  const rang = (cp) => Number(!!cp.shiny) * 2 + Number(vit.has(Number(cp.id)));
+  return copiesOf(cardId).filter((cp) => !cp.locked_trade).sort((a, b) => rang(a) - rang(b) || Number(b.id) - Number(a.id))[0] || null;
+}
+/** Vrai si j'ai la carte en double (au moins deux exemplaires, dont un libre) et qu'elle s'échange. */
+const enDoubleChezMoi = (c) => c.tradeable !== false && copiesOf(c.id).length >= 2 && !!copieADonner(c.id);
+
+/**
+ * Bloc « Sa liste de souhaits » de la collection d'un membre : ses souhaits, celles que j'ai en double d'abord,
+ * avec le repère « Tu l'as en double » et « Lui proposer » (offre avec ma carte cochée dans « Je donne »).
+ * Rien si la liste n'a pas pu être lue.
+ * @param {object} P état de la collection (S.peer), chargé
+ * @returns {string}
+ */
+function peerSouhaitsHtml(P) {
+  if (!P.souhaits) return '';
+  const qui = P.member.pseudo;
+  const voeux = P.souhaits.map((id) => S.cardsById.get(id)).filter(Boolean)
+    .sort((a, b) => Number(enDoubleChezMoi(b)) - Number(enDoubleChezMoi(a)) || rarityRank(b.rarity) - rarityRank(a.rarity) || (a.number ?? 0) - (b.number ?? 0));
+  const n2 = voeux.filter(enDoubleChezMoi).length;
+  /** Une case : la carte, le repère (« Tu l'as en double » ou « Tu l'as ») et le bouton « Lui proposer ». */
+  const cell = (c) => {
+    const d = enDoubleChezMoi(c), mine = copiesOf(c.id).length;
+    const tags = d ? [['Tu l’as en double', 'is-need']] : mine ? [['Tu l’as', '']] : [];
+    const serie = S.sets.find((s) => s.id === c.set_id) || S.otherSets.get(c.set_id);
+    const vue = { ...c, set_name: serie?.name, set_total: S.cards.filter((k) => k.set_id === c.set_id).length || null };
+    return `<div class="cz-cell pv-cell">${cardHtml(vue, { size: 'md' })}`
+      + (tags.length ? `<ul class="pv-tags">${tags.map(([t, k]) => `<li class="pv-tag ${k}">${esc(t)}</li>`).join('')}</ul>` : '')
+      + (d ? `<button type="button" class="btn btn-ghost pvs-btn" data-action="peer-give" data-card="${esc(c.id)}" aria-label="Proposer ${esc(c.name)} à ${esc(qui)}">Lui proposer</button>` : '')
+      + '</div>';
+  };
+  const corps = !voeux.length
+    ? `<p class="empty">${esc(qui)} n’a encore rien mis dans sa liste de souhaits.</p>`
+    : `${n2 ? '' : '<p class="muted small">Tu n’as aucune de ces cartes en double pour le moment.</p>'}<div class="cartes-grid">${voeux.map(cell).join('')}</div>`;
+  return `<section class="card cartes-block pv-souhaits" aria-labelledby="pvs-h">
+      <div class="cz-group-head pvs-tete">
+        <h2 class="cz-group-title" id="pvs-h">Sa liste de souhaits</h2>
+        <p class="cz-group-count">${voeux.length ? `${pluralCount(voeux.length, 'carte', 'cartes', nf.format)}${n2 ? ` · ${nf.format(n2)} que tu as en double` : ''}` : 'vide'}</p>
+      </div>
+      ${n2 ? `<p class="muted small">« Lui proposer » ouvre une offre avec ta carte déjà cochée dans « Je donne ». Tu choisis ensuite ce que tu demandes.</p>
+      ${n2 > 1 ? `<div class="pvs-tout"><button type="button" class="btn btn-primary" data-action="peer-give-all">Lui proposer les ${nf.format(n2)} cartes</button></div>` : ''}` : ''}
+      ${corps}
+    </section>`;
+}
+
 /**
  * HTML complet de la collection d'un membre : en-tête, série, progression, filtres et grille.
  * @param {object} P état de la collection (S.peer), chargé
@@ -3087,6 +3387,7 @@ function peerHtml(P) {
       : (all ? `<div class="cz-groups">${sl.groups.map(peerGroupHtml).join('')}</div>`
         : `<div class="cartes-grid">${(sl.groups[0]?.shown || []).map(peerCell).join('')}</div>`) + moreHtml(sl, 'peer');
   return `${peerHead(P)}
+    ${peerSouhaitsHtml(P)}
     <section class="card cartes-block">
       <div class="cartes-series">
         <div class="field">
@@ -3153,10 +3454,14 @@ function togglePeerPick(cardId) {
   renderPeer(`[data-action="peer-pick"][data-card="${CSS.escape(cardId)}"]`);
 }
 
-/** Ouvre l'éditeur d'offre (cartes-trades.js) avec ce membre ; les cartes cochées sont pré-cochées dans « Je demande ». */
-async function peerOffer() {
+/**
+ * Ouvre l'éditeur d'offre (cartes-trades.js) avec ce membre ; les cartes cochées sont pré-cochées dans « Je demande ».
+ * @param {string[]} [donner] cartes de sa liste de souhaits à lui proposer : un de mes exemplaires de chacune est coché dans « Je donne »
+ */
+async function peerOffer(donner = []) {
   const P = S.peer;
   if (!P || P.loading || P.error) return;
+  const give = donner.map(copieADonner).filter(Boolean).map((cp) => String(cp.id));
   const want = [];
   let locked = 0;
   for (const cid of P.picks) {
@@ -3172,7 +3477,7 @@ async function peerOffer() {
   cleanHash();
   S.tab = 'echanges';
   renderAll();
-  api.offer({ to, want });
+  api.offer({ to, give, want });
 }
 
 /* ---------- Classement ---------- */
@@ -3344,6 +3649,7 @@ function onClick(e) {
     case 'resume-multi': return runMulti(null);
     case 'toggle-all-cards': return toggleAllCards();
     case 'quest-claim': return claimQuest(t.dataset.code);
+    case 'defi-claim': return claimDefiBooster();
     case 'quest-proof': return openProof(S.quests.quests.find((q) => q.code === t.dataset.code), { uid: me.id, sb, toast, esc, onDone: loadQuests });
     case 'reveal-all': return skipSeq();
     case 'more-cards': return showMore(t.dataset.which);
@@ -3363,6 +3669,12 @@ function onClick(e) {
     case 'peer-pick': return togglePeerPick(t.dataset.card);
     case 'peer-clear': if (S.peer) { S.peer.picks.clear(); renderPeer('[data-action="peer-offer"]'); } return;
     case 'peer-offer': return peerOffer();
+    case 'peer-give': return peerOffer([t.dataset.card]); // idée 55 : sa liste de souhaits, ma carte en double
+    case 'peer-give-all': return peerOffer((S.peer?.souhaits || []).filter((id) => { const c = S.cardsById.get(id); return c && enDoubleChezMoi(c); }));
+    case 'mq-demander': return demanderManquante(t.dataset.to, t.dataset.copy); // idée 57
+    case 'mq-souhait': return souhaitManquante(t.dataset.card);
+    case 'mq-reessayer': return reessayerManquantes();
+    case 'mq-ouvrir': return ouvrirSerieManquante(t.dataset.set);
     case 'buy-stock': return buyStock(t.dataset.type || 'classique');
     case 'gift-ask': e.preventDefault(); return askGift(); // bouton de type submit : pas d'envoi du formulaire
     case 'gift-confirm': return giftConfirm();
@@ -3370,6 +3682,8 @@ function onClick(e) {
     case 'wish':
     case 'craft':
     case 'recycle': return detailAction(t.dataset.action, t);
+    case 'vendre': return ouvrirVente(t); // idée 33
+    case 'voir-vente': $('#cartes-detail')?.close(); location.hash = `echanges/encheres/${t.dataset.id}`; return;
     case 'fav': return toggleFav(t.dataset.card, t);
     case 'close-dialog': return t.closest('dialog')?.close();
   }

@@ -61,7 +61,7 @@ a.notif-item:focus-visible { outline: 3px solid var(--sand); outline-offset: 2px
 
 /* Centre de notifications (/pages/compte/notifications.html) */
 .ntf { display: flex; flex-direction: column; gap: 20px; max-width: 860px; }
-.ntf-tete { display: flex; flex-direction: column; gap: 8px; }
+.ntf-tete { display: flex; flex-direction: column; gap: 8px; padding: var(--page-top) 0 var(--page-bas); } /* marges de page communes (base.css) */
 .ntf-tete .page-title:focus { outline: none; }
 .ntf-outils { display: flex; flex-direction: column; gap: 12px; }
 .ntf-outils[hidden], .ntf-pied .btn[hidden], .ntf-ligne1 .btn[hidden] { display: none; }

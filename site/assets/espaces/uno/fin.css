@@ -55,6 +55,9 @@
 .uno-or { color: var(--sand); font-weight: 700; }
 .uno-fin-pailles { display: inline-flex; align-items: center; flex: none; min-height: 40px; padding: 0 16px; border-radius: 999px;
   background: #26201A; border: 1px solid #5A4A2A; color: #E8C27A; font-family: var(--font-display); font-size: 16px; }
+/* Place tenue par un robot à la fin (migration 211) : note sous le tableau, gain à zéro (l'étiquette .rb-tag vient de table.css) */
+.rb-note { margin: 12px 0 0; font-size: 13px; line-height: 1.4; }
+.uno-fin-pailles.rb-zero { opacity: .75; }
 
 /* ----- Actions ----- */
 .uno-fin-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }

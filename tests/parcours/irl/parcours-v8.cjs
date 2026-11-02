@@ -107,8 +107,10 @@ const plusDays = (n) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zur
   check(p.errs.length === 0, 'ordinateur : aucune erreur console' + (p.errs.length ? ' : ' + p.errs.join(' | ') : ''));
   await p.ctx.close();
 
-  /* ---------- Téléphone 360 px ---------- */
+  /* ---------- Téléphone 360 px (grille choisie : la liste par défaut est testée dans parcours-calendrier-liste.cjs) ---------- */
   p = await openPage(browser, { page: 'calendrier', fixture: 'fake-sb-vd.mjs', width: 360, height: 780 });
+  await p.waitForSelector('#cal-liste .cal-jour', { timeout: 8000 });
+  await p.click('#cal-vue-grille');
   await p.waitForSelector('#cal-grid [data-day]', { timeout: 8000 });
   check(await hscroll(p) <= 0, '360 px : pas de défilement horizontal');
   check(await p.locator('.cal-dots').first().isVisible() && !(await p.locator('.cal-ttls').first().isVisible()), 'téléphone : pastilles, pas de titres');

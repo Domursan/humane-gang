@@ -51,6 +51,9 @@
     hg_uno_mes_parties: () => ok([]),
     hg_uno_stats: () => ok({ parties: 0, victoires: 0 }),
     hg_uno_avancer: () => ok(null),
+    hg_uno_reprendre: () => ok(null),   // place tenue par le robot (migration 211) : rien à reprendre dans l'état figé
+    hg_uno_en_direct: () => ok([]),     // parties à regarder (migration 214)
+    hg_spect_arreter: () => ok(null),
     hg_uno_invite: (a) => ok(a.p_action === 'etat' ? unoEtat() : []),   // invité : même état, tous ses appels passent ici
   };
 

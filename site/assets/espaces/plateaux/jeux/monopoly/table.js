@@ -22,6 +22,7 @@ import { plat, erreurTexte, nomDe } from '../../api.js';
 import { bandeauHtml, brancherChrono, journalHtml, envoyer, moiJoueur, joueurDe, pseudoHtml, texteSur, quitterPartie } from '../../vues/commun.js';
 import { boutonQuitter } from '../../../../commun/quitter.js';
 import { creerChat, tiroirChat } from '../../vues/chat.js';
+import { brancherSpectateur } from '../../vues/spectateur.js';
 import { creerSignalTour } from '../../../../commun/tour-signal.js';
 import { plateauHtml, pointCase } from './plateau.js';
 import { voisinSpatial } from '../../../../commun/grille-clavier.js';
@@ -137,6 +138,8 @@ export function creer(root, ctx) {
     chatZone: q('[data-chat]'), tiroirChatZone: q('[data-tiroir-chat]'), echange: q('[data-echange]'), annonce: q('[data-annonce]'),
     ongletJeu: q('[data-onglet-jeu]'), ongletCote: q('[data-onglet-cote]'), quitter: q('[data-quitter]'),
   };
+  // Spectateur (migration 214) : « Arrêter de regarder » et message sous la barre ; compteur pour les joueurs.
+  const spect = brancherSpectateur({ barre: q('.mo-barre'), quitter: refs.quitter, naviguer: ctx.naviguer });
 
   let etat = null;
   let occupe = false;
@@ -829,6 +832,7 @@ export function creer(root, ctx) {
       retardPions = !premiere && !!e.jeu?.des && JSON.stringify(e.jeu.des) !== cles.des ? DELAI_DES_MS : 0;
       rendreBandeau();
       rendreElimine();
+      spect.maj(e);
       rendreCases();
       rendrePions();
       retardPions = 0;

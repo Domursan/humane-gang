@@ -1,7 +1,8 @@
 // ===== Humane Gang — Duels : code du jour (#jour, Mastermind solo) =====
 /*
  * Rôle : écran autonome du code du jour, même plateau et même palette que la table Mastermind.
- * Un code secret par jour pour tout le gang, 10 essais. Affiche la série de jours consécutifs,
+ * Un code secret par jour pour tout le gang, 10 essais. Affiche la série commune des jeux du jour (serie-jeux.js : partie finie,
+ * trouvée ou non) et, si elle vient de casser, l'encart « Sauver ma série »,
  * le classement du jour (ma ligne en or) et le nombre de trouveurs. Une fois fini : le code dévoilé.
  * Interrupteur « Mode daltonien » partagé avec la table (clé localStorage hg_duel_daltonien).
  * Effets (maquette des jeux quotidiens) : après un essai, les pions se posent un à un (son « pion posé » du Mastermind), puis
@@ -10,14 +11,18 @@
  * le tampon est posé sans animation. Les Paillettes ne sont pas renvoyées par le serveur : pas de ligne de gain.
  * Dépendances : core.js (esc, toast, motionAllowed), ../api.js (duel, erreurTexte, COULEURS_MM), ./commun.js (nomJoueur),
  *   ../../../commun/sons-jeux.js (jouerSonJeu), ../../jeux/effets-jour.js (rejoue, finDePartie).
+ * Codes passés (idée 13, migration 213) : la liste des 30 derniers codes sous l'écran ; #jour/AAAA-MM-JJ ouvre un code passé,
+ * joué pour l'honneur (hg_jeux_honneur_etat / hg_jeux_honneur_essai) : pas de classement, pas de série, pas de Paillettes.
  * Exporte : afficher.
  */
-import { esc, toast, motionAllowed } from '../../../commun/core.js';
+import { esc, toast, motionAllowed, sb } from '../../../commun/core.js';
 import { duel, erreurTexte, COULEURS_MM } from '../api.js';
 import { nomJoueur } from './commun.js';
 import { boutonReponses } from '../../../commun/core/admin-reponses.js';
 import { jouerSonJeu } from '../../../commun/sons-jeux.js';
 import { rejoue, finDePartie } from '../../jeux/effets-jour.js';
+import { serieHtml, jokerHtml } from '../../jeux/serie-jeux.js'; // série commune des jeux du jour et joker payant (migrations 206 et 207)
+import { jourVoulu, sousTitreHonneur, retourHtml, monterArchives } from '../../jeux/archives-jeux.js';
 
 const CLE_DALTO = 'hg_duel_daltonien';
 const ESSAIS_MAX = 10;
@@ -45,13 +50,25 @@ const heure = (iso) => {
   try { return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; }
 };
 
+/** Appel au serveur pour un code passé (erreur levée telle quelle). */
+async function rpcHonneur(nom, args) {
+  const { data, error } = await sb.rpc(nom, args);
+  if (error) throw error;
+  return data;
+}
+
 /**
- * Affiche le code du jour dans root.
+ * Affiche le code du jour (ou un code passé, #jour/AAAA-MM-JJ) dans root.
  * @param {HTMLElement} root conteneur de l'écran.
+ * @param {{arg?: string|null}} [o] arg : jour d'un code passé.
  * @returns {Promise<Function>} nettoyage (retire les écouteurs).
  */
-export async function afficher(root) {
-  const st = { jour: null, occupe: false, brouillon: vide(), dalto: lireDalto(), vivant: true, anim: false };
+export async function afficher(root, o = {}) {
+  // honneur : jour du code passé joué pour l'honneur (null = code du jour).
+  const st = { jour: null, occupe: false, brouillon: vide(), dalto: lireDalto(), vivant: true, anim: false, honneur: jourVoulu(o.arg) };
+  // Codes passés : sous l'écran, gardés d'un dessin à l'autre.
+  const blocArchives = document.createElement('div');
+  blocArchives.className = 'duels-jour-archives';
 
   /** Le jour est-il terminé pour moi (code trouvé ou plus d'essais) ? */
   const fini = () => !!st.jour && (!!st.jour.fini || !!st.jour.trouve_en || (st.jour.essais || []).length >= ESSAIS_MAX);
@@ -76,7 +93,9 @@ export async function afficher(root) {
     let nouveau = false;
     st.occupe = true; rendre();
     try {
-      st.jour = await duel.jourEssayer(texte);
+      st.jour = st.honneur
+        ? await rpcHonneur('hg_jeux_honneur_essai', { p_jeu: 'code_jour', p_day: st.honneur, p: { essai: texte } })
+        : await duel.jourEssayer(texte);
       st.brouillon = vide();
       nouveau = (st.jour?.essais || []).length > avant;
     } catch (err) {
@@ -86,6 +105,7 @@ export async function afficher(root) {
       if (st.vivant) { if (nouveau) st.anim = true; rendre(); }
     }
     if (nouveau && st.vivant) effetsEssai();
+    if (nouveau && st.honneur && fini()) liste?.rafraichir();
   }
 
   /**
@@ -117,7 +137,7 @@ export async function afficher(root) {
       const bilan = root.querySelector('.duels-jour-bilan');
       if (!bilan) return;
       bilan.classList.remove('jour-cache');
-      finDePartie(bilan, { points: pointsFin(), gain: st.jour?.gain ?? null, animer: true });
+      if (!st.honneur) finDePartie(bilan, { points: pointsFin(), gain: st.jour?.gain ?? null, animer: true });
     }, 800 + indicesPts.length * 420);
   }
 
@@ -163,7 +183,7 @@ export async function afficher(root) {
     return `<div class="duels-jour-bilan" aria-live="polite">
         <p class="mm-fin">${esc(titre)}</p>
         ${secret ? `<p class="mm-aide">Le code était</p><div class="mm-codes" aria-label="Code du jour : ${esc(st.jour.secret)}">${secret}</div>` : ''}
-        <p class="duels-jour-suite">Reviens demain pour un nouveau code.</p>
+        <p class="duels-jour-suite">${st.honneur ? (st.jour.du_jour ? 'Ta partie du jour même.' : 'Code passé, joué pour l’honneur : sans Paillettes ni classement.') : 'Reviens demain pour un nouveau code.'}</p>
       </div>`;
   }
 
@@ -185,14 +205,13 @@ export async function afficher(root) {
   function rendre() {
     if (!st.jour) return;
     const j = st.jour;
-    const serie = Number(j.serie) || 0;
     const focus = root.contains(document.activeElement) ? document.activeElement.dataset.k : null;
     root.innerHTML = `<section class="duels-jour">
       <header class="duels-jour-tete">
         <p class="duels-fil"><a href="/pages/jeux/jeux.html#tous">Retour aux jeux</a></p>
         <h1 class="duels-titre">Code du jour</h1>
-        <p class="duels-jour-expl">Un code secret par jour, le même pour tout le gang. 10 essais. Trouve-le vite pour grimper au classement.</p>
-        ${serie > 0 ? `<p class="duels-jour-serie"><strong>${serie} jour${serie > 1 ? 's' : ''} de suite</strong></p>` : ''}
+        <p class="duels-jour-expl">${st.honneur ? esc(sousTitreHonneur(`Code n°${j.num}`, st.honneur)) : 'Un code secret par jour, le même pour tout le gang. 10 essais. Trouve-le vite pour grimper au classement.'}</p>
+        ${st.honneur ? retourHtml('#jour', 'Code du jour') : `${serieHtml('code_jour')}${jokerHtml('code_jour')}`}
       </header>
       <div class="duels-jour-corps">
         <section class="card duels-jour-plateau" aria-label="Ton plateau">
@@ -201,7 +220,8 @@ export async function afficher(root) {
           ${basHtml()}
         </section>
         <aside class="duels-jour-cote">
-          <section class="card duels-jour-classement">${classementHtml()}</section>
+          ${st.honneur ? '<p class="card muted small ar-note">Code passé : pas de classement ni de Paillettes. Ta partie reste visible dans « Manches passées ».</p>'
+            : `<section class="card duels-jour-classement">${classementHtml()}</section>`}
           <section class="card mm-bloc mm-dalto">
             <div><span id="jour-dalto-titre" class="mm-dalto-titre">Mode daltonien</span>
               <span id="jour-dalto-aide" class="mm-aide">Affiche une lettre sur chaque couleur</span></div>
@@ -211,13 +231,14 @@ export async function afficher(root) {
         </aside>
       </div>
     </section>`;
+    root.querySelector('.duels-jour')?.append(blocArchives);
     if (focus) root.querySelector(`[data-k="${focus}"]:not([disabled])`)?.focus();
-    boutonReponses(root.querySelector('.duels-jour-tete'), 'codejour');
+    if (!st.honneur) boutonReponses(root.querySelector('.duels-jour-tete'), 'codejour');
     // Bilan : caché pendant les effets du dernier essai (il est révélé avec son tampon), sinon tampon posé sans animation.
     const bilan = root.querySelector('.duels-jour-bilan');
     if (bilan) {
       if (st.anim) bilan.classList.add('jour-cache');
-      else finDePartie(bilan, { points: pointsFin(), gain: st.jour?.gain ?? null, animer: false });
+      else if (!st.honneur) finDePartie(bilan, { points: pointsFin(), gain: st.jour?.gain ?? null, animer: false });
     }
   }
 
@@ -247,8 +268,9 @@ export async function afficher(root) {
   }
 
   root.innerHTML = '<p class="duels-chargement">Chargement du code du jour…</p>';
+  let liste = null;
   try {
-    st.jour = await duel.jour();
+    st.jour = st.honneur ? await rpcHonneur('hg_jeux_honneur_etat', { p_jeu: 'code_jour', p_day: st.honneur }) : await duel.jour();
   } catch (err) {
     root.innerHTML = `<section class="card duels-erreur"><h1 class="display">Code du jour</h1>
       <p>${esc(erreurTexte(err))}</p><p><a class="btn btn-primary" href="/pages/jeux/jeux.html#tous">Retour aux jeux</a></p></section>`;
@@ -257,6 +279,9 @@ export async function afficher(root) {
   root.addEventListener('click', surClic);
   root.addEventListener('keydown', surTouche);
   rendre();
+  liste = monterArchives(blocArchives, { sb, esc, jeu: 'code_jour', lien: (d) => `#jour/${d}`, code: 'Code du jour',
+    unite: 'code du jour', essais: ESSAIS_MAX, actuel: st.honneur,
+    texteTitre: (t) => [...String(t)].map((c) => infoCouleur(c).nom).join(' · ') });
 
   return () => {
     st.vivant = false;

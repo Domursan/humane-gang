@@ -18,6 +18,9 @@ import { motionAllowed } from '../../commun/core.js';
 import { sonJour, pointsDeGain, rejoue, secouer, finDePartie } from './effets-jour.js';
 import { loadCss, boardHtml, copyText, normalize } from './devine.js';
 import { boutonReponses } from '../../commun/core/admin-reponses.js';
+import { serieHtml, jokerHtml } from './serie-jeux.js'; // série commune et joker payant (migrations 206 et 207)
+// Manches passées pour l'honneur (idée 13, migration 213) : #<onglet>-AAAA-MM-JJ, sans Paillettes, classement ni série.
+import { jourVoulu, sousTitreHonneur, retourHtml, modeHonneur, monterArchives, suivreJour } from './archives-jeux.js';
 
 /**
  * Présentation des six jeux : titre, consignes et libellé du champ de réponse ; facultatifs : exemple (texte d'attente
@@ -49,6 +52,12 @@ const JEUX = {
     'Un essai raté donne la distance et la direction entre le pays de ton plat et celui du plat à trouver (0 km : même pays).',
     'Chaque erreur ou « Passer » débloque un indice (le 4e donne le pays).',
     'Choisis le plat dans la liste des suggestions.'] },
+};
+/** Manches passées : onglet de la page Jeux, présentation (grille d'images ou liste) et ce que montre la réponse. */
+const ARCHIVES = {
+  carte: { onglet: 'carte-mystere', forme: 'grille' }, jv: { onglet: 'jeu-video', forme: 'grille' },
+  pochette: { onglet: 'pochette', forme: 'grille' }, plat: { onglet: 'plat', forme: 'grille' },
+  replique: { onglet: 'replique', forme: 'liste', unite: 'film' }, pays: { onglet: 'pays', forme: 'liste', unite: 'pays du jour' },
 };
 /** Points par essai (essai 1 = 10 points … essai 6 = 5 points). */
 const BAREME = [10, 9, 8, 7, 6, 5];
@@ -83,13 +92,26 @@ const IMAGES = new Map();
  * @param {{sb: object, me: object, toast: Function, esc: Function}} ctx Contexte des modules d'onglet.
  * @param {string} jeu Identifiant : carte, jv, pochette, replique, pays ou plat.
  */
-export async function monter(panel, ctx, jeu) {
+export async function monter(zone, ctx, jeu) {
   const cfg = JEUX[jeu];
-  if (!cfg) { panel.innerHTML = '<p class="card">Jeu inconnu.</p>'; return; }
+  if (!cfg) { zone.innerHTML = '<p class="card">Jeu inconnu.</p>'; return; }
   loadCss('jeux-devine');
   loadCss('jeux-nj');
   const esc = ctx.esc;
-  const e = { st: null, err: null, busy: false, draft: '', px: null, attendFin: false, finPoch: false };
+  // jour : manche passée jouée pour l'honneur (null = manche du jour).
+  const e = { st: null, err: null, busy: false, draft: '', px: null, attendFin: false, finPoch: false, jour: jourVoulu(ctx.sub) };
+  const ar = ARCHIVES[jeu];
+  // Le jeu se dessine dans panel ; les manches passées dessous, dans leur propre bloc.
+  const panel = document.createElement('div');
+  const blocArchives = document.createElement('div');
+  zone.append(panel, blocArchives);
+  const liste = monterArchives(blocArchives, { sb: ctx.sb, esc, jeu: `nj_${jeu}`, lien: (d) => `#${ar.onglet}-${d}`, code: cfg.titre,
+    forme: ar.forme, unite: ar.unite, essais: 6, actuel: e.jour });
+  suivreJour(zone, ctx, () => e.jour, (j) => {
+    Object.assign(e, { jour: j, busy: false, draft: '', px: null, attendFin: false });
+    charger();
+    liste.rafraichir(j);
+  });
   panel.innerHTML = '<p class="muted">Chargement du jeu…</p>';
   panel.addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-act="copier"]');
@@ -99,9 +121,13 @@ export async function monter(panel, ctx, jeu) {
 
   /** Lit l'état du jour (serveur) puis dessine. */
   async function charger() {
+    const jour = e.jour;
     try {
-      const { data, error } = await ctx.sb.rpc('hg_nj_etat', { p_jeu: jeu });
+      const { data, error } = jour
+        ? await ctx.sb.rpc('hg_jeux_honneur_etat', { p_jeu: `nj_${jeu}`, p_day: jour })
+        : await ctx.sb.rpc('hg_nj_etat', { p_jeu: jeu });
       if (error) throw error;
+      if (e.jour !== jour) return;
       e.st = data; e.err = null;
     } catch (err) { e.err = err?.message || String(err); }
     dessiner();
@@ -113,14 +139,19 @@ export async function monter(panel, ctx, jeu) {
     const avant = e.st;
     let nouveau = false;
     e.busy = true; dessiner();
+    const jour = e.jour;
     try {
-      const { data, error } = await ctx.sb.rpc('hg_nj_essai', { p_jeu: jeu, p_texte: texte });
+      const { data, error } = jour
+        ? await ctx.sb.rpc('hg_jeux_honneur_essai', { p_jeu: `nj_${jeu}`, p_day: jour, p: { texte } })
+        : await ctx.sb.rpc('hg_nj_essai', { p_jeu: jeu, p_texte: texte });
       if (error) throw error;
+      if (e.jour !== jour) { e.busy = false; return; }
       e.st = data; e.draft = '';
       nouveau = (data.essais?.length || 0) > (avant?.essais?.length || 0);
       e.attendFin = nouveau && !!data.finished;
       e.finPoch = e.attendFin && jeu === 'pochette' && e.px != null && motionAllowed();
-      if (data.finished) ctx.toast(data.solved ? `Bravo ! +${data.reward} ${paillSym()}` : `Pas trouvé cette fois. +${data.reward} ${paillSym()}`, data.solved ? 'ok' : undefined);
+      if (data.finished && jour) { ctx.toast(data.solved ? 'Bravo, trouvé pour l’honneur !' : 'Pas trouvé cette fois.', data.solved ? 'ok' : undefined); liste.rafraichir(); }
+      else if (data.finished) ctx.toast(data.solved ? `Bravo ! +${data.reward} ${paillSym()}` : `Pas trouvé cette fois. +${data.reward} ${paillSym()}`, data.solved ? 'ok' : undefined);
     } catch (err) { ctx.toast(err?.message || String(err), 'error'); }
     e.busy = false; dessiner();
     e.finPoch = false;
@@ -137,7 +168,7 @@ export async function monter(panel, ctx, jeu) {
    */
   function habillerFin(animer) {
     const st = e.st, carte = panel.querySelector('.nj-fin');
-    if (!st || !carte) return;
+    if (!st || !carte || e.jour) return; // manche passée : ni points, ni Paillettes, ni série
     const gain = Number(st.reward) > 0 ? Number(st.reward) : null;
     finDePartie(carte, { points: pointsFin(st), gain, animer, cibleGain: gain ? carte.querySelector('.nj-gain-v') : null });
   }
@@ -204,24 +235,30 @@ export async function monter(panel, ctx, jeu) {
     if (e.err) { panel.innerHTML = `<p class="card">Jeu indisponible : ${esc(e.err)}</p>`; return; }
     const st = e.st;
     if (!st) return;
+    const honneur = !!e.jour;
+    modeHonneur(zone, honneur);
     const ancienne = panel.querySelector('.nj-scene img[data-nj-img]');
     const n = (st.essais || []).length, fini = !!st.finished, manche = !!st.round;
     const pills = !manche ? '' : fini
       ? `<span class="pill nj-pill">Essais <strong>${n} / 6</strong></span><span class="pill nj-pill">Points <strong>${esc(st.score)}</strong></span>`
       : `<span class="pill nj-pill">Essai <strong>${Math.min(n + 1, 6)} / 6</strong></span><span class="pill nj-pill">Points max <strong>${Math.max(1, 10 - n)}</strong></span>`;
-    const head = `<div class="nj-head"><div class="nj-head-t"><p class="nj-kicker">JEU DU JOUR${manche ? ` · N°${esc(st.round)}` : ''}</p>
-      <h2 class="nj-title">${esc(cfg.titre)}</h2></div><div class="nj-pills">${pills}</div></div>`;
+    const head = honneur
+      ? `<div class="nj-head"><div class="nj-head-t"><p class="nj-kicker">MANCHE PASSÉE · N°${esc(st.round)}</p>
+      <h2 class="nj-title">${esc(cfg.titre)}</h2><p class="small muted">${esc(sousTitreHonneur(`Manche n°${st.round}`, e.jour))}</p></div>
+      <div class="nj-pills">${retourHtml(`#${ar.onglet}`, 'Manche du jour')}${pills}</div></div>`
+      : `<div class="nj-head"><div class="nj-head-t"><p class="nj-kicker">JEU DU JOUR${manche ? ` · N°${esc(st.round)}` : ''}</p>
+      <h2 class="nj-title">${esc(cfg.titre)}</h2></div><div class="nj-pills">${serieHtml(`nj_${jeu}`)}${pills}</div>${jokerHtml(`nj_${jeu}`)}</div>`;
     const corps = manche
       ? `<div class="nj-main">${jeuHtml(st, fini, n)}</div>`
       : '<div class="nj-main"><div class="card nj-vide"><p>Pas de manche aujourd’hui, reviens demain.</p></div></div>';
     const regles = `<section class="card nj-regles" aria-labelledby="nj-regles-h"><h2 id="nj-regles-h" class="jd-h2">Règles en bref</h2>
       <ul class="nj-rules">${cfg.regles.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>
       <h3 class="nj-label">Barème</h3><ol class="nj-bareme" aria-label="Barème">${BAREME.map((p, i) => `<li><span class="nj-bp">${p}</span><span class="nj-be">Essai ${i + 1}</span></li>`).join('')}</ol></section>`;
-    const board = `<section class="card nj-board" aria-labelledby="nj-board-h"><h2 id="nj-board-h" class="jd-h2">Classement de la semaine</h2>${boardHtml(st.board, ctx.me?.id, esc)}</section>`;
+    const board = honneur ? '' : `<section class="card nj-board" aria-labelledby="nj-board-h"><h2 id="nj-board-h" class="jd-h2">Classement de la semaine</h2>${boardHtml(st.board, ctx.me?.id, esc)}</section>`;
     const hier = st.hier ? `<section class="card nj-hier"><p class="jd-hier-t">Hier : ${esc(st.hier.titre || '—')}</p>
       <p class="muted small">trouvé par ${esc(pluriel(st.hier.trouves ?? 0, 'membre'))}</p></section>` : '';
     panel.innerHTML = `<div class="nj nj--${jeu}">${head}${corps}<aside class="nj-aside">${regles}${board}${hier}</aside></div>`;
-    boutonReponses(panel.querySelector('.nj-head'), 'nj', () => jeu);
+    if (!honneur) boutonReponses(panel.querySelector('.nj-head'), 'nj', () => jeu);
     if (ancienne && motionAllowed()) garderImage(ancienne);
     lier();
     if (fini && manche && !e.attendFin) habillerFin(false);

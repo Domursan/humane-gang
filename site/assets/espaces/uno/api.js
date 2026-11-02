@@ -22,9 +22,15 @@ export const uno = Object.assign(commun, {
   direUno: deux((code) => rpc('hg_uno_uno', { p_code: code }), (code) => rpcInvite('uno', code)),
   contrer: deux((code, cible) => rpc('hg_uno_contrer', { p_code: code, p_cible: cible }), (code, cible) => rpcInvite('contrer', code, { cible })),
   contester: deux((code, oui) => rpc('hg_uno_contester', { p_code: code, p_contester: !!oui }), (code, oui) => rpcInvite('contester', code, { contester: !!oui })),
+  /** Joueur parti : reprend sa main tenue par le robot (migration 211). Renvoie { tours, resume } ou null si rien à reprendre. */
+  reprendre: deux((code) => rpc('hg_uno_reprendre', { p_code: code }), (code) => rpcInvite('reprendre', code)),
   /** Hôte, salle d'attente : change les règles (t_tour, nb_places, mode, visibilite, invites, variantes). */
   regles: (code, p) => rpc('hg_uno_regles', { p_code: code, p }),
   message: deux((code, texte) => rpc('hg_uno_message', { p_code: code, p_texte: texte }), (code, texte) => rpcInvite('message', code, { texte })),
+  /** Parties publiques en cours qui admettent les spectateurs, hors les miennes (migration 214). */
+  enDirect: () => rpc('hg_uno_en_direct'),
+  /** Spectateur : arrête de regarder la partie (id). */
+  arreterDeRegarder: (partieId) => rpc('hg_spect_arreter', { p_partie: partieId }),
 });
 
 export const { erreurTexte, activerInvite, estInvite, jetonInvite, messages, suivrePartie } = salon;

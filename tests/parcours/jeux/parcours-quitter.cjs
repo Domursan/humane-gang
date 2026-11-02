@@ -126,7 +126,8 @@ async function parcours(p, nom, sel, cas, rpc) {
   await p.context().close();
 
   // ----- Uno -----
-  const QT = { uno: { titre: 'Quitter la table ?', ok: 'Quitter la table', texte: 'Tes cartes repartent sous la pioche, tu ne peux plus revenir dans cette partie et tu ne reçois pas de Paillettes.' } };
+  // Migration 211 : un robot tient la place de celui qui part (détail : parcours-uno-robot.cjs).
+  const QT = { uno: { titre: 'Quitter la table ?', ok: 'Quitter la table', texte: 'Un robot joue ta main jusqu’à ton retour. Reviens avant la fin de la partie pour la reprendre. Si tu n’es pas revenu à la fin, tu ne reçois pas de Paillettes.' } };
   p = await ouvrirSalon(browser, 'uno', 'uno', 'HGUNO-4242');
   await parcours(p, 'Uno en cours', '.uno-barre [data-quitter]', QT.uno, 'hg_uno_quitter');
 

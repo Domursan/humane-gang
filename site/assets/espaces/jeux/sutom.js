@@ -12,10 +12,12 @@ import { boutonReponses } from '../../commun/core/admin-reponses.js';
 import { motionAllowed } from '../../commun/core.js';
 import { paillSym } from '../../commun/paillettes.js';
 import { sonJour, secouer, rejoue, enCascade, finDePartie, pointsDeGain } from './effets-jour.js';
+import { serieHtml, jokerHtml } from './serie-jeux.js'; // série commune et joker payant (migrations 206 et 207)
+// Grilles passées pour l'honneur (idée 13, migration 213) : #sutom-AAAA-MM-JJ, sans Paillettes, classement ni série.
+import { jourVoulu, sousTitreHonneur, retourHtml, modeHonneur, monterArchives, suivreJour } from './archives-jeux.js';
 
 const RANGEES = ['AZERTYUIOP', 'QSDFGHJKLM', 'WXCVBN'];
 const ETAT = { 2: 'bien placée', 1: 'mal placée', 0: 'absente' };
-const FLAMME = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-7 0 2 1 3 2 3 0-3 1-6 1-8z" fill="currentColor"/></svg>';
 
 /** Charge la feuille de style une seule fois. */
 function styles() {
@@ -30,12 +32,17 @@ function styles() {
  * @param {HTMLElement} panel Panneau vide.
  * @param {{sb: object, toast: Function, esc: Function}} ctx Contexte de la page Jeux.
  */
-export async function mount(panel, { sb, toast, esc }) {
+export async function mount(panel, ctx) {
+  const { sb, toast, esc } = ctx;
   styles();
-  const S = { d: null, saisie: '', busy: false, msg: '' };
+  // jour : grille passée jouée pour l'honneur (null = grille du jour).
+  const S = { d: null, saisie: '', busy: false, msg: '', jour: jourVoulu(ctx.sub) };
   const root = document.createElement('div');
   root.className = 'su';
-  panel.append(root);
+  const archives = document.createElement('div');
+  panel.append(root, archives);
+  const liste = monterArchives(archives, { sb, esc, jeu: 'sutom', lien: (d) => `#sutom-${d}`, code: 'Sutom du gang',
+    titre: 'Grilles passées', unite: 'mot du jour', essais: 6, actuel: S.jour });
 
   /** États connus de chaque lettre (meilleur état vu) pour colorer le clavier. */
   function lettres() {
@@ -83,6 +90,8 @@ export async function mount(panel, { sb, toast, esc }) {
   /** Dessine l'onglet. */
   function dessine() {
     const d = S.d;
+    const honneur = !!S.jour;
+    modeHonneur(panel, honneur, 'Grilles passées');
     if (!d.available) { root.innerHTML = '<div class="card"><h2 class="su-h">Sutom du gang</h2><p class="muted">Pas de grille aujourd’hui : le Staff n’a pas encore ajouté de mots. Reviens demain !</p></div>'; return; }
     const essai = d.finished ? (d.solved ? `trouvé en ${d.guesses.length}` : 'perdu') : `${d.guesses.length + 1}e essai en cours`;
     const fin = d.finished ? `<section class="card su-end ${d.solved ? 'is-ok' : 'is-ko'}" aria-labelledby="su-end-h">
@@ -90,16 +99,18 @@ export async function mount(panel, { sb, toast, esc }) {
         <p><span class="su-word">${esc(d.word || '')}</span>${d.definition ? ` : ${esc(d.definition)}` : ''}</p>
         ${d.gain ? `<p class="small su-gain">+${esc(String(d.gain))} ${paillSym()}</p>` : ''}
         <div class="btn-row"><button type="button" class="btn btn-sand" data-share>Partager</button></div>
-        <p class="small muted">Nouvelle grille demain à minuit.</p></section>` : '';
+        <p class="small muted">${honneur ? (d.du_jour ? 'Ta partie du jour même.' : 'Grille passée, jouée pour l’honneur : sans Paillettes ni classement.') : 'Nouvelle grille demain à minuit.'}</p></section>` : '';
+    const sous = honneur ? sousTitreHonneur(`Grille n°${d.num}`, S.jour) : `Grille n°${d.num} · ${d.length} lettres · ${essai}`;
     root.innerHTML = `<div class="su-head"><div><h2 class="su-h">Sutom du gang</h2>
-        <p class="small muted">Grille n°${esc(String(d.num))} · ${esc(String(d.length))} lettres · ${esc(essai)}</p></div>
-        <span class="su-serie" aria-label="Série : ${esc(String(d.streak || 0))} jours">${FLAMME}${esc(String(d.streak || 0))} jour${d.streak > 1 ? 's' : ''}</span></div>
+        <p class="small muted">${esc(sous)}</p></div>
+        ${honneur ? retourHtml('#sutom') : serieHtml('sutom')}</div>
+      ${honneur ? '' : jokerHtml('sutom')}
       ${grille()}
       <div class="su-legend small muted" aria-hidden="true"><span><span class="su-sq"></span>bien placée</span><span><span class="su-ci"></span>mal placée</span></div>
       <p class="su-msg small" role="status" aria-live="polite">${esc(S.msg)}</p>
       ${fin}
       ${d.finished ? '' : clavier()}`;
-    boutonReponses(root.querySelector('.su-head > div'), 'sutom');
+    if (!honneur) boutonReponses(root.querySelector('.su-head > div'), 'sutom');
     // Partie déjà finie (ouverture, rechargement, message) : carte de fin sans effet. L'essai gagnant la gère lui-même (revele).
     if (d.finished && !S.busy) habilleFin(false);
   }
@@ -114,7 +125,7 @@ export async function mount(panel, { sb, toast, esc }) {
   function habilleFin(animer) {
     const carte = root.querySelector('.su-end');
     const d = S.d;
-    if (!carte) return;
+    if (!carte || S.jour) return; // grille passée : ni points, ni Paillettes, ni série
     const gain = Number(d.gain) || 0;
     finDePartie(carte, { points: d.points ?? pointsDeGain(gain), gain: gain || null, animer, cibleGain: gain ? carte.querySelector('.su-gain') : null });
   }
@@ -172,9 +183,13 @@ export async function mount(panel, { sb, toast, esc }) {
     if (k === 'Enter') {
       if (S.saisie.length < d.length) { S.msg = `Il faut ${d.length} lettres.`; dessine(); return; }
       S.busy = true;
+      const jour = S.jour;
       try {
-        const { data, error } = await sb.rpc('hg_sutom_guess', { p_word: S.saisie });
+        const { data, error } = jour
+          ? await sb.rpc('hg_jeux_honneur_essai', { p_jeu: 'sutom', p_day: jour, p: { mot: S.saisie } })
+          : await sb.rpc('hg_sutom_guess', { p_word: S.saisie });
         if (error) throw error;
+        if (S.jour !== jour) return; // l'adresse a changé pendant l'envoi
         if (!data?.valid) { S.msg = data?.message || 'Mot refusé.'; dessine(); refuse(); return; }
         const avant = lettres();
         d.guesses.push({ word: data.word, colors: data.colors });
@@ -183,6 +198,7 @@ export async function mount(panel, { sb, toast, esc }) {
         if (data.finished) Object.assign(d, { finished: true, solved: data.solved, word: data.answer, definition: data.definition, gain: data.gain, streak: data.streak ?? d.streak, points: data.points });
         dessine();
         await revele(data, avant);
+        if (jour && data.finished) liste.rafraichir();
       } catch (e) {
         console.warn('[sutom]', e);
         S.msg = errMsg(e); dessine();
@@ -213,15 +229,30 @@ export async function mount(panel, { sb, toast, esc }) {
     touche(k);
   });
 
-  root.innerHTML = '<p class="muted">Chargement de la grille…</p>';
-  try {
-    const { data, error } = await sb.rpc('hg_sutom_state');
-    if (error) throw error;
-    S.d = data || { available: false };
-    S.d.guesses ||= [];
-    dessine();
-  } catch (e) {
-    console.warn('[sutom]', e);
-    root.innerHTML = `<p class="card muted">Sutom indisponible pour le moment (${esc(errMsg(e))}).</p>`;
+  /** Charge la grille du jour, ou la grille passée S.jour (pour l'honneur). */
+  async function charger() {
+    const jour = S.jour;
+    root.innerHTML = '<p class="muted">Chargement de la grille…</p>';
+    try {
+      const { data, error } = jour
+        ? await sb.rpc('hg_jeux_honneur_etat', { p_jeu: 'sutom', p_day: jour })
+        : await sb.rpc('hg_sutom_state');
+      if (error) throw error;
+      if (S.jour !== jour) return;
+      S.d = data || { available: false };
+      S.d.guesses ||= [];
+      dessine();
+    } catch (e) {
+      console.warn('[sutom]', e);
+      root.innerHTML = `<p class="card muted">Sutom indisponible pour le moment (${esc(errMsg(e))}).</p>`;
+    }
   }
+  // Grille passée ouverte depuis la liste (#sutom-AAAA-MM-JJ) ou retour à la grille du jour (#sutom).
+  suivreJour(panel, ctx, () => S.jour, (j) => {
+    Object.assign(S, { jour: j, saisie: '', msg: '', busy: false });
+    charger();
+    liste.rafraichir(j);
+    if (j) root.scrollIntoView?.({ block: 'start' });
+  });
+  await charger();
 }

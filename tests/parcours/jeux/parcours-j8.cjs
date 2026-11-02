@@ -18,7 +18,7 @@ async function tape(p, mot) {
   const browser = await chromium.launch();
   fs.mkdirSync(SHOTS, { recursive: true });
 
-  let p = await openPage(browser, { page: 'jeux', hash: '#sutom', width: 390, height: 844, init: 'fake-jeux.js' });
+  let p = await openPage(browser, { page: 'jeux', hash: '#sutom', width: 390, height: 844, init: 'fake-jeux.js', scenario: { series: { jeux: { sutom: { n: 9 } } } } });
   await p.waitForSelector('.su-grid', { timeout: 6000 }).catch(() => {});
   check((await p.locator('.su-head').innerText()).includes('Grille n°42 · 8 lettres'), 'en-tête : numéro de grille et longueur');
   check((await p.locator('.su-row').count()) === 6 && (await p.locator('.su-row').first().locator('.su-cell').count()) === 8, 'grille de 6 essais × 8 lettres');
@@ -26,7 +26,7 @@ async function tape(p, mot) {
   check(!(await p.content()).includes('RACLETTE'), 'le mot n’est jamais dans la page avant la fin');
   check((await p.locator('.su-admin').count()) === 0, 'joueur ordinaire : pas d’encart solution');
   check((await p.locator('.su-kbd .su-key').count()) === 28, 'clavier : 26 lettres, Effacer et Entrée');
-  check((await p.locator('.su-serie').innerText()).includes('9 jours'), 'série affichée');
+  check((await p.locator('.su-head .sj').innerText()).includes('9 jours'), 'série affichée (pastille commune, migration 206)');
   check((await hscroll(p)) <= 0, '390 px : pas de défilement horizontal');
   // Mot hors dictionnaire (clavier à l'écran) : refusé sans compter
   for (const c of 'ZZZZZZZ') await p.click(`.su-key[data-key="${c}"]`);

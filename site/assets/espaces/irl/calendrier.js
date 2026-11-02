@@ -11,7 +11,9 @@
  * Données : RPC hg_calendar (période ≤ 62 jours), table hg_gang_slots (lecture), RPC hg_gang_slot_save,
  * hg_gang_slot_archive, hg_gang_slot_skip, hg_calendar_token_me, hg_calendar_token_reset (migration 087).
  * Événements ponctuels : RPC hg_cal_can_manage (droit de gestion), hg_cal_event_save, hg_cal_event_remove (migration 098).
- * Fuseau : tout en heure de Zurich. Les filtres sont mémorisés dans le navigateur (localStorage, facultatif).
+ * Téléphone (600 px et moins, seuil commun des pages, idées 70 et 71) : le mois s'affiche en liste des jours qui ont quelque chose (jours passés repliés,
+ * aujourd'hui toujours affiché), avec un choix Liste / Grille retenu sur l'appareil. Au-dessus, la grille seule.
+ * Fuseau : tout en heure de Zurich. Les filtres et le choix Liste / Grille sont mémorisés dans le navigateur (localStorage, facultatif).
  * Dépendances : core.js, ics.js (export d'un rendez-vous), icons.js, ui-confirm.js, config.js (adresse du flux).
  * Page réservée aux membres (auth: 'member'). N'exporte rien.
  */
@@ -41,10 +43,14 @@ const WEEKDAYS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', '
 const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 const MAX_DOTS = 3;
 const LS_FILTERS = 'hg_cal_filters';
+const LS_VUE = 'hg_cal_vue';
+/** Téléphone : seuil de la liste du mois (le même que celui de la grille compacte dans calendrier.css). */
+const MQ_TEL = matchMedia('(max-width: 600px)');
 const I = {
   prev: svg('prev', { size: 18 }), next: svg('next', { size: 18 }), cal: svg('cal', { size: 18 }), plus: svg('plus', { size: 18 }),
   edit: svg('edit', { size: 16 }), trash: svg('trash', { size: 16 }), copy: svg('copy', { size: 16 }), link: svg('link', { size: 16 }),
   close: svg('close', { size: 20 }), undo: svg('undo', { size: 16 }), down: svg('download', { size: 16 }),
+  list: svg('list', { size: 18 }), grid: svg('grid', { size: 18 }),
 };
 const canStaff = hasPerm('evenements');
 
@@ -70,12 +76,18 @@ const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const T = todayZ();
 const S = {
   y: Number(T.slice(0, 4)), m: Number(T.slice(5, 7)), sel: T,
-  items: [], slots: [], loading: false, error: null, canManage: false,
+  items: [], slots: [], loading: true, error: null, canManage: false,
   off: new Set(readFilters()),
+  vue: readVue(), passes: false, // téléphone : 'liste' ou 'grille' ; jours passés du mois dépliés dans la liste
 };
 /** Filtres masqués mémorisés (facultatif : stockage parfois indisponible). */
 function readFilters() { try { const v = JSON.parse(localStorage.getItem(LS_FILTERS) || '[]'); return Array.isArray(v) ? v.filter((k) => k in TYPES) : []; } catch { return []; } }
 function saveFilters() { try { localStorage.setItem(LS_FILTERS, JSON.stringify([...S.off])); } catch { /* sans importance */ } }
+/** Choix Liste / Grille du téléphone, retenu sur l'appareil (liste par défaut). */
+function readVue() { try { return localStorage.getItem(LS_VUE) === 'grille' ? 'grille' : 'liste'; } catch { return 'liste'; } }
+function saveVue() { try { localStorage.setItem(LS_VUE, S.vue); } catch { /* sans importance */ } }
+/** Vrai quand le mois s'affiche en liste (téléphone et choix « Liste »). */
+const enListe = () => MQ_TEL.matches && S.vue === 'liste';
 
 /** Type d'affichage d'un rendez-vous (les rendez-vous récurrents « soirée » prennent la couleur des soirées). */
 const typeOf = (it) => (it.kind === 'groupe' && it.meta?.kind === 'soiree' ? 'soiree' : it.kind);
@@ -152,28 +164,63 @@ function subOf(it) {
 const isMineSlot = (slotId) => { const s = S.slots.find((x) => x.id === slotId); return !!s && (s.created_by === me.id || canStaff); };
 const safeHref = (l) => (/^https:\/\//.test(l || '') ? l : /^(\/pages\/[a-z0-9-]+\/)?[a-z0-9-]+\.html([?#][\w=:#.-]*)?$/i.test(l || '') ? l : null);
 
+/** Ligne d'un rendez-vous (liste du jour choisi et liste du mois) : titre, sous-titre, « Ouvrir », agenda, actions de l'auteur. */
+function itemHtml(it) {
+  const evt = it.meta?.source === 'calendrier' ? it.meta : null;
+  // Événement ajouté depuis ce calendrier : pas de « Ouvrir » sans lien https (le lien par défaut est la page elle-même)
+  const href = evt && !/^https:\/\//.test(it.link || '') ? null : safeHref(it.link), ext = /^https:/.test(href || '');
+  const timed = it.starts_at && !it.all_day;
+  const slot = it.kind === 'groupe' ? it.meta?.slot_id : null;
+  return `<li class="cal-item"><span class="cal-bar" style="--c:${TYPES[typeOf(it)]?.color}" aria-hidden="true"></span>
+    <div class="cal-item-txt"><strong>${esc(it.title)}</strong><span class="small muted">${esc(subOf(it))}</span>
+      ${evt?.location ? `<span class="small">Lieu : ${esc(evt.location)}</span>` : ''}
+      ${evt?.note ? `<span class="small muted cal-item-note">${esc(evt.note)}</span>` : ''}</div>
+    <div class="cal-item-act">
+      ${href ? `<a class="btn btn-ghost btn-sm" href="${esc(href)}"${ext ? ' target="_blank" rel="noopener noreferrer"' : ''}>${ext ? I.link : ''}<span>Ouvrir</span></a>` : ''}
+      ${timed ? `<button type="button" class="btn btn-ghost btn-sm cal-icon" data-act="ics" data-ref="${esc(it.ref)}" aria-label="Ajouter « ${esc(it.title)} » à mon agenda">${I.down}</button>` : ''}
+      ${slot && isMineSlot(slot) ? `<button type="button" class="btn btn-ghost btn-sm" data-act="skip" data-slot="${esc(slot)}" data-day="${esc(it.day)}">Annuler cette date</button>` : ''}
+      ${evt && S.canManage ? `<button type="button" class="btn btn-ghost btn-sm" data-act="edit-evt" data-ref="${esc(it.ref)}" aria-label="Modifier « ${esc(it.title)} »">${I.edit}<span>Modifier</span></button>
+      <button type="button" class="btn btn-ghost btn-sm" data-act="remove-evt" data-ref="${esc(it.ref)}" aria-label="Retirer « ${esc(it.title)} »">${I.trash}<span>Retirer</span></button>` : ''}
+    </div></li>`;
+}
+
 function renderDay() {
   const box = $('#cal-day');
   const list = (byDay().get(S.sel) || []);
   box.innerHTML = `<h2 class="cal-day-title" id="cal-day-title">${esc(cap(longDay(S.sel)))}</h2>
-    ${list.length ? `<ul class="cal-list">${list.map((it) => {
-      const evt = it.meta?.source === 'calendrier' ? it.meta : null;
-      // Événement ajouté depuis ce calendrier : pas de « Ouvrir » sans lien https (le lien par défaut est la page elle-même)
-      const href = evt && !/^https:\/\//.test(it.link || '') ? null : safeHref(it.link), ext = /^https:/.test(href || '');
-      const timed = it.starts_at && !it.all_day;
-      const slot = it.kind === 'groupe' ? it.meta?.slot_id : null;
-      return `<li class="cal-item"><span class="cal-bar" style="--c:${TYPES[typeOf(it)]?.color}" aria-hidden="true"></span>
-        <div class="cal-item-txt"><strong>${esc(it.title)}</strong><span class="small muted">${esc(subOf(it))}</span>
-          ${evt?.location ? `<span class="small">Lieu : ${esc(evt.location)}</span>` : ''}
-          ${evt?.note ? `<span class="small muted cal-item-note">${esc(evt.note)}</span>` : ''}</div>
-        <div class="cal-item-act">
-          ${href ? `<a class="btn btn-ghost btn-sm" href="${esc(href)}"${ext ? ' target="_blank" rel="noopener noreferrer"' : ''}>${ext ? I.link : ''}<span>Ouvrir</span></a>` : ''}
-          ${timed ? `<button type="button" class="btn btn-ghost btn-sm cal-icon" data-act="ics" data-ref="${esc(it.ref)}" aria-label="Ajouter « ${esc(it.title)} » à mon agenda">${I.down}</button>` : ''}
-          ${slot && isMineSlot(slot) ? `<button type="button" class="btn btn-ghost btn-sm" data-act="skip" data-slot="${esc(slot)}" data-day="${esc(it.day)}">Annuler cette date</button>` : ''}
-          ${evt && S.canManage ? `<button type="button" class="btn btn-ghost btn-sm" data-act="edit-evt" data-ref="${esc(it.ref)}" aria-label="Modifier « ${esc(it.title)} »">${I.edit}<span>Modifier</span></button>
-          <button type="button" class="btn btn-ghost btn-sm" data-act="remove-evt" data-ref="${esc(it.ref)}" aria-label="Retirer « ${esc(it.title)} »">${I.trash}<span>Retirer</span></button>` : ''}
-        </div></li>`;
-    }).join('')}</ul>` : '<p class="muted cal-none">Rien de prévu ce jour-là.</p>'}`;
+    ${list.length ? `<ul class="cal-list">${list.map(itemHtml).join('')}</ul>` : '<p class="muted cal-none">Rien de prévu ce jour-là.</p>'}`;
+}
+
+/** Téléphone : le mois en liste. Seuls les jours qui ont un rendez-vous sont listés, plus aujourd'hui (même vide) ;
+ *  les jours passés du mois sont repliés derrière « Voir les jours passés ». */
+function renderListe() {
+  const box = $('#cal-liste');
+  box.setAttribute('aria-label', `Rendez-vous de ${MONTHS[S.m - 1]} ${S.y}`);
+  box.setAttribute('aria-busy', String(S.loading));
+  if (S.loading) {
+    box.innerHTML = `<ol class="cal-jours" aria-hidden="true">${'<li class="cal-jour cal-jour-sk"><span class="cal-sk cal-jour-date"></span><span class="cal-jour-corps"><span class="cal-sk cal-sk-titre"></span><span class="cal-sk cal-sk-ligne"></span></span></li>'.repeat(4)}</ol>`;
+    return;
+  }
+  if (S.error) { box.innerHTML = `<p class="cal-error" role="alert">Impossible de charger le calendrier : ${esc(S.error)}</p><button type="button" class="btn btn-ghost" data-act="recharger">Réessayer</button>`; return; }
+  const map = byDay();
+  if (!visible().length) {
+    box.innerHTML = `<div class="cal-liste-vide"><p>Rien de prévu en ${esc(MONTHS[S.m - 1])}${S.off.size ? ' avec ces filtres' : ''}.</p>
+      <p class="small muted">Un rendez-vous qui revient chaque semaine ? Ajoute-le avec « Rendez-vous récurrent ».</p></div>`;
+    return;
+  }
+  if (T.startsWith(`${S.y}-${p2(S.m)}`) && !map.has(T)) map.set(T, []);
+  const jours = [...map.keys()].sort();
+  const passes = jours.filter((d) => d < T), avenir = jours.filter((d) => d >= T);
+  const jourHtml = (day) => {
+    const list = map.get(day), d = parse(day), auj = day === T;
+    return `<li class="cal-jour${auj ? ' is-today' : ''}${day < T ? ' is-passe' : ''}">
+      <h2 class="cal-jour-date"><span aria-hidden="true"><span class="cal-jour-dow">${WEEKDAYS[isoDow(day) - 1].slice(0, 3)}.</span><span class="cal-jour-num">${d.getUTCDate()}</span></span>
+        <span class="visually-hidden">${esc(cap(longDay(day)))}${auj ? ', aujourd’hui' : ''}</span></h2>
+      <div class="cal-jour-corps">${auj ? '<p class="cal-jour-auj" aria-hidden="true">Aujourd’hui</p>' : ''}
+        ${list.length ? `<ul class="cal-list">${list.map(itemHtml).join('')}</ul>` : '<p class="muted cal-jour-rien">Rien de prévu</p>'}</div></li>`;
+  };
+  const bouton = passes.length ? `<button type="button" class="btn btn-ghost cal-passes" data-act="passes" aria-expanded="${S.passes}" aria-controls="cal-jours">${S.passes ? 'Masquer les jours passés' : `Voir ${passes.length > 1 ? `les ${passes.length} jours passés` : 'le jour passé'}`}</button>` : '';
+  box.innerHTML = `${bouton}<ol class="cal-jours" id="cal-jours">${(S.passes ? jours : avenir).map(jourHtml).join('')}</ol>`;
 }
 
 function renderSlots() {
@@ -195,6 +242,12 @@ function renderSlots() {
 function render() {
   app.setAttribute('aria-busy', String(S.loading));
   renderFilters(); renderGrid(); renderDay(); renderSlots();
+  // Téléphone : liste ou grille selon le choix retenu ; au-dessus de 600 px, toujours la grille et le jour choisi.
+  const liste = enListe();
+  $('#cal-liste').hidden = !liste;
+  $('.cal-grid-wrap').hidden = liste; $('#cal-day').hidden = liste;
+  for (const b of document.querySelectorAll('.cal-vue [data-vue]')) b.setAttribute('aria-pressed', String(b.dataset.vue === S.vue));
+  if (liste) renderListe();
   const n = visible().length;
   $('#cal-status').textContent = `${cap(MONTHS[S.m - 1])} ${S.y} : ${n} rendez-vous affiché${n > 1 ? 's' : ''}.`;
 }
@@ -203,7 +256,7 @@ function render() {
 function go(delta) {
   let m = S.m + delta, y = S.y;
   if (m < 1) { m = 12; y--; } else if (m > 12) { m = 1; y++; }
-  S.y = y; S.m = m;
+  S.y = y; S.m = m; S.passes = false;
   S.sel = T.startsWith(`${y}-${p2(m)}`) ? T : ymd(y, m, 1);
   load();
 }
@@ -369,6 +422,15 @@ $('#cal-add').innerHTML = `${I.plus}<span>Rendez-vous récurrent</span>`;
 // Bouton « Ajouter un événement » : créé ici s'il manque (ancienne copie de /pages/irl/calendrier.html en cache).
 if (!$('#cal-add-evt')) $('#cal-add')?.insertAdjacentHTML('afterend', '<button type="button" class="btn btn-ghost" id="cal-add-evt" hidden></button>');
 $('#cal-add-evt').innerHTML = `${I.plus}<span>Ajouter un événement</span>`;
+// Choix Liste / Grille du téléphone : créé ici s'il manque (ancienne copie de la page en cache).
+if (!$('#cal-vue-liste')) $('.cal-nav')?.insertAdjacentHTML('beforeend', '<div class="cal-vue" role="group" aria-label="Affichage du mois"><button type="button" class="btn btn-ghost cal-vue-btn" id="cal-vue-liste" data-vue="liste" aria-pressed="false"><span>Liste</span></button><button type="button" class="btn btn-ghost cal-vue-btn" id="cal-vue-grille" data-vue="grille" aria-pressed="false"><span>Grille</span></button></div>');
+if (!$('#cal-liste')) $('.cal-grid-wrap')?.insertAdjacentHTML('beforebegin', '<section class="cal-liste" id="cal-liste" aria-label="Rendez-vous du mois" hidden></section>');
+$('#cal-vue-liste').insertAdjacentHTML('afterbegin', I.list); $('#cal-vue-grille').insertAdjacentHTML('afterbegin', I.grid);
+$('.cal-vue').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-vue]'); if (!b || b.dataset.vue === S.vue) return;
+  S.vue = b.dataset.vue; saveVue(); render();
+});
+MQ_TEL.addEventListener('change', render); // rotation ou redimensionnement : liste ou grille selon la largeur
 $('#cal-prev').addEventListener('click', () => go(-1));
 $('#cal-next').addEventListener('click', () => go(1));
 $('#cal-today').addEventListener('click', () => { S.y = Number(T.slice(0, 4)); S.m = Number(T.slice(5, 7)); S.sel = T; load(); });
@@ -386,7 +448,7 @@ $('#cal-grid').addEventListener('click', (e) => {
   const b = e.target.closest('[data-day]'); if (!b) return;
   S.sel = b.dataset.day; renderGrid(); renderDay();
   $(`#cal-grid [data-day="${S.sel}"]`)?.focus();
-  if (matchMedia('(max-width: 760px)').matches) $('#cal-day').scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  if (MQ_TEL.matches) $('#cal-day').scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 });
 // Flèches du clavier dans la grille : jour précédent / suivant / semaine.
 $('#cal-grid').addEventListener('keydown', (e) => {
@@ -401,7 +463,11 @@ $('#cal-grid').addEventListener('keydown', (e) => {
 app.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const act = b.dataset.act;
-  if (act === 'ics') {
+  if (act === 'passes') { // liste du mois : déplier ou replier les jours passés
+    S.passes = !S.passes; renderListe(); $('#cal-liste [data-act="passes"]')?.focus();
+  } else if (act === 'recharger') {
+    load();
+  } else if (act === 'ics') {
     const it = S.items.find((x) => x.ref === b.dataset.ref); if (!it) return;
     const href = safeHref(it.link);
     addToCalendar({ id: `${it.kind}-${it.ref}`, title: it.title, start: it.starts_at }, href ? new URL(href, location.href).href : location.href);

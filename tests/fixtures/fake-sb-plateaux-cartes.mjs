@@ -160,6 +160,8 @@ const HANDLERS = {
   hg_plat_contenus: () => ok({}),
   hg_plat_mes_parties: () => ok([]),
   hg_plat_publiques: () => ok([]),
+  hg_plat_en_direct: () => ok([]),     // parties à regarder (migration 214)
+  hg_spect_arreter: () => ok(null),
 };
 
 /** Client : celui du faux de base, avec les RPC des jeux de cartes en plus (journalisées). */
