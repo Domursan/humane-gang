@@ -59,3 +59,4 @@
 2026-11-02T07:02:29.155Z ok supabase/migrations/200_notif_ton_tour.sql
 2026-11-02T07:02:29.850Z ok supabase/migrations/201_suppression_compte.sql
 2026-11-02T07:02:30.637Z ok supabase/migrations/202_champion_v2.sql
+2026-11-02T12:09:41.126Z ERREUR supabase/migrations/203_recherche_messages.sql : {"message":"Invalid access token"}
