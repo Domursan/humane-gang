@@ -53,3 +53,9 @@
 2026-11-01T20:51:22.487Z ok supabase/migrations/194_modeles_reponse.sql
 2026-11-01T20:51:23.227Z ok supabase/migrations/195_centre_notifications.sql
 2026-11-01T21:59:20.626Z ok supabase/migrations/196_give_panier.sql
+2026-11-02T07:02:27.013Z ok supabase/migrations/197_jeux_mes_parties.sql
+2026-11-02T07:02:27.691Z ok supabase/migrations/198_quitter_plateaux.sql
+2026-11-02T07:02:28.369Z ok supabase/migrations/199_transfert_hote.sql
+2026-11-02T07:02:29.155Z ok supabase/migrations/200_notif_ton_tour.sql
+2026-11-02T07:02:29.850Z ok supabase/migrations/201_suppression_compte.sql
+2026-11-02T07:02:30.637Z ok supabase/migrations/202_champion_v2.sql
