@@ -37,9 +37,11 @@ begin
   perform t_ok(t_err(5, format('hg_plat_messages(%L)', pid)) is not null, 'arrêter : plus de chat');
 
   -- Blackjack : la carte cachée de la banque reste « ?? » chez le spectateur. Seulement si le Blackjack est dans la base :
-  -- la base de la CI (rebuild.sh) ne peut pas charger la migration 143, qui dépend des jeux du jour (136, 150) absents du banc.
-  if to_regproc('public.hg_bj__total') is not null then
-    c := t_call(1, format('hg_plat_creer(%L::jsonb)', '{"jeu":"blackjack","nb_places":2,"visibilite":"publique"}')) #>> '{}';
+  -- la base de la CI (rebuild.sh) ne charge la migration 143 qu'en partie (ses hg__patch échouent : jeux du jour 136 et 150
+  -- absents du banc) ; le Blackjack n'y est branché que si hg_plat__prefixe le connaît. Page ouverte comme dans helpers.sql.
+  if position('blackjack' in pg_get_functiondef('public.hg_plat__prefixe(text)'::regprocedure)) > 0 then
+    update hg_pages set mode = 'membres' where slug = 'blackjack';
+    c :=t_call(1, format('hg_plat_creer(%L::jsonb)', '{"jeu":"blackjack","nb_places":2,"visibilite":"publique"}')) #>> '{}';
     pid := t_pid(c);
     perform t_call(2, format('hg_plat_rejoindre(%L)', c)); perform t_call(2, format('hg_plat_pret(%L, true)', c));
     perform t_call(1, format('hg_plat_lancer(%L)', c));

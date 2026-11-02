@@ -497,7 +497,7 @@ function syncAdmin(header, profile) {
  */
 /** Ajoute la feuille comptes.css (une seule fois). */
 function cssComptes() {
-  if (document.querySelector('link[href$="/comptes.css"]')) return;
+  if (document.querySelector('link[href$="commun/comptes.css"]')) return; // sans « / » en tête : check-build y verrait un chemin du site
   const l = document.createElement('link');
   l.rel = 'stylesheet'; l.href = new URL('../comptes.css', import.meta.url).href;
   document.head.append(l);
