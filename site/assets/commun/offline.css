@@ -8,7 +8,7 @@
 /* Onglets indisponibles sans réseau : grisés, bord pointillé (maquette Q4) */
 .cartes-offline .cartes-tab[disabled] { opacity: .45; border-style: dashed; cursor: not-allowed; }
 /* Rien ne se modifie hors ligne : recyclage, fabrication et souhaits masqués */
-.cartes-offline .cartes-mass,
+.cartes-offline .mc-actions,
 .cartes-offline .cd-btn,
 .cartes-offline .cd-wish,
 .membre-offline .mb-actions { display: none !important; }

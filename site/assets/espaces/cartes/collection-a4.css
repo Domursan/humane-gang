@@ -45,6 +45,11 @@
 .a4-cell { position: relative; }
 .a4-cell .hgc { --w: 28mm; width: 28mm; max-width: none; }
 .a4-cell .hgc-holo, .a4-cell .hgc-sheen { display: none; } /* aucun effet animé sur papier */
+/* Grilles 4 × 4 et 3 × 3 : la hauteur est bornée par la première page, qui porte l'en-tête. */
+.a4-page.mc-g16 .a4-grid { grid-template-columns: repeat(4, 38mm); grid-auto-rows: 53.1mm; justify-content: center; column-gap: 8mm; }
+.a4-page.mc-g9 .a4-grid { grid-template-columns: repeat(3, 51mm); grid-auto-rows: 71.2mm; justify-content: center; column-gap: 8mm; }
+.a4-page.mc-g16 .a4-cell .hgc { --w: 38mm; width: 38mm; }
+.a4-page.mc-g9 .a4-cell .hgc { --w: 51mm; width: 51mm; }
 .a4-shiny { position: absolute; top: -1.6mm; right: -1.6mm; width: 4.6mm; height: 4.6mm; border-radius: 50%; background: #FCA301; color: #1a1618;
   display: grid; place-items: center; font-size: 7pt; line-height: 1; box-shadow: 0 0 0 .5mm var(--pg-bg); }
 .a4-miss { border: .45mm dashed var(--miss-line); border-radius: 1.6mm; background: var(--miss-bg); color: var(--miss-ink);

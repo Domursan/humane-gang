@@ -6,7 +6,7 @@
 // écran, carte agrandie « Suivante » au-delà du lot dessiné, recherche sans accents, recyclage des doublons calculé sur
 // toute la collection, pas de défilement horizontal à 360 px.
 // Lancer : node tests/parcours/cartes/parcours-collection-longue.cjs
-const { ROOT, check, finish, openPage, sleep, chromium } = require('../../lib/harness.cjs');
+const { choisirFiltre, ROOT, check, finish, openPage, sleep, chromium } = require('../../lib/harness.cjs');
 /** Ouvre un onglet de Cartes par son adresse : les onglets internes sont masqués (nouvel en-tête). */
 const goTab = (p, id) => p.evaluate((id) => { if (location.hash === '#' + id) location.hash = ''; location.hash = id; }, id);
 
@@ -19,8 +19,8 @@ const dernierDessin = (p) => p.evaluate(() => { const m = performance.getEntries
   const browser = await chromium.launch();
   const p = await openPage(browser, { page: 'cartes', fixture: 'fake-sb-cartes.mjs', width: 1280, scenario: SCN });
   await goTab(p, 'collection');
-  await p.waitForSelector('#cartes-set', { timeout: 10000 });
-  await p.selectOption('#cartes-set', '__all__');
+  await p.waitForSelector('#cartes-set', { state: 'attached', timeout: 10000 });
+  await choisirFiltre(p, '#cartes-set', '__all__');
   await sleep(300);
   const ms = await dernierDessin(p);
   console.log(`       premier dessin « Toutes les séries » : ${ms.toFixed(1)} ms`);
@@ -60,8 +60,12 @@ const dernierDessin = (p) => p.evaluate(() => { const m = performance.getEntries
     for (const [key, l] of by) { const k = window.__DB.hg_cards.find((x) => x.id === key.split('|')[0]); if (!k || k.rarity === 'identite' || k.rarity === 'unique') continue; n += Math.max(l.filter((x) => !x.locked_trade).length - 1, 0); }
     return n;
   });
-  const massTxt = (await p.textContent('.cartes-mass')).replace(/\s+/g, ' ');
-  check(massTxt.replace(/[’'.  ]/g, '').includes(String(attendu) + 'doublonsrecyclables'), `doublons recyclables sur toute la collection (${attendu}) : « ${massTxt.trim().slice(0, 60)} »`);
+  await p.click('[data-action="mass"]');
+  await p.waitForSelector('#cartes-recyclage[open] .mc-bilan strong', { timeout: 5000 }).catch(() => {});
+  await p.evaluate(() => { for (const v of ['fav', 'wish', 'num']) { const e = document.querySelector(`#cartes-recyclage input[name="rec-opt"][value="${v}"]`); if (e.checked) e.click(); } });
+  const massTxt = (await p.textContent('#cartes-recyclage .mc-bilan strong')).replace(/\s+/g, ' ');
+  await p.click('#cartes-recyclage [data-rec="fermer"]');
+  check(massTxt.replace(/[’'.  ]/g, '').includes(String(attendu) + 'cartes'), `doublons recyclables sur toute la collection (${attendu}) : « ${massTxt.trim().slice(0, 60)} »`);
 
   // Recherche sans accents : « raclette » (40 cartes) → tout est dessiné, compteur de résultats
   await p.fill('#cartes-f-q', 'RACLÉTTE');
@@ -76,11 +80,11 @@ const dernierDessin = (p) => p.evaluate(() => { const m = performance.getEntries
   check(await cells(p) === 120, 'recherche vidée : retour au premier lot');
 
   // Filtres inchangés : rareté épique → toujours par lots si > 300, comptes cohérents
-  await p.selectOption('#cartes-f-rarity', 'epique');
+  await choisirFiltre(p, '#cartes-f-rarity', 'epique');
   await sleep(200);
   const epi = await p.$$eval('#cartes-p-collection .hgc', (x) => x.every((c) => c.className.includes('hgc-epique')));
   check(epi, 'filtre rareté : seulement des épiques');
-  await p.selectOption('#cartes-f-rarity', '');
+  await choisirFiltre(p, '#cartes-f-rarity', '');
   await sleep(200);
 
   // Chargement anticipé (cartes-lots.js) : rien tant que la sentinelle est à plus de 2,5 écrans du haut de la fenêtre
@@ -117,8 +121,7 @@ const dernierDessin = (p) => p.evaluate(() => { const m = performance.getEntries
   // Remplissage : sur un grand écran (3000 px), les lots suivants se chargent seuls tant que l'écran n'est pas couvert.
   const g = await openPage(browser, { page: 'cartes', fixture: 'fake-sb-cartes.mjs', width: 1280, height: 3000, scenario: SCN });
   await goTab(g, 'collection');
-  await g.waitForSelector('#cartes-set', { timeout: 10000 });
-  await g.selectOption('#cartes-set', '__all__');
+  await g.waitForSelector('#cartes-set', { state: 'attached', timeout: 10000 });
   await sleep(900);
   const nG = await cells(g);
   check(nG > 120 && nG % 120 === 0 && await g.evaluate(() => window.scrollY) === 0,
@@ -129,8 +132,8 @@ const dernierDessin = (p) => p.evaluate(() => { const m = performance.getEntries
   // Téléphone 360 px : pas de défilement horizontal
   const m = await openPage(browser, { page: 'cartes', fixture: 'fake-sb-cartes.mjs', width: 360, height: 780, scenario: SCN, mobile: true, dpr: 2 });
   await goTab(m, 'collection');
-  await m.waitForSelector('#cartes-set', { timeout: 10000 });
-  await m.selectOption('#cartes-set', '__all__');
+  await m.waitForSelector('#cartes-set', { state: 'attached', timeout: 10000 });
+  await choisirFiltre(m, '#cartes-set', '__all__');
   await sleep(300);
   check(await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), '360 px : pas de défilement horizontal');
   await m.evaluate(() => document.querySelector('.cz-more')?.scrollIntoView());

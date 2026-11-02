@@ -9,7 +9,7 @@
 // - Réglage coupé (site_identite.cartes_hors_ligne = false) : rien n'est gardé.
 // Lancer : node tests/parcours/cartes/parcours-collection-hors-ligne.cjs
 const path = require('path');
-const { ORIGIN, PREFIX, SHOTS, check, finish, openPage, hscroll, sleep, chromium } = require('../../lib/harness.cjs');
+const { basculerVue, ORIGIN, PREFIX, SHOTS, check, finish, openPage, hscroll, sleep, chromium } = require('../../lib/harness.cjs');
 
 /** Coupe le « réseau » pour les prochains chargements de la page (navigator.onLine faux, faux Supabase en mode offline). */
 const goOffline = (p) => p.ctx.addInitScript(() => {
@@ -49,12 +49,10 @@ const cells = (p) => p.locator('#cartes-p-collection .cz-cell').count();
     check(await p.getAttribute('#cartes-tab-echanges', 'title') === 'Disponible quand le réseau revient', 'hors ligne : « Disponible quand le réseau revient »');
     const horsLigne = await cells(p);
     check(horsLigne === enLigne, `hors ligne : même nombre de cartes (${horsLigne} / ${enLigne})`);
-    check(!(await p.locator('.cartes-mass').isVisible()), 'hors ligne : recyclage des doublons masqué');
+    check(!(await p.locator('.mc-actions').isVisible()), 'hors ligne : recyclage, planche et Champion masqués');
     await p.click('#cartes-tab-ouverture', { force: true }).catch(() => {});
     check(await p.getAttribute('#cartes-tab-collection', 'aria-selected') === 'true', 'hors ligne : clic sur Ouverture sans effet');
-    await p.waitForSelector('#cartes-filtres'); // téléphone : les filtres sont repliés
-    await p.evaluate(() => { document.querySelector('#cartes-filtres').open = true; });
-    await p.selectOption('#cartes-f-owned', 'owned'); await sleep(300);
+    await basculerVue(p, 'owned'); await sleep(300);
     check(await cells(p) > 0, 'hors ligne : le filtre « Possédées » fonctionne');
     const zoomBtn = p.locator('#cartes-p-collection .cz-zoom').first();
     if (await zoomBtn.count()) { await zoomBtn.click(); await sleep(500); check(await p.evaluate(() => !!document.querySelector('dialog[open]')), 'hors ligne : carte agrandie'); await p.keyboard.press('Escape'); await sleep(300); }

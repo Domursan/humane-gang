@@ -4,7 +4,7 @@
 // ouvert = premier incomplet, compteur 3 / 4, ligne LoL « Titre obtenu », titres « Pilier de LoL ») ; ouvrir un autre
 // groupe ; « Chercher un échange » mène à l'onglet Échanges ; 360 px sans défilement horizontal ; aucune erreur JS.
 // Lancer : node tests/parcours/cartes/parcours-c7.cjs
-const { ROOT, check, finish, openPage, hscroll, sleep, chromium } = require('../../lib/harness.cjs');
+const { choisirFiltre, ROOT, check, finish, openPage, hscroll, sleep, chromium } = require('../../lib/harness.cjs');
 const txt = (p, sel) => p.textContent(sel).then((t) => (t || '').replace(/\s+/g, ' ').trim()).catch(() => '');
 
 (async () => {
@@ -14,11 +14,11 @@ const txt = (p, sel) => p.textContent(sel).then((t) => (t || '').replace(/\s+/g,
     const p = await openPage(browser, { page: 'cartes', fixture: 'fake-sb-cartes.mjs', scenario: { c2: true }, width, height: 900 });
     await p.evaluate(() => { location.hash = 'collection'; }); // la barre d'onglets est masquée : on change d'onglet par l'adresse
     await p.evaluate(() => { const d = document.querySelector('#cartes-filtres'); if (d) d.open = true; }); // téléphone : les filtres sont repliés
-    await p.waitForSelector('#cartes-set', { timeout: 5000 });
-    await p.selectOption('#cartes-set', 'SET1');
+    await p.waitForSelector('#cartes-set', { state: 'attached', timeout: 5000 });
+    await choisirFiltre(p, '#cartes-set', 'SET1');
     await sleep(150);
     check(!(await p.$('#cartes-f-group')), `${label} : pas de « Grouper » pour une série sans tag`);
-    await p.selectOption('#cartes-set', 'SETJ');
+    await choisirFiltre(p, '#cartes-set', 'SETJ');
     await sleep(150);
     check(!!(await p.$('#cartes-f-group')), `${label} : « Grouper » proposé pour « Le gang joue »`);
     await p.selectOption('#cartes-f-group', 'jeu');

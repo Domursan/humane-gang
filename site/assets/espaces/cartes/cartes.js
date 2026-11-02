@@ -142,10 +142,10 @@ const S = {
   otherSets: new Map(), // séries fermées ou pas encore ouvertes dont un membre possède des cartes (drops, dons…)
   copies: [], wish: new Set(), favs: new Set(), favBusy: false, log: [],
   uniqueTaken: null, // cartes uniques : Map id -> exemplaires déjà attribués (null = inconnu)
-  tab: 'ouverture', setId: null, filters: { rarity: '', family: '', owned: 'all', group: '', q: '' }, jeuOpen: null, filtresOuverts: undefined,
+  tab: 'ouverture', setId: ALL, filters: { rarity: '', family: '', type: '', vues: new Set(), group: '', q: '' }, jeuOpen: null, filtresOuverts: false,
   // Collection très longue (idée Q5) : nombre de cartes dessinées (lot affiché), remis à zéro à chaque changement de filtre.
   colLimit: 0,
-  reveal: null, busy: false, detailId: null, tradesMounted: false, massIds: [],
+  reveal: null, busy: false, detailId: null, tradesMounted: false,
   // Ouverture groupée en cours ou interrompue (voir openStockMulti) : type, série, identifiants des demandes, avancement ; null sinon.
   x5: null,
   lcdShown: null, lcdAnim: false, quests: null, shownIds: [], zoomIds: null,
@@ -448,7 +448,7 @@ async function loadStatic() {
       S.uniqueTaken = new Map(uniqueIds.map((id) => [id, Math.max(nombre.get(id) || 0, plusGrand.get(id) || 0)]));
     }
   }
-  if (S.setId !== ALL && !S.sets.some((s) => s.id === S.setId) && !S.otherSets.has(S.setId)) S.setId = S.sets.at(-1)?.id || null;
+  if (S.setId !== ALL && !S.sets.some((s) => s.id === S.setId) && !S.otherSets.has(S.setId)) S.setId = ALL;
 }
 
 /**
@@ -575,16 +575,6 @@ function skeleton() {
       <div class="cartes-dialog-body">
         <div class="cartes-big" id="cartes-detail-card"></div>
         <div id="cartes-detail-info"></div>
-      </div>
-    </dialog>
-    <dialog id="cartes-mass" class="cartes-dialog" aria-labelledby="cartes-mass-title">
-      <div class="cartes-dialog-pad">
-        <h2 id="cartes-mass-title">Recycler les doublons</h2>
-        <div id="cartes-mass-body"></div>
-        <div class="btn-row">
-          <button type="button" class="btn btn-ghost" data-action="close-dialog">Annuler</button>
-          <button type="button" class="btn btn-primary" id="cartes-mass-confirm" data-action="mass-confirm">Recycler</button>
-        </div>
       </div>
     </dialog>
     <dialog id="cartes-serie-pick" class="cartes-dialog" aria-labelledby="cartes-serie-title">
@@ -2432,6 +2422,28 @@ function groupHtml(g, i) {
   </section>`;
 }
 
+/** Types proposés par le filtre « Type » (identifiant, libellé). */
+const TYPES_CARTE = [['simple', 'Simple'], ['brillante', 'Brillante'], ['numerotee', 'Numérotée'], ['hors-serie', 'Hors série']];
+/** Pastilles « Dans ma collection » (identifiant, libellé). */
+const VUES = [['owned', 'Possédées'], ['missing', 'Manquantes'], ['dupes', 'Doublons'], ['fav', 'Favoris'], ['wish', 'Liste de souhaits']];
+
+/** Vrai si la carte est de ce type. Brillante : j'en possède un exemplaire brillant, la brillance étant propre à l'exemplaire. */
+function estDeType(c, t) {
+  if (t === 'brillante') return copiesOf(c.id).some((cp) => cp.shiny);
+  const hs = setCodeOf(c.set_id) === 'hors-serie', num = !!c.max_copies;
+  return t === 'numerotee' ? num : t === 'hors-serie' ? hs : !num && !hs;
+}
+
+/** Vrai si la carte correspond à une pastille « Dans ma collection ». Un favori doit être encore possédé. */
+function passeVue(v, c) {
+  const n = copiesOf(c.id).length;
+  if (v === 'owned') return n > 0;
+  if (v === 'missing') return n === 0;
+  if (v === 'dupes') return hasDupes(c.id);
+  if (v === 'fav') return n > 0 && S.favs.has(c.id);
+  return S.wish.has(c.id);
+}
+
 /**
  * Dessine l'onglet Collection : choix de la série, filtres, progression et grille des cartes.
  * Les compteurs de progression ignorent les filtres ; seules les cartes affichées sont filtrées.
@@ -2453,16 +2465,14 @@ function drawCollection(focusId) {
     if (q && !matchQuery(c, q)) return false;
     if (f.rarity && c.rarity !== f.rarity) return false;
     if (f.family && c.family !== f.family) return false;
-    if (f.owned === 'owned' && n === 0) return false;
-    if (f.owned === 'missing' && n > 0) return false;
-    if (f.owned === 'dupes' && !hasDupes(c.id)) return false;
-    if (f.owned === 'fav' && (n === 0 || !S.favs.has(c.id))) return false;
-    return true;
+    if (f.type && !estDeType(c, f.type)) return false;
+    // Possédées et Manquantes cochées ensemble reviennent à tout voir ; les autres pastilles se cumulent
+    if (f.vues.has('owned') !== f.vues.has('missing') && (f.vues.has('owned') ? n === 0 : n > 0)) return false;
+    return ['dupes', 'fav', 'wish'].every((v) => !f.vues.has(v) || passeVue(v, c));
   };
-  const favCount = [...S.favs].filter((id) => copiesOf(id).length > 0).length; // favoris encore possédés (libellé du filtre)
-  // Filtres repliables : ouverts sur ordinateur, fermés sur téléphone ; le choix de l'utilisateur tient d'un dessin à l'autre
-  const filtresOuverts = S.filtresOuverts ?? !window.matchMedia('(max-width: 600px)').matches;
-  const filtresActifs = [f.rarity, f.family, f.group, f.owned !== 'all' ? f.owned : ''].filter(Boolean).length;
+  // Filtres fermés à l'arrivée ; le choix tient d'un dessin à l'autre
+  const filtresOuverts = !!S.filtresOuverts;
+  const filtresActifs = [!all, f.rarity, f.family, f.type, f.group].filter(Boolean).length + f.vues.size;
   // Une entrée par série affichée : ses compteurs (sans filtre) et ses cartes (filtrées).
   /** Compteurs et cartes affichées d'une série ouverte. */
   const openGroup = (s) => {
@@ -2472,6 +2482,11 @@ function drawCollection(focusId) {
   };
   // Cartes possédées hors des séries ouvertes (drop, don…) : groupes à part, sans progression
   const extras = outsideGroups(copiesOf, keep);
+  // Série complète : toutes les cartes comptées dans la barre sont possédées, séries ouvertes seulement
+  const series = S.sets.reduce((a, s) => {
+    const sc = S.cards.filter((c) => c.set_id === s.id && c.rarity !== 'identite');
+    return sc.length ? { total: a.total + 1, ok: a.ok + Number(sc.every((c) => copiesOf(c.id).length > 0)) } : a;
+  }, { total: 0, ok: 0 });
   const outside = !all && !S.sets.some((x) => x.id === set.id);
   const groups = all ? [...S.sets.map(openGroup), ...extras] : outside ? extras.filter((g) => g.set.id === set.id) : [openGroup(set)];
   const scoredAll = groups.reduce((a, g) => a + g.scored, 0);
@@ -2480,11 +2495,11 @@ function drawCollection(focusId) {
   const withCards = groups.filter((g) => g.shown.length);
   // Liste complète (pas seulement le lot dessiné) : sert à « Précédente / Suivante » dans la carte agrandie
   S.shownIds = withCards.flatMap((g) => g.shown.map((c) => c.id));
-  const plan = massPlan(); // toujours sur toute la collection, jamais sur le lot affiché
   const sl = sliceGroups(withCards, S.colLimit);
   // Regroupement par jeu (idée C7) : proposé quand des cartes de la sélection portent un tag.
   const pool = all ? [...S.cards, ...extras.flatMap((g) => g.shown)] : outside ? (extras[0]?.shown || []) : S.cards.filter((c) => c.set_id === set.id);
   const tagged = hasTags(pool);
+  const porteeCartes = all ? [...S.cards, ...outsideGroups(copiesOf, () => true).flatMap((g) => g.shown)] : pool;
   const byGame = tagged && f.group === 'jeu';
   if (byGame) S.shownIds = withCards.flatMap((g) => g.shown.filter((c) => c.tag).map((c) => c.id));
   mesuresGroupes = mesurerGroupes(el);
@@ -2496,79 +2511,79 @@ function drawCollection(focusId) {
     : (all
       ? `<div class="cz-groups">${sl.groups.map(groupHtml).join('')}</div>`
       : `<div class="cartes-grid">${(sl.groups[0]?.shown || []).map(cardCell).join('')}</div>`) + moreHtml(sl, 'col');
+  const vues = VUES.map(([id, label]) => [id, label, porteeCartes.filter((c) => passeVue(id, c)).length]);
   el.innerHTML = `
-    <div id="cartes-atelier" hidden></div>
+    <div class="mc-duo"><div id="cartes-luck-slot"></div><div id="cartes-atelier" hidden></div></div>
     <section class="card cartes-block">
-      <div class="cartes-series">
-        <div class="field">
-          <label for="cartes-set">Série</label>
-          <select id="cartes-set" data-change="set">
-            <option value="${ALL}" ${all ? 'selected' : ''}>Toutes les séries</option>
-            ${S.sets.map((s) => `<option value="${esc(s.id)}" ${s.id === S.setId ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
-            ${extras.map((g) => `<option value="${esc(g.set.id)}" ${g.set.id === S.setId ? 'selected' : ''}>${esc(g.set.name)} (pas ouverte)</option>`).join('')}
-          </select>
+      <div class="cartes-series mc-series">
+        <div class="mc-tete">
+          <p class="cartes-progress-label">${nf.format(haveAll)} / ${nf.format(scoredAll)} cartes obtenues</p>
+          <p class="mc-series-ok">${nf.format(series.ok)} / ${nf.format(series.total)} <span>série${series.total > 1 ? 's' : ''} complète${series.total > 1 ? 's' : ''}</span></p>
         </div>
-        <div class="cartes-progress">
-          <p class="cartes-progress-label">${nf.format(haveAll)} / ${nf.format(scoredAll)} cartes obtenues${all ? ' (toutes les séries)' : ''}</p>
-          <div class="progress" role="progressbar" aria-label="${all ? 'Progression de la collection' : 'Progression de la série'}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pctDone}"><span style="width:${pctDone}%"></span></div>
-        </div>
+        <div class="progress" role="progressbar" aria-label="${all ? 'Progression de la collection' : 'Progression de la série'}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pctDone}"><span style="width:${pctDone}%"></span></div>
       </div>
       ${set?.code === 'hors-serie' ? HORS_SERIE_NOTE : set?.description ? `<p class="muted small">${esc(set.description)}</p>` : ''}
-      <div class="field cartes-search">
-        <label for="cartes-f-q">Chercher une carte</label>
-        <div class="cartes-search-box">
-          <input id="cartes-f-q" type="search" data-search="col" value="${esc(f.q)}" autocomplete="off" maxlength="60" placeholder="Nom ou numéro" aria-describedby="cartes-f-q-n">
-          <span class="muted small" id="cartes-f-q-n">${q ? esc(pluralCount(S.shownIds.length, 'résultat', 'résultats', nf.format)) : ''}</span>
+      <div class="mc-recherche">
+        <div class="field cartes-search">
+          <label for="cartes-f-q">Chercher une carte</label>
+          <div class="cartes-search-box">
+            <input id="cartes-f-q" type="search" data-search="col" value="${esc(f.q)}" autocomplete="off" maxlength="60" placeholder="Nom ou numéro" aria-describedby="cartes-f-q-n">
+            <span class="muted small" id="cartes-f-q-n">${q ? esc(pluralCount(S.shownIds.length, 'résultat', 'résultats', nf.format)) : ''}</span>
+          </div>
         </div>
+        <button type="button" class="btn btn-ghost mc-filtres-btn" id="cartes-filtres-btn" data-action="filtres" aria-expanded="${filtresOuverts}" aria-controls="cartes-filtres">Filtres${filtresActifs ? ` · ${nf.format(filtresActifs)}` : ''}</button>
       </div>
-      <details class="cartes-filtres" id="cartes-filtres"${filtresOuverts ? ' open' : ''}>
-        <summary>Filtres et actions${filtresActifs ? ` <span class="muted">(${nf.format(filtresActifs)} actif${filtresActifs > 1 ? 's' : ''})</span>` : ''}</summary>
-      <div class="cartes-filters">
-        <div class="field">
-          <label for="cartes-f-rarity">Rareté</label>
-          <select id="cartes-f-rarity" data-filter="rarity">
-            <option value="">Toutes</option>
-            ${RARITIES.map((r) => `<option value="${r.id}" ${f.rarity === r.id ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}
-          </select>
+      <div class="mc-filtres" id="cartes-filtres"${filtresOuverts ? '' : ' hidden'}>
+        <div class="mc-selects">
+          <div class="field">
+            <label for="cartes-set">Série</label>
+            <select id="cartes-set" data-change="set">
+              <option value="${ALL}" ${all ? 'selected' : ''}>Toutes les séries</option>
+              ${S.sets.map((s) => `<option value="${esc(s.id)}" ${s.id === S.setId ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
+              ${extras.map((g) => `<option value="${esc(g.set.id)}" ${g.set.id === S.setId ? 'selected' : ''}>${esc(g.set.name)} (pas ouverte)</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label for="cartes-f-rarity">Rareté</label>
+            <select id="cartes-f-rarity" data-filter="rarity">
+              <option value="">Toutes</option>
+              ${RARITIES.map((r) => `<option value="${r.id}" ${f.rarity === r.id ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label for="cartes-f-family">Famille</label>
+            <select id="cartes-f-family" data-filter="family">
+              <option value="">Toutes</option>
+              ${FAMILIES.map((x) => `<option value="${x.id}" ${f.family === x.id ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label for="cartes-f-type">Type</label>
+            <select id="cartes-f-type" data-filter="type">
+              <option value="">Tous</option>
+              ${TYPES_CARTE.map(([id, label]) => `<option value="${id}" ${f.type === id ? 'selected' : ''}>${label}</option>`).join('')}
+            </select>
+          </div>
+          ${tagged ? `<div class="field">
+            <label for="cartes-f-group">Grouper</label>
+            <select id="cartes-f-group" data-filter="group">
+              <option value="" ${f.group ? '' : 'selected'}>Par numéro</option>
+              <option value="jeu" ${f.group === 'jeu' ? 'selected' : ''}>Par jeu</option>
+            </select>
+          </div>` : ''}
         </div>
-        <div class="field">
-          <label for="cartes-f-family">Famille</label>
-          <select id="cartes-f-family" data-filter="family">
-            <option value="">Toutes</option>
-            ${FAMILIES.map((x) => `<option value="${x.id}" ${f.family === x.id ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field">
-          <label for="cartes-f-owned">Afficher</label>
-          <select id="cartes-f-owned" data-filter="owned">
-            <option value="all" ${f.owned === 'all' ? 'selected' : ''}>Toutes les cartes</option>
-            <option value="owned" ${f.owned === 'owned' ? 'selected' : ''}>Possédées</option>
-            <option value="missing" ${f.owned === 'missing' ? 'selected' : ''}>Manquantes</option>
-            <option value="dupes" ${f.owned === 'dupes' ? 'selected' : ''}>Doublons</option>
-            <option value="fav" ${f.owned === 'fav' ? 'selected' : ''}>Favoris · ${nf.format(favCount)}</option>
-          </select>
-        </div>
-        ${tagged ? `<div class="field">
-          <label for="cartes-f-group">Grouper</label>
-          <select id="cartes-f-group" data-filter="group">
-            <option value="" ${f.group ? '' : 'selected'}>Par numéro</option>
-            <option value="jeu" ${f.group === 'jeu' ? 'selected' : ''}>Par jeu</option>
-          </select>
-        </div>` : ''}
+        <fieldset class="mc-fs"><legend class="mc-lg">Dans ma collection</legend>
+          <div class="mc-chips">${vues.map(([id, label, n]) => `<label class="champ-chip"><input type="checkbox" id="cartes-v-${id}" data-vue="${id}"${f.vues.has(id) ? ' checked' : ''}><span>${label}<b>${nf.format(n)}</b></span></label>`).join('')}</div>
+        </fieldset>
+        ${filtresActifs ? `<div class="mc-actifs"><span><strong>${nf.format(S.shownIds.length)}</strong> sur ${nf.format(porteeCartes.length)} cartes</span><button type="button" class="mc-lien" data-action="filtres-effacer">Tout effacer</button></div>` : ''}
       </div>
-      <div class="cartes-mass">
-        <p class="muted small">${pluralCount(plan.ids.length, 'doublon recyclable', 'doublons recyclables', nf.format)} (on garde un exemplaire de chaque carte, et un de chaque brillante)</p>
-        <button type="button" class="btn btn-ghost" data-action="mass">Recycler les doublons</button>
-      </div>
-      <div class="cz-extra">
-        <a class="btn btn-ghost" href="/pages/cartes/collection-a4.html?set=${all ? 'all' : esc(set.id)}">Imprimer ma planche</a>
+      <div class="mc-actions">
+        <button type="button" class="btn btn-ghost" data-action="mass">Recycler mes cartes</button>
+        <button type="button" class="btn btn-ghost" data-action="planche">Imprimer ma planche</button>
         <button type="button" class="btn btn-ghost" data-action="champion">Ma carte Champion</button>
       </div>
-      </details>
     </section>
     ${body}`;
-  $('#cartes-filtres')?.addEventListener('toggle', (e) => { S.filtresOuverts = e.currentTarget.open; });
-  el.insertAdjacentHTML('afterbegin', '<div id="cartes-luck-slot"></div>');
   if (!OFF) import('./cartes-chance.js').then((m) => m.mountLuck($('#cartes-luck-slot'))).catch(() => {}); // « Ma chance » (C14)
   atelier?.drawAtelier(); // panneau de l'Atelier (idée C10)
   // Le focus revient au champ modifié sans faire défiler la page
@@ -2578,6 +2593,22 @@ function drawCollection(focusId) {
   try { performance.measure('hg-collection', 'hg-collection-start'); } catch {}
 }
 const renderCollection = kept(drawCollection); // voir renderBoosters
+
+/** Ouvre ou ferme le panneau des filtres, sans redessiner les cartes. */
+function toggleFiltres() {
+  S.filtresOuverts = !S.filtresOuverts;
+  $('#cartes-filtres').hidden = !S.filtresOuverts;
+  $('#cartes-filtres-btn').setAttribute('aria-expanded', String(S.filtresOuverts));
+}
+
+/** Efface les filtres et revient à toutes les séries ; la recherche reste. */
+function effacerFiltres() {
+  Object.assign(S.filters, { rarity: '', family: '', type: '', group: '' });
+  S.filters.vues.clear();
+  S.setId = ALL;
+  S.colLimit = 0;
+  renderCollection('cartes-filtres-btn');
+}
 
 /* ---------- Recyclage de masse ---------- */
 /**
@@ -2591,34 +2622,6 @@ function recycleValue(cp, k) {
   return base * (cp.shiny ? Number(cfg().recycle?.shiny_multiplier ?? 3) : 1);
 }
 
-/**
- * Liste les doublons recyclables. La version simple et la version brillante d'une carte comptent comme deux
- * cartes différentes : on garde un exemplaire de chacune (le non échangé d'abord), et posséder la carte simple
- * plus la même en brillante n'est pas un doublon. Exclut les cartes Identité et les exemplaires en cours d'échange.
- * @returns {{ids: number[], total: number}} identifiants des exemplaires à recycler et leur valeur en Paillettes
- */
-function massPlan() {
-  const groups = new Map();
-  for (const cp of S.copies) {
-    const key = `${cp.card_id}|${cp.shiny ? 1 : 0}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(cp);
-  }
-  const ids = [];
-  let total = 0;
-  for (const list of groups.values()) {
-    const k = S.cardsById.get(list[0].card_id);
-    if (!k || k.rarity === 'identite' || k.rarity === 'unique' || list.length < 2) continue;
-    const sorted = [...list].sort((a, b) => Number(!!a.locked_trade) - Number(!!b.locked_trade));
-    for (const cp of sorted.slice(1)) {
-      if (cp.locked_trade) continue;
-      ids.push(cp.id);
-      total += recycleValue(cp, k);
-    }
-  }
-  return { ids, total };
-}
-
 /** Vrai si j'ai au moins deux exemplaires simples, ou deux brillants, de cette carte (le filtre « Doublons »). */
 function hasDupes(cardId) {
   const list = copiesOf(cardId);
@@ -2626,38 +2629,36 @@ function hasDupes(cardId) {
   return shiny >= 2 || list.length - shiny >= 2;
 }
 
-/** Ouvre la fenêtre de recyclage de masse, avec le nombre de doublons et leur valeur estimée. */
-function openMass() {
-  const plan = massPlan();
-  S.massIds = plan.ids;
-  $('#cartes-mass-body').innerHTML = plan.ids.length
-    ? `<p>Tu vas recycler <strong>${pluralCount(plan.ids.length, 'doublon', 'doublons', nf.format)}</strong> pour environ <strong>${fmtPaillettes(plan.total)}</strong>.</p>
-       <p class="muted small">Il te restera au moins un exemplaire de chaque carte, et un de chaque brillante : une carte simple et la même en brillante ne comptent pas comme un doublon. Les cartes Identité et celles en cours d’échange ne sont pas touchées. Cette action est définitive.</p>`
-    : '<p>Aucun doublon à recycler pour le moment.</p>';
-  $('#cartes-mass-confirm').hidden = !plan.ids.length;
-  const dlg = $('#cartes-mass');
-  if (!dlg.open) dlg.showModal();
-}
-
 /**
- * Recycle les doublons prévus (hg_card_recycle), puis recharge l'état et la page.
+ * Recycle les exemplaires choisis (hg_card_recycle), puis recharge l'état et la page.
+ * @param {number[]} ids exemplaires
  * @returns {Promise<void>}
  */
-async function confirmMass() {
-  if (S.busy || !S.massIds.length) return;
+async function recycleMass(ids) {
   S.busy = true;
   try {
-    const { data, error } = await sb.rpc('hg_card_recycle', { p_copies: S.massIds });
+    const { data, error } = await sb.rpc('hg_card_recycle', { p_copies: ids });
     if (error) throw error;
     toast(`Recyclage terminé : +${fmtP(data)}`, 'ok');
-    $('#cartes-mass').close();
     await refreshData();
-  } catch (e) {
-    toast(errMsg(e), 'error');
   } finally {
     S.busy = false;
     renderAll();
   }
+}
+
+/** Ouvre la fenêtre des paramètres de la planche à imprimer. */
+async function openPlanche() {
+  const m = await import('./cartes-planche.js');
+  m.openPlanche({ sets: S.sets, cards: () => S.cards, copiesOf, favs: S.favs, wish: S.wish, pseudo: me.pseudo, setId: S.setId, filtres: S.filters, hasDupes,
+    onClose: () => document.querySelector('[data-action="planche"]')?.focus({ preventScroll: true }) });
+}
+
+/** Ouvre la fenêtre de recyclage à paramètres. */
+async function openMass(from) {
+  const m = await import('./cartes-recyclage.js');
+  m.openRecyclage({ copies: () => S.copies, card: (id) => S.cardsById.get(id), favs: () => S.favs, wish: () => S.wish, vitrine: () => atelier?.vitrine() || new Set(), sets: () => S.sets,
+    value: recycleValue, recycle: recycleMass, onClose: () => document.querySelector('[data-action="mass"]')?.focus({ preventScroll: true }) || from?.focus?.({ preventScroll: true }) });
 }
 
 /* ---------- Détail d'une carte ---------- */
@@ -3325,7 +3326,7 @@ function onClick(e) {
   const t = e.target.closest('.cartes-tab[data-tab], [data-tab-go], [data-action]');
   if (!t || t.disabled) return;
   // Q4 : hors ligne, seules la collection, la fiche et la carte agrandie répondent (aucune action sur l'économie).
-  if (S.offline && !(t.dataset.tab === 'collection' || ['open-card', 'zoom-card', 'close-dialog'].includes(t.dataset.action))) return;
+  if (S.offline && !(t.dataset.tab === 'collection' || ['open-card', 'zoom-card', 'close-dialog', 'filtres', 'filtres-effacer'].includes(t.dataset.action))) return;
   if (t.dataset.tab) { setTab(t.dataset.tab); focusSection(); return; }
   if (t.dataset.tabGo) { setTab(t.dataset.tabGo); focusSection(); return; }
   switch (t.dataset.action) {
@@ -3347,7 +3348,10 @@ function onClick(e) {
     case 'open-card': return openDetail(t.dataset.card);
     case 'zoom-card': return zoom.open(t.dataset.card, t);
     case 'booster-card': return onBoosterCard(t);
-    case 'mass': return openMass();
+    case 'mass': return openMass(t);
+    case 'planche': return openPlanche();
+    case 'filtres': return toggleFiltres();
+    case 'filtres-effacer': return effacerFiltres();
     case 'champion': return import('./cartes-champion.js').then((m) => m.openChampion({ onClose: () => { if (t.isConnected) t.focus({ preventScroll: true }); } })); // C17
     case 'jeu-open': S.jeuOpen = t.dataset.tag; renderCollection(); document.getElementById(`c2-jeu-${t.dataset.tag}`)?.scrollIntoView({ block: 'nearest' }); return;
     case 'jeu-trade': setTab('echanges'); focusSection(); return;
@@ -3356,7 +3360,6 @@ function onClick(e) {
     case 'peer-pick': return togglePeerPick(t.dataset.card);
     case 'peer-clear': if (S.peer) { S.peer.picks.clear(); renderPeer('[data-action="peer-offer"]'); } return;
     case 'peer-offer': return peerOffer();
-    case 'mass-confirm': return confirmMass();
     case 'buy-stock': return buyStock(t.dataset.type || 'classique');
     case 'gift-ask': e.preventDefault(); return askGift(); // bouton de type submit : pas d'envoi du formulaire
     case 'gift-confirm': return giftConfirm();
@@ -3378,6 +3381,7 @@ function onChange(e) {
   if (t.id === 'cartes-section-sel') { setTab(t.value); focusSection(); }
   else if (t.dataset.change === 'set') { S.setId = t.value; S.colLimit = 0; renderCollection('cartes-set'); }
   else if (t.dataset.filter) { S.filters[t.dataset.filter] = t.value; S.colLimit = 0; renderCollection(t.id); }
+  else if (t.dataset.vue) { if (t.checked) S.filters.vues.add(t.dataset.vue); else S.filters.vues.delete(t.dataset.vue); S.colLimit = 0; renderCollection(t.id); }
   else if (t.dataset.change === 'peer-set' && S.peer) { S.peer.setId = t.value; S.peer.limit = 0; renderPeer('#peer-set'); }
   else if (t.dataset.pfilter && S.peer) { S.peer.filters[t.dataset.pfilter] = t.value; S.peer.limit = 0; renderPeer('#' + t.id); }
   else if (t.dataset.change === 'reveal-direct') setPrefs({ revealDirect: t.checked });
@@ -3492,6 +3496,7 @@ async function boot() {
     await refreshData();
     renderAll();
     cacheOwnedImages(); // Q4 : images des cartes possédées gardées pour le hors ligne
+    if (new URLSearchParams(location.search).get('planche') === '1') openPlanche(); // retour de la planche : « Changer les paramètres »
     // Cagnotte collective (C13) : encart au-dessus des onglets, module chargé à part
     import('./cartes-cagnotte.js').then((m) => m.mountPot($('#cartes-pot'), { me, balance: bal, refresh: async () => { await refreshData(); renderAll(); } })).catch(() => {});
   } catch (e) {
@@ -3557,7 +3562,7 @@ function bootOffline() {
   S.copies = Array.isArray(c.copies) ? c.copies : [];
   S.state = { paillettes: Number(c.paillettes) || 0, config: {} };
   S.uniqueTaken = null;
-  S.setId = S.sets.at(-1)?.id || null;
+  S.setId = ALL;
   S.tab = 'collection';
   for (const [id] of TABS) {
     if (id === 'collection') continue;

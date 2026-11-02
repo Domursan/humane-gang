@@ -19,9 +19,8 @@ const VERDICT = {
   tres_chanceux: ['Le RNG t’adore', 'up'], chanceux: ['Légèrement chanceux', 'up'], moyenne: ['Dans la moyenne', 'mid'],
   malchanceux: ['Légèrement malchanceux', 'down'], boude: ['Le RNG te boude', 'down'], pas_assez: ['Pas encore assez de tirages', 'mid'],
 };
-const OPEN_KEY = 'hg_luck_open';
-/** Cache : données, heure du chargement, chargement en cours, absence de la fonction. */
-const L = { data: null, at: 0, loading: null, missing: false };
+/** Cache : données, heure du chargement, chargement en cours, absence de la fonction ; ouvert : replié à chaque arrivée, sans mémoire. */
+const L = { data: null, at: 0, loading: null, missing: false, ouvert: false };
 
 const pct = (v) => (v == null ? '–' : `${nf1.format(Number(v))} %`);
 /** Largeur d'une barre : racine carrée (les petites raretés restent visibles), relative au plus grand taux affiché. */
@@ -120,9 +119,6 @@ async function share(btn) {
   }
 }
 
-/** Lit l'état replié / ouvert mémorisé (ouvert par défaut). */
-function wasOpen() { try { return localStorage.getItem(OPEN_KEY) !== '0'; } catch { return true; } }
-
 /** Charge les données (une seule requête à la fois). */
 async function load() {
   if (L.loading) return L.loading;
@@ -142,10 +138,10 @@ async function load() {
   return L.loading;
 }
 
-/** Branche les écouteurs de l'encart (repli mémorisé, partage). */
+/** Branche les écouteurs de l'encart (repli gardé d'un dessin à l'autre, partage). */
 function wire(slot) {
   const det = slot.querySelector('[data-luck]');
-  det?.addEventListener('toggle', () => { try { localStorage.setItem(OPEN_KEY, det.open ? '1' : '0'); } catch { /* stockage bloqué */ } });
+  det?.addEventListener('toggle', () => { L.ouvert = det.open; });
   slot.querySelector('[data-luck-act="share"]')?.addEventListener('click', (e) => share(e.currentTarget));
 }
 
@@ -158,7 +154,7 @@ export async function mountLuck(slot) {
   if (!slot) return;
   const paint = () => {
     if (!slot.isConnected) slot = document.getElementById(slot.id) || slot;
-    slot.innerHTML = L.data && !L.missing ? luckHtml(L.data, wasOpen()) : '';
+    slot.innerHTML = L.data && !L.missing ? luckHtml(L.data, L.ouvert) : '';
     wire(slot);
   };
   if (L.data) paint();

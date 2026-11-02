@@ -8,7 +8,7 @@
 // sur 3 attribué, elle reste choisissable. Collection : « n / max exemplaires attribués ».
 // Faux Supabase : fixtures/fake-sb-cartes.mjs, scénarios uniques (série + carte C14), uniqueTaken (Alice l'a), uniqueOwned (moi).
 // Lancer : node tests/parcours/cartes/parcours-cartes-uniques.cjs   (HG_ROOT / HG_PREFIX comme les autres parcours)
-const { ROOT, check, finish, openPage, adminSection, hscroll, sleep, chromium } = require('../../lib/harness.cjs');
+const { choisirFiltre, ROOT, check, finish, openPage, adminSection, hscroll, sleep, chromium } = require('../../lib/harness.cjs');
 /** Ouvre un onglet de Cartes par son adresse : les onglets internes sont masqués (nouvel en-tête). */
 const goTab = (p, id) => p.evaluate((id) => { if (location.hash === '#' + id) location.hash = ''; location.hash = id; }, id);
 
@@ -27,10 +27,10 @@ const waitClosed = (p) => p.waitForSelector('dialog.ui-drawer', { state: 'detach
   // 1. Collection : Hors série, carte unique non possédée, personne ne l'a encore.
   let p = await openPage(browser, { page: 'cartes', fixture: FIXTURE, width: 1280, height: 900, scenario: HS });
   await goTab(p, 'collection');
-  await p.waitForSelector('#cartes-set', { timeout: 5000 });
+  await p.waitForSelector('#cartes-set', { state: 'attached', timeout: 5000 });
   const series = await p.$$eval('#cartes-set option', (o) => o.map((x) => [x.value, x.textContent]));
   check(series.some(([v, t]) => v === 'SETHS' && t === 'Hors série'), 'sélecteur de série : « Hors série » est listée');
-  await p.selectOption('#cartes-set', 'SETHS');
+  await choisirFiltre(p, '#cartes-set', 'SETHS');
   await p.waitForSelector('.hgc-unique', { timeout: 5000 }).catch(() => {});
   const note = await p.textContent('.cartes-hs-note').catch(() => '');
   check(/Cartes uniques : hors boosters, en nombre limité \(exemplaires numérotés\), à gagner lors d'un événement ou offertes par l'admin\./.test(note), 'Hors série : en-tête explicatif affiché (« ' + note.trim() + ' »)');
@@ -42,10 +42,10 @@ const waitClosed = (p) => p.waitForSelector('dialog.ui-drawer', { state: 'detach
   check((await p.textContent('.cartes-uniq-state')).trim() === 'Pas encore attribuée', 'vignette : « Pas encore attribuée » (personne ne l\'a)');
   const rareOpts = await p.$$eval('#cartes-f-rarity option', (o) => o.map((x) => x.value));
   check(rareOpts.includes('unique'), 'filtre Rareté : l\'option « Unique » existe');
-  await p.selectOption('#cartes-f-rarity', 'unique');
+  await choisirFiltre(p, '#cartes-f-rarity', 'unique');
   await sleep(150);
   check(await p.$$eval('.cz-cell', (x) => x.length) === 1, 'filtre Rareté « Unique » : seule la carte unique reste');
-  await p.selectOption('#cartes-f-rarity', '');
+  await choisirFiltre(p, '#cartes-f-rarity', '');
   await sleep(150);
   check(!p.errs.length, 'collection : aucune erreur JS' + (p.errs.length ? ' (' + p.errs.join(' | ') + ')' : ''));
 
@@ -72,7 +72,7 @@ const waitClosed = (p) => p.waitForSelector('dialog.ui-drawer', { state: 'detach
   // 2. Carte unique que je possède : pas de bouton recycler, mention « Ne se recycle pas ».
   p = await openPage(browser, { page: 'cartes', fixture: FIXTURE, width: 1280, height: 900, scenario: { uniques: true, uniqueOwned: true } });
   await goTab(p, 'collection');
-  await p.selectOption('#cartes-set', 'SETHS');
+  await choisirFiltre(p, '#cartes-set', 'SETHS');
   await p.waitForSelector('.hgc-unique', { timeout: 5000 }).catch(() => {});
   check(await p.$$eval('.hgc-unique', (x) => x.length) === 1 && await p.$$eval('.cartes-uniq-state', (x) => x.length) === 0, 'carte possédée : pas de mention d\'attribution');
   check(await p.$$eval('.hgc-unique .hgc-pied-s', (x) => x[0]?.textContent.trim()) === '1/1', 'carte possédée : numéro d\'exemplaire « 1/1 »');
@@ -87,7 +87,7 @@ const waitClosed = (p) => p.waitForSelector('dialog.ui-drawer', { state: 'detach
   // 3. Un autre membre a déjà l'exemplaire : « Déjà attribuée », et la mise en page tient à 390 px sans défilement.
   p = await openPage(browser, { page: 'cartes', fixture: FIXTURE, width: 390, height: 844, scenario: { uniques: true, uniqueTaken: true } });
   await goTab(p, 'collection');
-  await p.selectOption('#cartes-set', 'SETHS');
+  await choisirFiltre(p, '#cartes-set', 'SETHS');
   await p.waitForSelector('.cartes-uniq-state', { timeout: 5000 }).catch(() => {});
   check((await p.textContent('.cartes-uniq-state').catch(() => '')).trim() === 'Déjà attribuée', 'vignette : « Déjà attribuée » (Alice l\'a)');
   check(await hscroll(p) === 0, 'mobile 390 px : aucun défilement horizontal');
@@ -97,7 +97,7 @@ const waitClosed = (p) => p.waitForSelector('dialog.ui-drawer', { state: 'detach
   // 4. Animation : le reflet doré ne bouge pas si la préférence « réduire les animations » est active.
   p = await openPage(browser, { page: 'cartes', fixture: FIXTURE, width: 1280, height: 900, reducedMotion: 'reduce', scenario: HS });
   await goTab(p, 'collection');
-  await p.selectOption('#cartes-set', 'SETHS');
+  await choisirFiltre(p, '#cartes-set', 'SETHS');
   await p.waitForSelector('.hgc-sheen', { timeout: 5000 }).catch(() => {});
   const anim = await p.evaluate(() => getComputedStyle(document.querySelector('.hgc-sheen') || document.body).animationName);
   check(anim === 'none', 'réduire les animations : le reflet unique est fixe (animation « ' + anim + ' »)');
@@ -159,7 +159,7 @@ const waitClosed = (p) => p.waitForSelector('dialog.ui-drawer', { state: 'detach
   const MULTI = { uniques: true, uniqueMulti: { taken: 1 } };
   p = await openPage(browser, { page: 'cartes', fixture: FIXTURE, width: 1280, height: 900, scenario: MULTI });
   await goTab(p, 'collection');
-  await p.selectOption('#cartes-set', 'SETHS');
+  await choisirFiltre(p, '#cartes-set', 'SETHS');
   await p.waitForSelector('.cz-cell:has([data-card="C15"])', { timeout: 5000 });
   const etat1 = await p.textContent('.cz-cell:has([data-card="C15"]) .cartes-uniq-state').catch(() => '');
   check(etat1.trim() === '1 / 3 exemplaires attribués', 'collection : unique à 3 exemplaires, 1 attribué → « 1 / 3 exemplaires attribués » (« ' + etat1.trim() + ' »)');
@@ -168,7 +168,7 @@ const waitClosed = (p) => p.waitForSelector('dialog.ui-drawer', { state: 'detach
   await p.ctx.close();
   p = await openPage(browser, { page: 'cartes', fixture: FIXTURE, width: 1280, height: 900, scenario: { uniques: true, uniqueMulti: { taken: 3 } } });
   await goTab(p, 'collection');
-  await p.selectOption('#cartes-set', 'SETHS');
+  await choisirFiltre(p, '#cartes-set', 'SETHS');
   await p.waitForSelector('.cz-cell:has([data-card="C15"])', { timeout: 5000 });
   const etat3 = await p.textContent('.cz-cell:has([data-card="C15"]) .cartes-uniq-state').catch(() => '');
   check(etat3.trim() === 'Tous les exemplaires sont attribués', 'collection : 3 attribués sur 3 → « Tous les exemplaires sont attribués » (« ' + etat3.trim() + ' »)');

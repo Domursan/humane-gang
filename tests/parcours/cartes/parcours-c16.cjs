@@ -1,9 +1,9 @@
 // Parcours C16 · Planche imprimable de la collection (/pages/cartes/collection-a4.html).
-// 1. Lien « Imprimer ma planche » dans la Collection, « Imprimer sa planche » dans la collection d'un membre.
+// 1. Bouton « Imprimer ma planche » dans la Collection, lien « Imprimer sa planche » dans la collection d'un membre.
 // 2. Planche : en-tête (pseudo, séries, compte possédées / total), cases possédées et manquantes (numéro, nom), pastille brillante,
-//    options (série, fond sombre, sans manquantes) reflétées dans l'adresse.
+//    anciennes adresses (theme, missing) toujours lues, barre réduite pour ma collection.
 // 3. Impression : barre d'outils et en-tête du site cachés, page.pdf() en A4 (nombre de pages), pas de débordement de la grille.
-// 4. Planche d'un autre membre (?user=) ; 360 px : prévisualisation sans défilement horizontal.
+// 4. Planche d'un autre membre (?user=), options de la barre reflétées dans l'adresse ; 360 px : prévisualisation sans défilement horizontal.
 // Faux Supabase : fixtures/fake-sb-cartes.mjs. Lancer : node tests/parcours/cartes/parcours-c16.cjs
 const path = require('path');
 const { openPage, check, finish, hscroll, sleep, chromium } = require('../../lib/harness.cjs');
@@ -17,7 +17,7 @@ require('fs').mkdirSync(SHOTS, { recursive: true });
 
   const c = await openPage(browser, { page: 'cartes', fixture: F, width: 1280, height: 900, hash: '#collection' });
   await sleep(400);
-  check(/collection-a4\.html\?set=/.test(await c.$eval('.cz-extra a', (a) => a.getAttribute('href'))), 'Collection : lien « Imprimer ma planche »');
+  check(await c.$('[data-action="planche"]') !== null, 'Collection : bouton « Imprimer ma planche »');
   await c.evaluate(() => { location.hash = '#collection/00000002-0000-4000-8000-000000000002'; });
   await sleep(800);
   check(/collection-a4\.html\?user=00000002/.test(await c.$eval('.cartes-peer-offer a', (a) => a.getAttribute('href'))), 'collection d’un membre : lien « Imprimer sa planche »');
@@ -34,15 +34,13 @@ require('fs').mkdirSync(SHOTS, { recursive: true });
   check(await p.$$eval('.a4-shiny', (x) => x.length) === 3, "pastilles brillantes (C1, C5, C7)");
   check(await p.$$eval('.a4-page .hgc-holo', (x) => x.filter((h) => getComputedStyle(h).display !== 'none').length) === 0, 'aucun effet holo sur la planche');
   check(/Imprimé le \d\d\.\d\d\.\d{4} · page 1 \/ 1/.test(await p.$eval('.a4-foot', (e) => e.innerText)), 'pied : date et page');
-  await p.check('input[name="a4-theme"][value="sombre"]');
-  await sleep(200);
-  check(await p.$('.a4-page.a4-sombre') !== null && /theme=sombre/.test(p.url()), 'fond sombre et adresse à jour');
-  await p.uncheck('[data-opt="missing"]');
-  await sleep(200);
-  check(await p.$$eval('.a4-miss', (x) => x.length) === 0 && /missing=0/.test(p.url()), 'sans les manquantes');
-  await p.check('[data-opt="missing"]');
-  await p.check('input[name="a4-theme"][value="clair"]');
-  await sleep(200);
+  check(/Changer les paramètres/.test(await p.$eval('.a4-tools', (e) => e.innerText)) && await p.$('[data-opt]') === null, 'ma planche : barre réduite, sans options');
+  const base = p.url().replace(/\?.*$/, '');
+  await p.goto(`${base}?set=all&theme=sombre&missing=0`);
+  await sleep(500);
+  check(await p.$('.a4-page.a4-sombre') !== null && await p.$$eval('.a4-miss', (x) => x.length) === 0, 'ancienne adresse : fond sombre, sans les manquantes');
+  await p.goto(`${base}?set=all&theme=clair&missing=1`);
+  await sleep(500);
   // Impression
   await p.emulateMedia({ media: 'print' });
   check(await p.$eval('.a4-tools', (e) => getComputedStyle(e).display) === 'none', 'impression : barre d’outils cachée');
@@ -64,6 +62,15 @@ require('fs').mkdirSync(SHOTS, { recursive: true });
   await o.goto(o.url().replace(/\.html.*$/, '.html?user=00000002-0000-4000-8000-000000000002&set=all&theme=clair&missing=1'));
   await sleep(800);
   check(/Collection de Alice/.test(await o.$eval('.a4-head', (e) => e.innerText)), 'planche d’un autre membre (?user=)');
+  await o.check('input[name="a4-theme"][value="sombre"]');
+  await sleep(200);
+  check(await o.$('.a4-page.a4-sombre') !== null && /theme=sombre/.test(o.url()) && /user=00000002/.test(o.url()), 'autre membre : fond sombre et adresse à jour');
+  await o.uncheck('[data-opt="missing"]');
+  await sleep(200);
+  check(/missing=0/.test(o.url()), 'autre membre : sans les manquantes');
+  await o.check('[data-opt="missing"]');
+  await o.check('input[name="a4-theme"][value="clair"]');
+  await sleep(200);
   check(await o.$$eval('.a4-page', (x) => x.length) === 2, '53 cartes : 2 pages (30 par page)');
   const pdf2 = await o.pdf({ preferCSSPageSize: true, printBackground: true });
   check((pdf2.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length === 2, 'PDF : 2 pages');

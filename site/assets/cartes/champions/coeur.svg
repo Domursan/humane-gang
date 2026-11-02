@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 160" width="560" height="320">
+<!-- Emblème « coeur » des cartes Champions du gang (idée C17) : picto générique dessiné pour le gang, aucun logo de jeu. -->
+<defs><radialGradient id="g" cx="50%" cy="45%" r="70%"><stop offset="0" stop-color="#1b2a5c"/><stop offset="1" stop-color="#0a0f22"/></radialGradient>
+<pattern id="q" width="14" height="14" patternUnits="userSpaceOnUse"><path d="M14 0H0V14" fill="none" stroke="#ffffff" stroke-opacity=".05"/></pattern></defs>
+<rect width="280" height="160" fill="url(#g)"/><rect width="280" height="160" fill="url(#q)"/>
+<g fill="#E2C77E" opacity=".7"><rect x="34" y="28" width="3" height="3"/><rect x="236" y="40" width="3" height="3"/><rect x="58" y="122" width="2" height="2"/><rect x="214" y="118" width="2" height="2"/></g>
+<g transform="translate(86 26) scale(4.5)" fill="none" stroke="#9FB8FF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></g>
+</svg>

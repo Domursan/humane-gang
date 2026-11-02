@@ -25,11 +25,12 @@ async function collection(browser, scenario, width = 390) {
 
   const b = await collection(browser, { luck: 'peu' });
   check(/Pas encore assez de tirages/.test(await b.$eval('.luck-pill', (e) => e.innerText)), 'moins de 100 cartes : verdict en attente');
-  check(/verdict à partir de 100 cartes/.test(await b.$eval('.luck-intro', (e) => e.innerText)), 'seuil de 100 cartes expliqué');
+  check(/verdict à partir de 100 cartes/.test(await b.$eval('.luck-intro', (e) => e.textContent)), 'seuil de 100 cartes expliqué');
   await b.ctx.close();
 
   const p = await collection(browser, { luck: 'beaucoup' });
-  check(await p.$eval('[data-luck]', (d) => d.open), 'encart ouvert par défaut');
+  check(await p.$eval('[data-luck]', (d) => !d.open), 'encart replié à l’arrivée');
+  await p.click('.luck-sum');
   check(/Légèrement chanceux/.test(await p.$eval('.luck-pill', (e) => e.innerText)), 'verdict « Légèrement chanceux »');
   check(await p.$$eval('.luck-row', (r) => r.length) === 6, '6 raretés (identité cachée sans tirage)');
   check(/60,0 %/.test(await p.$eval('.luck-row', (r) => r.innerText)) && /57,8 %/.test(await p.$eval('.luck-row', (r) => r.innerText)), 'commune : 60,0 % → 57,8 %');
@@ -42,7 +43,7 @@ async function collection(browser, scenario, width = 390) {
   check(await p.evaluate(() => document.querySelector('#cartes-luck-slot').compareDocumentPosition(document.querySelector('#cartes-set')) & Node.DOCUMENT_POSITION_FOLLOWING), 'encart en tête de la Collection');
   const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 8000 }).catch(() => null), p.click('[data-luck-act="share"]')]);
   check(dl && dl.suggestedFilename() === 'ma-chance-hg.png', 'partage : image PNG téléchargée');
-  // Repli mémorisé
+  // Repli gardé pendant la visite
   await p.click('.luck-sum');
   await sleep(150);
   await p.evaluate(() => { location.hash = 'classement'; }); // la barre d'onglets est masquée : on change d'onglet par l'adresse

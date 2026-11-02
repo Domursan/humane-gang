@@ -3,19 +3,21 @@
 // progression (« 41 / 60 cartes possédées »), bande arc-en-ciel, grille de 6 × 5 cases par page : cartes possédées en couleur
 // (brillante = pastille étoilée, rendu fixe : pas d'effet animé à l'impression), manquantes en cases pointillées avec leur
 // numéro et leur nom (pour cocher à la main), pied de page (légende, date, numéro de page).
-// Adresse : /pages/cartes/collection-a4.html?user=<uuid>&set=<uuid|all>&theme=clair|sombre&missing=1|0 (sans user : ma collection).
-// Les options se changent dans la barre d'outils (cachée à l'impression) ; l'adresse suit, pour pouvoir la partager.
-// Lectures existantes seulement (aucune migration) : hg_card_sets, hg_cards, hg_card_copies (exemplaires non recyclés),
-// RPC hg_members (pseudo d'un autre membre). Aucune donnée privée : ni solde, ni date d'arrivée des cartes.
+// Adresse : /pages/cartes/collection-a4.html?user=<uuid>&set=<uuid|all>&theme=clair|sombre&missing=1|0 (sans user : ma collection),
+// plus par=9|16|30, tri=numero|rarete|famille, rarete, famille, cartes=all|own|miss|dup|fav|wish, titre et compteur=1|0 (lirePlanche, cartes-planche.js).
+// Ma collection : réglages choisis dans la fenêtre de la page Cartes (cartes-planche.js), barre réduite ici. Collection d'un autre membre :
+// options dans la barre d'outils (cachée à l'impression) ; l'adresse suit, pour pouvoir la partager. Favoris, souhaits et titre : ma collection seulement.
+// Lectures existantes seulement (aucune migration) : hg_card_sets, hg_cards, hg_card_copies (exemplaires non recyclés), hg_card_favorites,
+// hg_card_wishlist, RPC hg_members (pseudo d'un autre membre). Aucune donnée privée : ni solde, ni date d'arrivée des cartes.
 // Accès : comme la page Cartes (canAccess('cartes')). Tout texte venant de la base passe par esc() (cardHtml échappe aussi).
 // Exporte : rien (page). Styles : collection-a4.css (+ cartes-card.css pour les cartes).
 import { sb, initPage, esc, errMsg, $, canAccess } from '../../commun/core.js';
 import { cardHtml } from './cartes-ui.js';
+import { lirePlanche, requetePlanche, filtrerPlanche, pagesPlanche } from './cartes-planche.js';
 
 const me = await initPage({ auth: 'member' });
 const app = $('#app');
 const nf = new Intl.NumberFormat('fr-CH');
-const PER_PAGE = 30; // 6 colonnes × 5 lignes
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const today = new Intl.DateTimeFormat('fr-CH', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date());
 
@@ -23,12 +25,14 @@ const today = new Intl.DateTimeFormat('fr-CH', { day: '2-digit', month: '2-digit
 function readOpts() {
   const q = new URLSearchParams(location.search);
   const user = UUID.test(q.get('user') || '') ? q.get('user') : me.id;
-  const set = q.get('set') === 'all' || UUID.test(q.get('set') || '') ? q.get('set') : 'all';
-  return { user, set, theme: q.get('theme') === 'sombre' ? 'sombre' : 'clair', missing: q.get('missing') !== '0' };
+  const o = lirePlanche(q);
+  if (user !== me.id) { o.titre = ''; if (o.cartes === 'fav' || o.cartes === 'wish') o.cartes = 'all'; }
+  return { user, ...o };
 }
 const O = readOpts();
-/** Données : séries ouvertes, cartes, exemplaires possédés par carte, pseudo. */
-const D = { sets: [], cards: [], owned: new Map(), pseudo: '' };
+const miens = O.user === me.id;
+/** Données : séries ouvertes, cartes, exemplaires possédés par carte, favoris, souhaits, pseudo. */
+const D = { sets: [], cards: [], owned: new Map(), favs: new Set(), wish: new Set(), pseudo: '' };
 
 /** Lit toutes les lignes d'une requête paginée (1000 lignes au plus par appel). */
 async function fetchAll(build) {
@@ -52,11 +56,13 @@ async function load() {
   const copies = await fetchAll(() => sb.from('hg_card_copies').select('id,card_id,shiny').eq('owner_id', O.user).is('recycled_at', null).order('id'));
   D.owned = new Map();
   for (const c of copies) {
-    const o = D.owned.get(c.card_id) || { n: 0, shiny: false };
-    o.n += 1; o.shiny = o.shiny || c.shiny;
+    const o = D.owned.get(c.card_id) || { n: 0, shiny: false, nShiny: 0 };
+    o.n += 1; o.shiny = o.shiny || c.shiny; o.nShiny += c.shiny ? 1 : 0;
     D.owned.set(c.card_id, o);
   }
-  if (O.user === me.id) D.pseudo = me.pseudo;
+  if (miens && O.cartes === 'fav') D.favs = new Set((await fetchAll(() => sb.from('hg_card_favorites').select('card_id').eq('user_id', O.user).order('card_id'))).map((x) => x.card_id));
+  if (miens && O.cartes === 'wish') D.wish = new Set((await fetchAll(() => sb.from('hg_card_wishlist').select('card_id').eq('user_id', O.user).order('card_id'))).map((x) => x.card_id));
+  if (miens) D.pseudo = me.pseudo;
   else {
     const { data, error } = await sb.rpc('hg_members');
     if (error) throw error;
@@ -80,34 +86,61 @@ function ownedCell(c, o) {
   return `<div class="a4-cell">${cardHtml(k, { size: 'sm', shiny: false })}${o.shiny ? '<span class="a4-shiny" title="Brillante" aria-label="brillante">★</span>' : ''}</div>`;
 }
 
-/** HTML des pages : en-tête sur la première, grille de 30 cases, pied sur chaque page. */
-function pagesHtml() {
+/** Vrai si j'ai au moins deux exemplaires simples, ou deux brillants (comme le filtre « Doublons » de la collection). */
+function aDoublon(id) {
+  const o = D.owned.get(id);
+  return !!o && (o.nShiny >= 2 || o.n - o.nShiny >= 2);
+}
+
+/** Cartes des séries affichées, et celles que la planche montre d'après les réglages. */
+function contenu() {
   const sets = shownSets();
   const cards = D.cards.filter((c) => sets.some((s) => s.id === c.set_id));
+  const etat = { own: (id) => D.owned.has(id), dup: aDoublon, fav: (id) => D.favs.has(id), wish: (id) => D.wish.has(id) };
+  return { sets, cards, items: filtrerPlanche(cards, O, etat) };
+}
+
+/** HTML des pages : en-tête sur la première, grille de O.par cases, pied sur chaque page. */
+function pagesHtml() {
+  const { sets, cards, items } = contenu();
   const scored = cards.filter((c) => c.rarity !== 'identite');
   const have = scored.filter((c) => D.owned.has(c.id)).length;
-  const items = cards.filter((c) => O.missing || D.owned.has(c.id));
+  const titre = O.titre || `Collection de ${D.pseudo}`;
   const pages = [];
-  for (let i = 0; i < Math.max(1, items.length); i += PER_PAGE) pages.push(items.slice(i, i + PER_PAGE));
+  for (let i = 0; i < Math.max(1, items.length); i += O.par) pages.push(items.slice(i, i + O.par));
   const names = sets.map((s) => `« ${esc(s.name)} »`);
   const series = !sets.length ? 'Aucune série' : names.length === 1 ? `Série ${names[0]}` : names.length <= 3 ? `Séries ${names.slice(0, -1).join(', ')} et ${names.at(-1)}` : `${nf.format(names.length)} séries`;
-  return pages.map((list, p) => `<section class="a4-page a4-${O.theme}" aria-label="Page ${p + 1} sur ${pages.length}">
+  return pages.map((list, p) => `<section class="a4-page a4-${O.theme}${O.par === 30 ? '' : ` mc-g${O.par}`}" aria-label="Page ${p + 1} sur ${pages.length}">
     ${p === 0 ? `<header class="a4-head">
       <div><p class="a4-kicker">Humane Gang · Le jeu de cartes</p>
-        <h1 class="a4-title">Collection de ${esc(D.pseudo)}</h1>
+        <h1 class="a4-title">${esc(titre)}</h1>
         <p class="a4-sub">${series} · version ${O.theme === 'clair' ? 'claire' : 'sombre'}</p></div>
-      <div class="a4-count"><span class="a4-count-n">${nf.format(have)} / ${nf.format(scored.length)}</span><span class="a4-count-l">cartes possédées</span></div>
+      ${O.compteur ? `<div class="a4-count"><span class="a4-count-n">${nf.format(have)} / ${nf.format(scored.length)}</span><span class="a4-count-l">cartes possédées</span></div>` : ''}
     </header>
     <div class="a4-rule"></div><div class="a4-rainbow" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>`
-    : `<header class="a4-head a4-head-mini"><p class="a4-kicker">Collection de ${esc(D.pseudo)} · suite</p></header>`}
+    : `<header class="a4-head a4-head-mini"><p class="a4-kicker">${esc(titre)} · suite</p></header>`}
     <div class="a4-grid">${list.length ? list.map((c) => (D.owned.has(c.id) ? ownedCell(c, D.owned.get(c.id)) : missingCell(c))).join('') : '<p class="a4-empty">Aucune carte à montrer avec ces options.</p>'}</div>
     <footer class="a4-foot"><span>Pastille ★ : brillante · cases en pointillés : à trouver (coche-les au RDV)</span><span>Imprimé le ${today} · page ${p + 1} / ${pages.length}</span></footer>
   </section>`).join('');
 }
 
-/** Barre d'outils (écran seulement). */
+/** Réglages sans le membre, pour l'adresse. */
+const reglages = () => { const { user, ...o } = O; return o; };
+
+/** Barre d'outils de ma planche (écran seulement) : les réglages se changent dans la fenêtre de la page Cartes. */
+function toolsMiensHtml() {
+  const n = pagesPlanche(contenu().items.length, O.par);
+  return `<section class="a4-tools card" aria-labelledby="a4-tools-h">
+    <div class="a4-tools-head"><a class="btn btn-ghost" href="/pages/cartes/cartes.html?planche=1&amp;${esc(String(requetePlanche(reglages())))}#collection">← Changer les paramètres</a>
+      <h2 id="a4-tools-h" class="a4-tools-h">Ta planche · ${nf.format(n)} page${n > 1 ? 's' : ''} A4</h2></div>
+    <div class="btn-row"><button type="button" class="btn btn-primary" data-act="print">Imprimer ou enregistrer en PDF</button></div>
+    <p class="small muted">Conseil : format A4 portrait, marges « aucune », graphiques d’arrière-plan activés.</p>
+  </section>`;
+}
+
+/** Barre d'outils de la planche d'un autre membre (écran seulement). */
 function toolsHtml() {
-  const back = O.user === me.id ? '/pages/cartes/cartes.html#collection' : `/pages/cartes/cartes.html#collection/${esc(O.user)}`;
+  const back = `/pages/cartes/cartes.html#collection/${esc(O.user)}`;
   return `<section class="a4-tools card" aria-labelledby="a4-tools-h">
     <div class="a4-tools-head"><a class="btn btn-ghost" href="${back}">← Retour à la collection</a>
       <h2 id="a4-tools-h" class="a4-tools-h">Planche à imprimer</h2></div>
@@ -118,7 +151,7 @@ function toolsHtml() {
       <fieldset class="a4-fs"><legend>Fond</legend>
         <label class="a4-radio"><input type="radio" name="a4-theme" value="clair" data-opt="theme" ${O.theme === 'clair' ? 'checked' : ''}> Clair (économie d’encre)</label>
         <label class="a4-radio"><input type="radio" name="a4-theme" value="sombre" data-opt="theme" ${O.theme === 'sombre' ? 'checked' : ''}> Sombre</label></fieldset>
-      <label class="a4-check"><input type="checkbox" data-opt="missing" ${O.missing ? 'checked' : ''}> Avec les cartes manquantes</label>
+      <label class="a4-check"><input type="checkbox" data-opt="missing" ${O.cartes !== 'own' ? 'checked' : ''}> Avec les cartes manquantes</label>
     </div>
     <div class="btn-row"><button type="button" class="btn btn-primary" data-act="print">Imprimer ou enregistrer en PDF</button></div>
     <p class="small muted">Conseil : format A4 portrait, marges « aucune », graphiques d’arrière-plan activés.</p>
@@ -138,9 +171,8 @@ function fit() {
 
 /** Redessine la planche (après un changement d'option) et met l'adresse à jour. */
 function renderSheets() {
-  const q = new URLSearchParams();
-  if (O.user !== me.id) q.set('user', O.user);
-  q.set('set', O.set); q.set('theme', O.theme); q.set('missing', O.missing ? '1' : '0');
+  const q = requetePlanche(reglages());
+  if (!miens) q.set('user', O.user);
   history.replaceState(null, '', `${location.pathname}?${q}`);
   $('#a4-sheets').innerHTML = `<div class="a4-sheets-in">${pagesHtml()}</div>`;
   // Pour l'impression, toutes les images doivent être chargées : pas de chargement différé
@@ -174,14 +206,14 @@ async function boot() {
     return;
   }
   if (O.set !== 'all' && !D.sets.some((s) => s.id === O.set)) O.set = 'all';
-  app.innerHTML = `${toolsHtml()}<div class="a4-sheets" id="a4-sheets"></div>`;
+  app.innerHTML = `${miens ? toolsMiensHtml() : toolsHtml()}<div class="a4-sheets" id="a4-sheets"></div>`;
   renderSheets();
   app.removeAttribute('aria-busy');
   app.addEventListener('change', (e) => {
     const t = e.target;
     if (t.dataset.opt === 'set') O.set = t.value;
     else if (t.dataset.opt === 'theme') O.theme = t.value;
-    else if (t.dataset.opt === 'missing') O.missing = t.checked;
+    else if (t.dataset.opt === 'missing') O.cartes = t.checked ? 'all' : 'own';
     else return;
     renderSheets();
   });

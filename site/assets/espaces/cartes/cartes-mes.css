@@ -1,0 +1,109 @@
+/* Mes cartes : Ma chance et Atelier côte à côte, filtres, fenêtres à paramètres, Ma carte Champion. */
+/* Ma chance et Atelier côte à côte */
+.mc-duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; margin-bottom: 20px; }
+.mc-duo.mc-seul { grid-template-columns: minmax(0, 1fr); }
+.mc-duo > * { min-width: 0; }
+.mc-duo .luck { margin-bottom: 0; }
+.mc-duo #cartes-atelier .c2-atelier { margin: 0; }
+.mc-plie { padding: 18px; }
+.mc-plie .mc-corps { margin-top: 12px; }
+@media (max-width: 760px) { .mc-duo { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
+
+/* Compteurs de la collection */
+.mc-tete { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; justify-content: space-between; }
+.mc-tete .cartes-progress-label { margin: 0; }
+.mc-series-ok { margin: 0; font-size: 14px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.mc-series-ok span { font-weight: 400; color: var(--muted); }
+.cartes-series.mc-series { display: block; }
+.cartes-series.mc-series .progress { margin-top: 8px; }
+
+/* Filtres */
+.mc-filtres[hidden] { display: none; }
+.mc-recherche { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.mc-recherche .cartes-search { flex: 1 1 260px; margin: 0; }
+.mc-filtres-btn { min-height: 44px; flex: none; }
+.mc-filtres { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 14px; }
+.mc-selects { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.mc-selects select { min-height: 44px; }
+.mc-lg { font-size: 14px; color: var(--muted); margin: 0 0 8px; padding: 0; }
+.mc-fs { border: 0; margin: 0; padding: 0; min-width: 0; }
+.mc-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.mc-chips .champ-chip b { font-weight: 400; color: var(--muted); margin-left: 6px; font-variant-numeric: tabular-nums; }
+.mc-chips .champ-chip input:checked + span b { color: inherit; }
+.mc-actifs { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; font-size: 14px; color: var(--muted); }
+.mc-actifs strong { color: var(--text); }
+.mc-lien { background: none; border: 0; padding: 0 2px; min-height: 44px; color: var(--text); text-decoration: underline; font: inherit; cursor: pointer; }
+.mc-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.mc-actions .btn { width: 100%; }
+@media (max-width: 760px) {
+  .mc-selects { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mc-actions { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Fenêtres à paramètres */
+.mc-dlg { width: min(720px, calc(100vw - 24px)); }
+.mc-dlg .cartes-dialog-pad { gap: 18px; }
+.mc-bloc { display: flex; flex-direction: column; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.mc-bloc:last-of-type { border-bottom: 0; padding-bottom: 0; }
+.mc-bloc h3 { margin: 0; font-size: 15px; font-weight: 700; }
+.mc-aide { margin: 0; font-size: 14px; color: var(--muted); }
+.mc-case { display: flex; gap: 10px; align-items: center; min-height: 44px; font-size: 15px; cursor: pointer; }
+.mc-case input { width: 20px; height: 20px; flex: none; accent-color: var(--sand); }
+.mc-plus > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; cursor: pointer; font-weight: 700; font-size: 15px; list-style: none; }
+.mc-plus > summary::-webkit-details-marker { display: none; }
+.mc-plus > summary span { font-weight: 400; color: var(--muted); font-size: 14px; }
+.mc-plus[open] > summary { margin-bottom: 8px; }
+.mc-bilan { position: sticky; bottom: 0; margin: 0 -24px -24px; padding: 14px 24px; background: var(--surface); border-top: 1px solid var(--border-strong); display: flex; flex-direction: column; gap: 10px; }
+.mc-bilan-l { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; justify-content: space-between; margin: 0; }
+.mc-bilan-l strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.mc-bilan .btn-row { justify-content: flex-end; margin: 0; }
+.mc-detail { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 18px; font-size: 14px; }
+.mc-detail li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; font-variant-numeric: tabular-nums; }
+.mc-detail li span:first-child { color: var(--muted); }
+.mc-alerte { margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); border-left: 3px solid var(--sand); font-size: 14px; }
+.mc-selects-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.mc-selects-2 select, .mc-selects-2 input { min-height: 44px; }
+.mc-taille { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.mc-taille label { position: relative; cursor: pointer; }
+.mc-taille input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.mc-taille span { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 6px; min-height: 44px; border-radius: 12px; border: 1px solid var(--border-strong); font-size: 14px; text-align: center; }
+.mc-taille i { display: grid; gap: 2px; width: 34px; height: 46px; }
+.mc-taille i b { background: var(--border-strong); border-radius: 1px; }
+.mc-taille input:checked + span { border-color: var(--sand); box-shadow: inset 0 0 0 1px var(--sand); font-weight: 700; }
+.mc-taille input:checked + span i b { background: var(--sand); }
+.mc-taille input:focus-visible + span { outline: 2px solid var(--sand); outline-offset: 2px; }
+
+/* Ma carte Champion, nouvelle version */
+.mc-champ { width: min(860px, calc(100vw - 24px)); max-width: none; }
+.mc-ch { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 28px; align-items: start; }
+.mc-ch-g { position: sticky; top: 0; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.mc-ch-g .champ-preview { width: 100%; }
+.mc-ch-g p { margin: 0; font-size: 13px; color: var(--muted); text-align: center; }
+.mc-ch-d { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.mc-etapes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; counter-reset: e; }
+.mc-etapes li { counter-increment: e; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-bottom: 3px solid var(--border-strong); font-size: 14px; color: var(--muted); }
+.mc-etapes li::before { content: counter(e); font-family: var(--font-display); }
+.mc-etapes li.is-on { color: var(--text); border-color: var(--sand); font-weight: 700; }
+.mc-etapes li.is-fait { color: var(--text); }
+.mc-couleurs { display: flex; flex-wrap: wrap; gap: 8px; }
+.mc-couleurs label { position: relative; cursor: pointer; }
+.mc-couleurs input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.mc-couleurs span { display: block; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--border-strong); }
+.mc-couleurs input:checked + span { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--sand); }
+.mc-couleurs input:focus-visible + span { outline: 2px solid var(--sand); outline-offset: 5px; }
+.mc-motif { background-size: cover; }
+.mc-depot { display: flex; flex-direction: column; gap: 6px; align-items: center; padding: 18px; border: 1px dashed var(--border-strong); border-radius: 12px; text-align: center; }
+.mc-depot p { margin: 0; font-size: 14px; color: var(--muted); }
+.mc-nav { display: flex; gap: 10px; justify-content: space-between; }
+.mc-nav .btn { flex: 1 1 0; }
+.mc-ligne { display: flex; gap: 8px; align-items: flex-end; }
+.mc-ligne .field { flex: 1 1 auto; min-width: 0; }
+.mc-ligne .btn { flex: none; }
+@media (max-width: 700px) {
+  .mc-champ { width: 100%; min-height: 100%; margin: 0; border-radius: 0; }
+  .mc-ch { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .mc-ch-g { position: static; }
+  .mc-ch-g .champ-preview { max-width: 170px; }
+  .mc-dlg { width: 100%; max-width: none; min-height: 100%; margin: 0; border-radius: 0; }
+  .mc-selects-2 { grid-template-columns: minmax(0, 1fr); }
+}

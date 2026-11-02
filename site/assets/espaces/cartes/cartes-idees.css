@@ -102,8 +102,6 @@
 .bul-arch { font: inherit; text-align: left; width: 100%; min-height: 44px; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
 
 /* ---------- C16 et C17 · boutons de la Collection ---------- */
-.cz-extra { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-.cz-extra .btn { flex: 1 1 200px; }
 
 /* ---------- C17 · Ma carte Champion ---------- */
 .champ-dlg { max-width: 520px; width: calc(100% - 24px); }

@@ -35,10 +35,6 @@
 }
 
 /* Filtres de la collection : repliables (téléphone : fermés par défaut, pour garder la collection près du haut de page) */
-.cartes-filtres { margin-bottom: 16px; }
-.cartes-filtres > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; color: var(--text); }
-.cartes-filtres > summary .muted { font-weight: 400; margin-left: 8px; }
-.cartes-filtres > .cartes-filters { margin: 10px 0 0; }
 
 /* ---------- Blocs génériques ---------- */
 .cartes-block { margin-bottom: 20px; }

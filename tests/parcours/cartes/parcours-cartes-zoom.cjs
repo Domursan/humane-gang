@@ -11,7 +11,7 @@
 // Lancer : node tests/parcours/cartes/parcours-cartes-zoom.cjs
 const fs = require('fs');
 const path = require('path');
-const { ROOT, SHOTS, check, finish, openPage, hscroll, sleep, log, chromium } = require('../../lib/harness.cjs');
+const { choisirFiltre, ROOT, SHOTS, check, finish, openPage, hscroll, sleep, log, chromium } = require('../../lib/harness.cjs');
 /** Ouvre un onglet de Cartes par son adresse : les onglets internes sont masqués (nouvel en-tête). */
 const goTab = (p, id) => p.evaluate((id) => { if (location.hash === '#' + id) location.hash = ''; location.hash = id; }, id);
 
@@ -38,11 +38,11 @@ const scrollY = (p) => p.evaluate(() => Math.round(window.scrollY));
   // ---------- 1. Toutes les séries ----------
   let p = await openPage(browser, { page: 'cartes', fixture: 'fake-sb-cartes.mjs', width: 1440, height: 900, scenario: SCN });
   await goTab(p, 'collection');
-  await p.waitForSelector('#cartes-set', { timeout: 5000 });
+  await p.waitForSelector('#cartes-set', { state: 'attached', timeout: 5000 });
   const options = await p.$$eval('#cartes-set option', (o) => o.map((x) => [x.value, x.textContent]));
   check(options[0] && options[0][0] === '__all__' && options[0][1] === 'Toutes les séries', 'sélecteur « Série » : première option « Toutes les séries »');
   check(options.length === 3, 'sélecteur : « Toutes les séries » + 2 séries ouvertes (' + options.length + ')');
-  await p.selectOption('#cartes-set', '__all__');
+  await choisirFiltre(p, '#cartes-set', '__all__');
   await p.waitForSelector('.cz-group', { timeout: 5000 }).catch(() => {});
   const titres = await p.$$eval('.cz-group-title', (x) => x.map((e) => e.textContent));
   check(JSON.stringify(titres) === JSON.stringify(['Première édition', 'Saison 2']), 'toutes les séries : un intertitre par série (' + titres.join(' | ') + ')');
@@ -52,24 +52,24 @@ const scrollY = (p) => p.evaluate(() => Math.round(window.scrollY));
   const barres = await p.$$eval('.cz-group-bar', (x) => x.map((e) => e.getAttribute('aria-valuenow')));
   check(barres[0] === '55' && barres[1] === '0', 'barre de progression par série (' + barres.join(' / ') + ')');
   const resume = await p.textContent('.cartes-progress-label');
-  check(/6 \/ 12 cartes obtenues \(toutes les séries\)/.test(resume), 'total : « 6 / 12 cartes obtenues (toutes les séries) » (' + resume + ')');
+  check(/6 \/ 12 cartes obtenues/.test(resume), 'total : « 6 / 12 cartes obtenues » (' + resume + ')');
   const cellules = await p.$$eval('.cz-cell', (x) => x.length);
   const loupes = await p.$$eval('.cz-zoom', (x) => x.length);
   check(cellules === 13 && loupes === 13, 'une loupe par carte affichée (' + loupes + ' loupes / ' + cellules + ' cartes)');
-  await p.selectOption('#cartes-f-rarity', 'legendaire');
+  await choisirFiltre(p, '#cartes-f-rarity', 'legendaire');
   await sleep(200);
   check(await p.$$eval('.cz-group', (x) => x.length) === 1, 'filtre Rareté : seules les séries qui ont une carte correspondante');
   check((await p.$$eval('.cz-group-count', (x) => x.map((e) => e.textContent.trim())))[0] === '6 / 11 possédées', 'filtre Rareté : les compteurs ne changent pas');
-  await p.selectOption('#cartes-f-rarity', '');
+  await choisirFiltre(p, '#cartes-f-rarity', '');
   await sleep(150);
   // Le choix est retenu pendant la session (changement d'onglet puis retour)
   await goTab(p, 'boutique');
   await goTab(p, 'collection');
   check(await p.inputValue('#cartes-set') === '__all__', '« Toutes les séries » retenue après changement d\'onglet');
-  await p.selectOption('#cartes-set', 'SET1');
+  await choisirFiltre(p, '#cartes-set', 'SET1');
   await sleep(150);
   check(await p.$$eval('.cz-group', (x) => x.length) === 0 && (await p.$$('.cartes-grid .cz-cell')).length === 12, 'une seule série : ses cartes, sans intertitre');
-  await p.selectOption('#cartes-set', '__all__');
+  await choisirFiltre(p, '#cartes-set', '__all__');
   await sleep(150);
   check(await p.$$eval('.cz-group', (x) => x.length) === 2, 'retour à « Toutes les séries »');
   await p.screenshot({ path: path.join(SHOTS, 'zoom-1440-toutes-series.png'), fullPage: false });
@@ -79,7 +79,7 @@ const scrollY = (p) => p.evaluate(() => Math.round(window.scrollY));
   // ---------- 2. Loupe et carte agrandie ----------
   p = await openPage(browser, { page: 'cartes', fixture: 'fake-sb-cartes.mjs', width: 1440, height: 900, scenario: SCN });
   await goTab(p, 'collection');
-  await p.selectOption('#cartes-set', '__all__');
+  await choisirFiltre(p, '#cartes-set', '__all__');
   await sleep(150);
   // Loupe cachée hors survol (ordinateur), visible au survol de la carte
   await p.mouse.move(5, 5);
@@ -196,7 +196,7 @@ const scrollY = (p) => p.evaluate(() => Math.round(window.scrollY));
   // Réduire les animations : pas de transition sur la loupe ni sur la carte agrandie
   p = await openPage(browser, { page: 'cartes', fixture: 'fake-sb-cartes.mjs', width: 1440, height: 900, scenario: SCN, reducedMotion: 'reduce' });
   await goTab(p, 'collection');
-  await p.selectOption('#cartes-set', '__all__');
+  await choisirFiltre(p, '#cartes-set', '__all__');
   await sleep(100);
   const duree = await p.$eval('.cz-zoom', (b) => getComputedStyle(b).transitionDuration);
   check(/^0s(, 0s)*$/.test(duree), 'réduire les animations : pas de transition sur la loupe (' + duree + ')');
@@ -210,16 +210,16 @@ const scrollY = (p) => p.evaluate(() => Math.round(window.scrollY));
   // ---------- 4. Défilement conservé après une action ----------
   p = await openPage(browser, { page: 'cartes', fixture: 'fake-sb-cartes.mjs', width: 1280, height: 900, scenario: { ...SCN, bigCards: 60 } });
   await goTab(p, 'collection');
-  await p.selectOption('#cartes-set', 'SET1'); // série longue (la série par défaut, la plus récente, est courte)
+  await choisirFiltre(p, '#cartes-set', 'SET1'); // série longue (la série par défaut, la plus récente, est courte)
   await sleep(150);
   await p.evaluate(() => window.scrollTo(0, 900));
   await sleep(150);
   const y0 = await scrollY(p);
   check(y0 === 900, 'défilement : page descendue à 900 px (' + y0 + ')');
-  await p.selectOption('#cartes-f-rarity', 'commune');
+  await choisirFiltre(p, '#cartes-f-rarity', 'commune');
   await sleep(200);
   check((await scrollY(p)) === y0, 'filtre Rareté : défilement conservé (' + (await scrollY(p)) + ')');
-  await p.selectOption('#cartes-f-rarity', '');
+  await choisirFiltre(p, '#cartes-f-rarity', '');
   await sleep(150);
   // Fiche détail (ouverte à la souris sur une carte visible), souhait, fermeture
   const vis = await p.evaluate(() => {
@@ -246,7 +246,7 @@ const scrollY = (p) => p.evaluate(() => Math.round(window.scrollY));
   await sleep(150);
   check((await scrollY(p)) === y0, 'carte agrandie (ouverture, suivant, fermeture) : défilement conservé (' + (await scrollY(p)) + ')');
   // « Toutes les séries » : la page s'allonge, le défilement reste
-  await p.selectOption('#cartes-set', '__all__');
+  await choisirFiltre(p, '#cartes-set', '__all__');
   await sleep(200);
   check((await scrollY(p)) === y0, 'choix « Toutes les séries » : défilement conservé (' + (await scrollY(p)) + ')');
   check(!p.errs.length, 'défilement collection : aucune erreur JS' + (p.errs.length ? ' (' + p.errs.join(' | ') + ')' : ''));
@@ -271,7 +271,7 @@ const scrollY = (p) => p.evaluate(() => Math.round(window.scrollY));
   // ---------- 5. Téléphone 390 px (écran tactile) ----------
   p = await openPage(browser, { page: 'cartes', fixture: 'fake-sb-cartes.mjs', width: 390, height: 844, scenario: SCN, touch: true });
   await goTab(p, 'collection');
-  await p.selectOption('#cartes-set', '__all__');
+  await choisirFiltre(p, '#cartes-set', '__all__');
   await sleep(200);
   check((await hscroll(p)) <= 0, 'téléphone : collection sans défilement horizontal (' + (await hscroll(p)) + ')');
   const loupeTactile = await p.$eval('.cz-zoom[data-card="C1"]', (b) => ({ op: getComputedStyle(b).opacity, w: b.getBoundingClientRect().width }));
@@ -323,7 +323,7 @@ const scrollY = (p) => p.evaluate(() => Math.round(window.scrollY));
   };
   const f = await openPage(browser, { page: 'cartes', fixture: 'fake-sb-cartes.mjs', width: 1280, height: 900, scenario: { bal: 5000 } });
   await goTab(f, 'collection');
-  await f.waitForSelector('#cartes-set', { timeout: 5000 });
+  await f.waitForSelector('#cartes-set', { state: 'attached', timeout: 5000 });
   // Légendaire (C9, « Braquage raté ») : fabrication normale -> annonce card_pull avec via fabrication.
   await ouvrirFiche(f, 'C9');
   await f.click('[data-action="craft"][data-shiny="0"]');

@@ -5,7 +5,7 @@
 // Un ingrédient qui consommerait le dernier exemplaire d'une carte est marqué en orange : il faut cocher
 // « Oui, j'utilise mon dernier … » (le serveur le vérifie aussi : p_confirm_last).
 // RPC : hg_card_recipes_me (recettes ouvertes et exemplaires en vitrine), hg_card_recipe_craft.
-// Exporte : initAtelier(ctx), drawAtelier(). ctx = { app, copies: () => [], card: (id) => object|null, refresh, toast }.
+// Exporte : initAtelier(ctx), drawAtelier(), vitrine(). ctx = { app, copies: () => [], card: (id) => object|null, refresh, toast }.
 import { sb, esc, toast, errMsg } from '../../commun/core.js';
 import { cardHtml, rarityLabel, fmtP } from './cartes-ui.js';
 import { tagLabel } from './cartes-jeux.js';
@@ -13,7 +13,7 @@ import { confirmBox } from '../../commun/ui-confirm.js';
 
 let C = null;
 // recipes : null = pas chargé, [] = aucune ; open : recette dépliée ; confirm : recettes où « dernier exemplaire » est coché.
-const A = { recipes: null, showcase: new Set(), open: null, confirm: new Set(), busy: false, err: '' };
+const A = { recipes: null, showcase: new Set(), open: null, confirm: new Set(), busy: false, err: '', plie: true };
 /** Carte connue d'après son identifiant (collection), ou une fiche minimale. */
 const cardOf = (id, fallback = {}) => C.card(id) || { id, name: fallback.name || 'Carte', rarity: fallback.rarity || 'commune', family: 'objet' };
 const blocked = (r) => r === 'identite' || r === 'unique';
@@ -76,6 +76,12 @@ function summary(r) {
   return parts.join(' + ') + end;
 }
 
+/** Recette réalisable tout de suite avec mes cartes et mes Paillettes. */
+function realisable(r) {
+  const { picks, missing } = plan(r);
+  return available(r) && !missing.length && picks.length === (r.inputs || []).reduce((a, i) => a + i.qty, 0) && (C.god() || r.paillettes <= C.balance());
+}
+
 /** Recette dépliée : ingrédients choisis, Paillettes, carte obtenue, confirmation et bouton. */
 function openHtml(r) {
   const { picks, missing } = plan(r);
@@ -119,7 +125,7 @@ function rowHtml(r) {
     </button></li>`;
 }
 
-/** Dessine le panneau (dans #cartes-atelier, posé par drawCollection). Sans recette ouverte : rien. */
+/** Dessine le panneau (dans #cartes-atelier, posé par drawCollection), replié à l'arrivée. Sans recette ouverte : rien. */
 export function drawAtelier() {
   const el = document.getElementById('cartes-atelier');
   if (!el || !C) return;
@@ -128,13 +134,20 @@ export function drawAtelier() {
   el.hidden = false;
   const cur = A.recipes.find((r) => r.id === A.open) || A.recipes.find(available) || A.recipes[0];
   A.open = cur.id;
-  el.innerHTML = `<section class="c2-atelier" aria-labelledby="c2-atelier-h">
-      <div class="c2-atelier-head"><h2 id="c2-atelier-h" class="c2-atelier-title">Atelier</h2>
-        <p class="muted small">${A.recipes.length} recette${A.recipes.length > 1 ? 's' : ''} active${A.recipes.length > 1 ? 's' : ''}</p></div>
-      ${openHtml(cur)}
-      ${A.recipes.length > 1 ? `<ul class="card c2-rec-list">${A.recipes.filter((r) => r !== cur).map(rowHtml).join('')}</ul>` : ''}
-    </section>`;
+  const n = A.recipes.length, ok = A.recipes.filter(realisable).length;
+  el.innerHTML = `<details class="card luck mc-plie" data-atelier${A.plie ? '' : ' open'}>
+      <summary class="luck-sum"><span class="luck-h">Atelier</span><span class="luck-pill luck-${ok ? 'up' : 'mid'}">${ok} réalisable${ok > 1 ? 's' : ''}</span></summary>
+      <p class="small muted luck-intro">${n} recette${n > 1 ? 's' : ''} active${n > 1 ? 's' : ''}</p>
+      <div class="mc-corps"><section class="c2-atelier" aria-label="Recettes de l’Atelier">
+        ${openHtml(cur)}
+        ${n > 1 ? `<ul class="card c2-rec-list">${A.recipes.filter((r) => r !== cur).map(rowHtml).join('')}</ul>` : ''}
+      </section></div>
+    </details>`;
+  el.querySelector('[data-atelier]').addEventListener('toggle', (e) => { A.plie = !e.currentTarget.open; });
 }
+
+/** Exemplaires en vitrine, jamais proposés au recyclage (vide tant que les recettes ne sont pas chargées). */
+export const vitrine = () => A.showcase;
 
 /** Charge les recettes ouvertes (sans erreur visible si la fonction n'existe pas encore). */
 export async function loadAtelier() {

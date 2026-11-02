@@ -626,7 +626,7 @@ const BUL_OLD = { ...BUL, week: '2026-10-12', num: 11, headline: 'Semaine calme 
 let ecoPublic = false;
 let champ = S.champion === 'proposee' ? { id: 3, status: 'proposee', year: 2026, game: 'lol', main: 'Ahri', emblem: 'baton', flavor: 'Je ne ban jamais Yasuo.' }
   : S.champion === 'acceptee' ? { id: 3, status: 'acceptee', year: 2026, game: 'ck3', main: 'Serge', emblem: 'couronne', flavor: null } : null;
-const champMe = () => ({ year: 2026, pseudo: 'Ethan', current: champ, can_propose: !champ || ['refusee', 'retiree'].includes(champ.status), cards: champ?.status === 'acceptee' ? [{ year: 2026, card_id: 'CH1' }] : [] });
+const champMe = () => ({ year: 2026, user_id: U(1), avatar_url: S.championPhoto || null, pseudo: 'Ethan', current: champ, can_propose: !champ || ['refusee', 'retiree'].includes(champ.status), cards: champ?.status === 'acceptee' ? [{ year: 2026, card_id: 'CH1' }] : [] });
 const IDEES_C3 = {
   hg_pot_current: () => (S.pot ? { data: potState(), error: null } : absente082('hg_pot_current')),
   hg_pot_contribute: (a) => {
@@ -647,7 +647,7 @@ const IDEES_C3 = {
   hg_champion_propose: (a) => {
     const p = a.p || {};
     if (!p.main) return { data: null, error: { message: 'Ton main : 1 à 24 caractères' } };
-    champ = { id: 4, status: 'proposee', year: 2026, game: p.game, main: p.main, emblem: p.emblem, flavor: p.flavor };
+    champ = { id: 4, status: 'proposee', year: 2026, game: p.game, main: p.main, emblem: p.emblem, flavor: p.flavor, title: p.title, game_label: p.game_label, inscription: p.inscription, source: p.source, image_path: p.image_path };
     return { data: 4, error: null };
   },
   hg_champion_withdraw: () => { if (champ?.status === 'proposee') champ = { ...champ, status: 'retiree' }; return { data: true, error: null }; },

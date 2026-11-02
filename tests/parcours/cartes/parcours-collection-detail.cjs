@@ -9,7 +9,7 @@
 // Lancer : node tests/parcours/cartes/parcours-collection-detail.cjs
 const fs = require('fs');
 const path = require('path');
-const { SHOTS, check, finish, openPage, sleep, chromium } = require('../../lib/harness.cjs');
+const { choisirFiltre, SHOTS, check, finish, openPage, sleep, chromium } = require('../../lib/harness.cjs');
 /** Ouvre un onglet de Cartes par son adresse : les onglets internes sont masqués (nouvel en-tête). */
 const goTab = (p, id) => p.evaluate((id) => { if (location.hash === '#' + id) location.hash = ''; location.hash = id; }, id);
 
@@ -71,8 +71,8 @@ async function parcourir(p, mobile, total) {
 /** Ouvre la Collection « Toutes les séries » et la carte agrandie de la première carte. */
 async function ouvrir(p, mobile) {
   await goTab(p, 'collection');
-  await p.waitForSelector('#cartes-set', { timeout: 5000 });
-  await p.selectOption('#cartes-set', '__all__');
+  await p.waitForSelector('#cartes-set', { state: 'attached', timeout: 5000 });
+  await choisirFiltre(p, '#cartes-set', '__all__');
   await sleep(200);
   if (mobile) await p.tap('.cz-zoom[data-card="C1"]');
   else await p.click('.cz-zoom[data-card="C1"]');

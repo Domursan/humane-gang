@@ -4,7 +4,7 @@
 // liseré double pour les OG, rien sur les cartes lieu / objet, contraste du bandeau ≥ 4,5:1, bandeau lisible en petit
 // format, libellé d'accessibilité ; fiche membre « Membre depuis … · OG » ; case « Afficher ma génération » du compte.
 // Lancer : node tests/parcours/cartes/parcours-c8.cjs
-const { ROOT, check, finish, openPage, hscroll, sleep, chromium } = require('../../lib/harness.cjs');
+const { choisirFiltre, ROOT, check, finish, openPage, hscroll, sleep, chromium } = require('../../lib/harness.cjs');
 
 /** Contraste WCAG entre deux couleurs « rgb(r, g, b) ». */
 function contrast(a, b) {
@@ -18,8 +18,8 @@ function contrast(a, b) {
   const browser = await chromium.launch();
   let p = await openPage(browser, { page: 'cartes', fixture: 'fake-sb-cartes.mjs', scenario: { c2: true }, width: 1280, height: 900 });
   await p.evaluate(() => { location.hash = 'collection'; }); // la barre d'onglets est masquée : on change d'onglet par l'adresse
-  await p.waitForSelector('#cartes-set', { timeout: 5000 });
-  await p.selectOption('#cartes-set', 'SET1');
+  await p.waitForSelector('#cartes-set', { state: 'attached', timeout: 5000 });
+  await choisirFiltre(p, '#cartes-set', 'SET1');
   await sleep(200);
   const band = (id) => p.$eval(`[data-card="${id}"].hgc .hgc-gen`, (n) => n.textContent.trim()).catch(() => null);
   check(await band('C1') === 'OG', 'carte d’Ethan : bandeau « OG »');
@@ -38,8 +38,8 @@ function contrast(a, b) {
   // Petit format (téléphone, cartes 112 px) : le bandeau reste dans la carte et lisible
   p = await openPage(browser, { page: 'cartes', fixture: 'fake-sb-cartes.mjs', scenario: { c2: true }, width: 360, height: 800 });
   await p.evaluate(() => { location.hash = 'collection'; }); // la barre d'onglets est masquée : on change d'onglet par l'adresse
-  await p.waitForSelector('#cartes-set', { timeout: 5000 });
-  await p.selectOption('#cartes-set', 'SET1');
+  await p.waitForSelector('#cartes-set', { state: 'attached', timeout: 5000 });
+  await choisirFiltre(p, '#cartes-set', 'SET1');
   await sleep(200);
   const r = await p.$eval('[data-card="C1"].hgc', (n) => { const c = n.getBoundingClientRect(); const b = n.querySelector('.hgc-gen').getBoundingClientRect(); return { inside: b.left >= c.left && b.right <= c.right, fs: parseFloat(getComputedStyle(n.querySelector('.hgc-gen')).fontSize), w: c.width }; });
   check(r.inside && r.fs >= 8, `360 px : bandeau dans la carte (${Math.round(r.w)} px), texte ${r.fs} px`);
@@ -49,8 +49,8 @@ function contrast(a, b) {
   // Préférence coupée : aucun bandeau
   p = await openPage(browser, { page: 'cartes', fixture: 'fake-sb-cartes.mjs', scenario: { c2: true, genHidden: true }, width: 1280, height: 900 });
   await p.evaluate(() => { location.hash = 'collection'; }); // la barre d'onglets est masquée : on change d'onglet par l'adresse
-  await p.waitForSelector('#cartes-set', { timeout: 5000 });
-  await p.selectOption('#cartes-set', 'SET1');
+  await p.waitForSelector('#cartes-set', { state: 'attached', timeout: 5000 });
+  await choisirFiltre(p, '#cartes-set', 'SET1');
   await sleep(200);
   check(await p.$$eval('.hgc-gen', (x) => x.length) === 0, 'génération masquée : aucun bandeau');
   await p.ctx.close();

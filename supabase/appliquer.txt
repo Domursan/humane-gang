@@ -64,3 +64,5 @@ supabase/migrations/197_jeux_mes_parties.sql
 supabase/migrations/198_quitter_plateaux.sql
 supabase/migrations/199_transfert_hote.sql
 supabase/migrations/200_notif_ton_tour.sql
+supabase/migrations/201_suppression_compte.sql
+supabase/migrations/202_champion_v2.sql

@@ -207,4 +207,16 @@ async function countOf(page, lieu, sub) {
 /** Renvoie le journal des appels du faux client, lu dans la page (window.__LOG). */
 const log = (page) => page.evaluate(() => window.__LOG || []);
 
-module.exports = { ROOT, DEPOT, urlPage, TESTS, FIXTURES, SHOTS, ORIGIN, PREFIX, check, finish, openPage, adminSection, ouvrirRepliable, countOf, hscroll, log, sleep, chromium };
+/** Collection : ouvre le panneau des filtres s'il est fermé, puis choisit une valeur dans une de ses listes. */
+async function choisirFiltre(p, sel, val) {
+  if (await p.$eval('#cartes-filtres', (d) => d.hidden)) await p.click('#cartes-filtres-btn');
+  await p.selectOption(sel, val);
+}
+
+/** Collection : ouvre les filtres s'ils sont fermés, puis coche ou décoche une pastille « Dans ma collection ». */
+async function basculerVue(p, id) {
+  if (await p.$eval('#cartes-filtres', (d) => d.hidden)) await p.click('#cartes-filtres-btn');
+  await p.click(`label:has(#cartes-v-${id})`);
+}
+
+module.exports = { choisirFiltre, basculerVue, ROOT, DEPOT, urlPage, TESTS, FIXTURES, SHOTS, ORIGIN, PREFIX, check, finish, openPage, adminSection, ouvrirRepliable, countOf, hscroll, log, sleep, chromium };
