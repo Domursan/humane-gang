@@ -106,7 +106,7 @@ function agirCatan(action, args) {
 }
 
 const HANDLERS = {
-  hg_plat_etat: () => ok(etatRenvoye()),
+  hg_plat_etat: () => ok((window.__PATCH || ((e) => e))(etatRenvoye())),
   hg_plat_agir: (a) => { agirCatan(a.p_action, a.p_args || {}); return ok({}); },
   hg_plat_creer: () => ok(CODE),
   hg_plat_rejoindre: () => ok(CODE),

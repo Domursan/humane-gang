@@ -10,6 +10,7 @@
  * première ouverture de son onglet et lui confie son panneau. L'onglet choisi est dans l'adresse (/pages/jeux/jeux.html#geo) ;
  * sans adresse, la page s'ouvre sur tous les jeux. Un choix propre à un jeu suit le nom de l'onglet dans l'adresse
  * (/pages/jeux/jeux.html#arcade-raclette) : il est passé au module dans ctx.sub, et l'événement « jeux:sub » le signale quand il change.
+ * Au-dessus de la vue de départ, filtre « Tous » seulement : la barre « Reprendre ma partie » (reprendre.js).
  * La barre d'onglets est masquée (CSS) : on navigue par les cartes de la vue de départ. Le panneau de l'onglet
  * choisi occupe toute la largeur ; le tableau de bord et chaque jeu portent leur titre. L'Arène n'est plus ici (/pages/cartes/cartes.html#arene) :
  * l'ancienne adresse /pages/jeux/jeux.html#bataille y redirige.
@@ -32,6 +33,7 @@ import { canAccess, pageLabel, pageMode } from '../../commun/core/pages-access.j
 import { getCachedProfile } from '../../commun/core/profile.js';
 import { viewAsActive } from '../../commun/core/view-as.js';
 import { setCompteurs } from '../../commun/core/badges-compteur.js';
+import { creerReprise } from './reprendre.js';
 
 /* ---------- Ancienne adresse de l'Arène : elle vit dans la page Cartes ---------- */
 if (location.hash === '#bataille') location.replace('/pages/cartes/cartes.html#arene');
@@ -67,12 +69,16 @@ const BASE = new URL('./', import.meta.url);
 const CTX = { sb, me, toast, esc, sub: null };
 // État : onglet affiché ; modules montés (id -> module) ; montages en cours ; modules importés ; résumés (id -> résumé) ;
 // notes : jeux notés aujourd'hui (clé de hg_jeux_resultats -> { score, points… }).
-const S = { cur: null, mods: new Map(), loading: new Map(), imports: new Map(), resumes: new Map(), classements: new Map(), notes: null };
+// filtre : section choisie dans la vue de départ ('' : Tous).
+const S = { cur: null, mods: new Map(), loading: new Map(), imports: new Map(), resumes: new Map(), classements: new Map(), notes: null, filtre: '' };
 
 const tablist = $('#jeux-tabs');
 const panels = $('#jeux-panels');
 const app = $('#app');
 const retour = $('#jeux-retour');
+/** Barre « Reprendre ma partie » (reprendre.js) : vue de départ seulement, pas sur un filtre. */
+const reprise = creerReprise(me?.id);
+const majReprise = () => reprise.afficher(S.cur === TOUS && !S.filtre);
 
 /* ---------- Outils ---------- */
 /** SVG d'icône (trait, 24 × 24). */
@@ -122,6 +128,7 @@ function construire() {
   tablist.innerHTML = h;
   panels.innerHTML = LISTE.map((o) => `<section class="jeux-panel" role="tabpanel" id="jeux-panel-${o.id}"
       aria-labelledby="jeux-tab-${o.id}" tabindex="0" data-id="${o.id}" hidden></section>`).join('');
+  document.querySelector('.jeux-layout').before(reprise.zone);
   // Orientation annoncée selon la mise en page (colonne à gauche sur grand écran)
   const mq = matchMedia('(min-width: 1024px)');
   const orient = () => tablist.setAttribute('aria-orientation', mq.matches ? 'vertical' : 'horizontal');
@@ -343,8 +350,10 @@ function monterCatalogue(panel) {
     const b = e.target.closest('.jx-filtre');
     if (!b) return;
     filtre = b.dataset.f;
+    S.filtre = filtre;
     for (const x of panel.querySelectorAll('.jx-filtre')) x.setAttribute('aria-pressed', String(x === b));
     appliquer();
+    majReprise();
   });
   panel.querySelector('#jx-q').addEventListener('input', appliquer);
   peindreHub();
@@ -443,6 +452,8 @@ function choisir(id, { focus = false, adresse = true, sub = undefined, section =
     }
   }
   for (const p of panels.querySelectorAll('[role="tabpanel"]')) p.hidden = p.dataset.id !== o.id;
+  majReprise();
+  if (o.catalogue && avant !== o.id) reprise.relire(); // à l'arrivée sur la vue de départ, jamais depuis un jeu ouvert directement
   if (adresse && lireAdresse().id !== o.id) history.replaceState(null, '', `#${o.id}`);
   document.title = `${o.catalogue ? 'Jeux' : `${o.titre} · Jeux`} · Humane Gang`;
   if (retour) retour.hidden = !!o.catalogue;
@@ -480,6 +491,8 @@ tablist.addEventListener('keydown', (e) => {
 window.addEventListener('hashchange', () => { const a = lireAdresse(); if (a.id) choisir(a.id, { adresse: false, sub: a.sub, section: a.section }); });
 // En quittant la page : chaque module chargé peut libérer ses ressources (minuteurs, abonnements…)
 window.addEventListener('pagehide', () => { for (const m of S.mods.values()) { try { m.unmount?.(); } catch { /* sans importance */ } } });
+// Retour arrière depuis une table : la page revient telle quelle, mais la partie a pu finir.
+window.addEventListener('pageshow', (e) => { if (e.persisted && S.cur === TOUS) reprise.relire(); });
 
 /* ---------- Démarrage ---------- */
 construire();

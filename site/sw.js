@@ -22,7 +22,7 @@
 /* ---------- Constantes ---------- */
 
 // Nom du cache : préfixe commun + version. Les caches des anciennes versions (même préfixe) sont supprimés à l'activation.
-const CACHE_VERSION = 'v154';
+const CACHE_VERSION = 'v155';
 const CACHE_PREFIX = 'hg-coque-';
 const CACHE = `${CACHE_PREFIX}${CACHE_VERSION}`;
 // Q4 : images des cartes (même nom et même plafond que assets/commun/offline-store.js). Hors du préfixe : gardé d'une version à l'autre.
@@ -235,7 +235,8 @@ async function cardImage(req, event) {
 
 /* ---------- Notifications push (F9) ----------
    Le serveur envoie « Nouveau message » + nom de la conversation (jamais le contenu, jamais l'expéditeur
-   d'un Secret Santa). Un clic ouvre la messagerie sur la conversation concernée. */
+   d'un Secret Santa). Un clic ouvre la messagerie sur la conversation concernée.
+   « C'est ton tour » (migration 200) : la charge porte le lien de la partie, un clic ouvre la partie. */
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = {}; }
@@ -244,16 +245,17 @@ self.addEventListener('push', (event) => {
     body: String(data.body || '').slice(0, 120),
     tag: String(data.tag || 'hg-message').slice(0, 120),
     icon: new URL('/assets/images/marque/icon-192.png', self.registration.scope).href,
-    data: { conversation_id: data.conversation_id || null },
+    data: { conversation_id: data.conversation_id || null, lien: data.lien || null },
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-/* Clic sur la notification : ouvre la messagerie sur la conversation, dans un onglet déjà ouvert si possible. */
+/* Clic sur la notification : ouvre la partie ou la messagerie sur la conversation, dans un onglet déjà ouvert si possible. */
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const conv = event.notification.data?.conversation_id;
-  const target = new URL('/pages/compte/messages.html', self.registration.scope);
+  const lien = event.notification.data?.lien;
+  const target = new URL(/^\/pages\/jeux\/[a-z0-9-]+\.html[?#][\w=/-]+$/.test(lien || '') ? lien : '/pages/compte/messages.html', self.registration.scope);
   if (conv && /^[0-9a-f-]{36}$/i.test(conv)) target.searchParams.set('c', conv);
   event.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });

@@ -12,6 +12,9 @@
 import { esc, toast, avatarHtml } from '../../../commun/core.js';
 import { uno, erreurTexte, estInvite } from '../api.js';
 import { creerChat } from './chat.js';
+import { majHoteMsg } from '../../../commun/hote-msg.js';
+import { boutonQuitter, libelleQuitter, departSalle, confirmerDepart } from '../../../commun/quitter.js';
+import { confirmBox } from '../../../commun/ui-confirm.js';
 
 /** Un joueur est-il prêt ? */
 const estPret = (j) => !!j.pret;
@@ -62,6 +65,7 @@ export function creer(root, ctx) {
   root.innerHTML = `
     <div class="uno-salle">
       <nav class="uno-fil" aria-label="Fil d'Ariane" ${invite ? 'hidden' : ''}><a href="/pages/jeux/uno.html">Uno</a> › <span>Salle d'attente</span></nav>
+      <div data-zone="hote-msg" hidden></div>
       <h1 class="uno-titre display" data-zone="titre"></h1>
 
       <div data-zone-adieu hidden class="card uno-salle-adieu">
@@ -96,12 +100,13 @@ export function creer(root, ctx) {
           <button type="button" class="btn btn-sand" data-lancer disabled hidden aria-describedby="uno-salle-raison">Lancer la partie</button>
         </div>
         <p id="uno-salle-raison" class="small muted" data-raison></p>
-        <p class="uno-salle-quitter"><button type="button" class="uno-lien-action" data-quitter></button></p>
+        <p class="uno-salle-quitter">${boutonQuitter('Quitter la salle', { attrs: 'data-quitter' })}</p>
       </div>
     </div>`;
 
   const q = (sel) => root.querySelector(sel);
   const zTitre = q('[data-zone="titre"]');
+  const zHoteMsg = q('[data-zone="hote-msg"]');
   const zAdieu = q('[data-zone-adieu]');
   const zNormale = q('[data-zone-normale]');
   const zCode = q('[data-zone="code"]');
@@ -149,9 +154,9 @@ export function creer(root, ctx) {
   btnLancer.addEventListener('click', () => essayer(() => uno.lancer(code)));
 
   btnQuitter.addEventListener('click', async () => {
-    const hote = !!dernierEtat?.moi?.hote;
-    const texte = hote ? 'Annuler la partie pour tout le monde ?' : 'Quitter la salle ?';
-    if (!window.confirm(texte)) return;
+    if (!await confirmerDepart(departSalle(dernierEtat))) return;
+    // Lancée pendant que la fenêtre était ouverte : ce départ-là n'est plus celui que la fenêtre annonçait.
+    if (suivi.etat()?.partie?.statut !== 'attente') return;
     await essayer(async () => {
       await uno.quitter(code);
       if (invite) {
@@ -173,7 +178,7 @@ export function creer(root, ctx) {
     if (!b) return;
     const uid = b.dataset.exclure;
     const nom = b.dataset.pseudo;
-    if (!window.confirm(`Retirer ${nom} de la partie ?`)) return;
+    if (!await confirmBox(`Retirer ${nom} de la partie ?`, '', { ok: 'Retirer', danger: true })) return;
     essayer(() => uno.exclure(code, uid));
   });
 
@@ -305,7 +310,7 @@ export function creer(root, ctx) {
     raison.textContent = estHote ? raisonTexte : '';
     bilan.textContent = `${pretsN} joueur${pretsN > 1 ? 's' : ''} sur ${Math.max(n, 0)} ${pretsN > 1 ? 'sont prêts' : 'est prêt'}${nb ? ` (${nb} places)` : ''}`;
 
-    btnQuitter.textContent = estHote ? 'Annuler la partie' : 'Quitter la salle';
+    libelleQuitter(btnQuitter, departSalle(e).ok);
     btnQuitter.disabled = busy;
   }
 
@@ -314,6 +319,7 @@ export function creer(root, ctx) {
     dernierEtat = e;
     const p = e.partie;
     rendreTitre(p);
+    majHoteMsg(zHoteMsg, e, 'Tu peux lancer la partie, retirer un joueur et changer les règles.');
     rendreJoueurs(e);
     rendreRegles(e);
     rendreActions(e);

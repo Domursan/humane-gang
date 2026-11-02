@@ -16,14 +16,15 @@
  */
 import { esc } from '../../../../commun/core.js';
 import { plat, nomDe, imageExiste } from '../../api.js';
-import { avatarHtml, pseudoHtml, bandeauHtml, brancherChrono, journalHtml, imagePlateau, envoyer, moiJoueur, joueurDe } from '../../vues/commun.js';
+import { avatarHtml, pseudoHtml, bandeauHtml, brancherChrono, journalHtml, imagePlateau, envoyer, moiJoueur, joueurDe, quitterPartie } from '../../vues/commun.js';
+import { boutonQuitter } from '../../../../commun/quitter.js';
+import { confirmBox } from '../../../../commun/ui-confirm.js';
 import { creerChat, tiroirChat } from '../../vues/chat.js';
 import { creerSignalTour } from '../../../../commun/tour-signal.js';
 import { LIEUX, GROUPES, PV_MAX, CAMP_LIBELLE, campDe, voisinsDe, plateauHtml, pisteHtml, medaillonsHtml, persoVisuelHtml } from './plateau.js';
 import { creerEffets } from './effets.js';
 
 const ECRAN_GRAND = '(min-width: 761px)';
-const ICONE_QUITTER = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H9"></path></svg>';
 /** Cartes à utiliser ou non (règle : choix oui / non). */
 const CARTE_UTILISER = ['avenement', 'chocolat', 'rituel'];
 /** Cartes qui visent un joueur et un équipement. */
@@ -52,7 +53,7 @@ function squelette() {
   <header class="sh-bandeau" data-bandeau></header>
   <div class="sh-barre">
     <p class="sh-composition" data-composition></p>
-    <button type="button" class="sh-btn sh-btn-ghost sh-quitter" data-quitter>${ICONE_QUITTER}<span>Quitter la partie</span></button>
+    ${boutonQuitter('Quitter la partie', { attrs: 'data-quitter' })}
   </div>
   <p class="sh-elimine" data-elimine hidden></p>
 
@@ -185,7 +186,8 @@ export function creer(root, ctx) {
   const phase = () => jeu().phase || '';
   const partieEnCours = () => etat?.partie?.statut === 'en_cours';
   const jeAiSorti = () => !!moiJoueur(etat)?.elimine;
-  const monTour = () => !!monId() && etat?.partie?.tour === monId() && partieEnCours();
+  // Le jeu joue pour un joueur parti : ni action, ni révélation, ni réponse à une carte Vision.
+  const monTour = () => !!monId() && etat?.partie?.tour === monId() && partieEnCours() && !moiJoueur(etat)?.parti;
   const pseudoDe = (uid) => (uid == null ? '' : (joueurDe(etat, uid)?.pseudo || '?'));
   const acteur = () => pseudoDe(etat?.partie?.tour || jeu().actif);
   const etatDe = (uid) => joueurDe(etat, uid)?.etat || {};
@@ -396,6 +398,7 @@ export function creer(root, ctx) {
   /** Contenu du panneau selon la phase et mon rôle. */
   function corpsPanneau() {
     const j = jeu();
+    if (moiJoueur(etat)?.parti) return titre('Tu regardes la suite') + '<p>Tu as quitté la partie.</p>';
     if (jeAiSorti()) return titre('Tu regardes la suite') + '<p>Tu as été éliminé. Tu peux suivre la partie.</p>';
     if (!monId()) return vueAttente(`${acteur()} joue.`);
     if (phase() === 'vision') {
@@ -447,7 +450,7 @@ export function creer(root, ctx) {
         </div>
       </div>
       <button type="button" class="sh-btn sh-btn-outline sh-pleine" data-revele${peutReveler ? '' : ' disabled'}>${mon.revele ? 'Personnage révélé' : 'Me révéler'}</button>
-      ${!mon.revele && !monTour() ? '<p class="sh-note">Tu peux te révéler pendant ton tour.</p>' : ''}`;
+      ${!mon.revele && !monTour() && !moiJoueur(etat)?.parti ? '<p class="sh-note">Tu peux te révéler pendant ton tour.</p>' : ''}`;
   }
 
   /** Points de vie : valeur, barre (le texte porte l'information). */
@@ -863,10 +866,10 @@ export function creer(root, ctx) {
     }
   }
 
-  function surPerso(ev) {
+  async function surPerso(ev) {
     const b = ev.target.closest('button[data-revele]');
     if (!b || b.disabled || occupe) return;
-    if (!confirm('Te révéler ? Tout le monde verra ton personnage et ton camp.')) return;
+    if (!await confirmBox('Te révéler ?', 'Tout le monde verra ton personnage et ton camp.', { ok: 'Me révéler' })) return;
     agir(b, 'reveler');
   }
 
@@ -882,8 +885,7 @@ export function creer(root, ctx) {
 
   function surQuitter(ev) {
     if (occupe) return;
-    if (!confirm('Quitter la partie ? Tu ne pourras plus jouer dans cette manche.')) return;
-    envoyer(ev.currentTarget, () => plat.quitter(code), suivi);
+    quitterPartie(ev.currentTarget, () => plat.quitter(code), suivi);
   }
 
   /* ---------- Écouteurs ---------- */
@@ -940,7 +942,7 @@ export function creer(root, ctx) {
       if (blesses.length) refs.annonce.textContent = texteBlesses(blesses) + '.';
       if (avant !== undefined && e.partie.tour !== avant && monTour()) refs.annonce.textContent = 'À toi de jouer.';
       chat.maj(e);
-      signal.maj(monTour() || (phase() === 'vision' && !!monId() && jeu().vision?.pour === monId() && partieEnCours()));
+      signal.maj(monTour() || (phase() === 'vision' && !!monId() && jeu().vision?.pour === monId() && partieEnCours() && !moiJoueur(etat)?.parti));
       try { effets.maj(e, monId()); } catch (err) { console.warn('[shadow] effets visuels', err); }
     },
     /** Message du chat (ancien ou nouveau). */

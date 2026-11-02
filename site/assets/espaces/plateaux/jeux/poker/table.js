@@ -19,7 +19,8 @@
  */
 import { esc, initials, toast } from '../../../../commun/core.js';
 import { plat, erreurTexte } from '../../api.js';
-import { bandeauHtml, brancherChrono, journalHtml, envoyer, moiJoueur, joueurDe } from '../../vues/commun.js';
+import { bandeauHtml, brancherChrono, journalHtml, envoyer, moiJoueur, joueurDe, quitterPartie } from '../../vues/commun.js';
+import { boutonQuitter, DEPART } from '../../../../commun/quitter.js';
 import { creerChat, tiroirChat } from '../../vues/chat.js';
 import { creerSignalTour } from '../../../../commun/tour-signal.js';
 import { carteHtml } from '../cartes.js';
@@ -31,7 +32,6 @@ import { finFx } from './fin.js';
 
 const ECRAN_GRAND = '(min-width: 761px)';
 const GARDE_FIN = 1900;      // ms : la table reste à l'écran après la fin, le temps du vol du pot
-const ICONE_QUITTER = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H9"></path></svg>';
 
 /** Gabarit statique : les zones variables sont remplies à chaque mise à jour. */
 function squelette() {
@@ -39,7 +39,7 @@ function squelette() {
   <header class="pk-bandeau" data-bandeau></header>
   <div class="pk-barre" role="toolbar" aria-label="Actions de la partie">
     <span class="pk-code small muted" data-code></span>
-    <button type="button" class="pk-btn pk-btn-ghost pk-quitter" data-quitter>${ICONE_QUITTER}<span>Quitter la partie</span></button>
+    ${boutonQuitter('Quitter la partie', { attrs: 'data-quitter' })}
   </div>
   <p class="pk-alerte" data-alerte hidden></p>
   <div class="pk-corps">
@@ -122,7 +122,7 @@ export function creer(root, ctx) {
   const monTour = () => !!monId() && jeu().actif === monId() && etat?.partie?.tour === monId();
   const jeAiSorti = () => !!moiJoueur(etat)?.elimine;
   const jeSuisCouche = () => !!moiE().couche;
-  const peutAgir = () => !finie && !occupe && !jeAiSorti() && etat?.partie?.statut === 'en_cours';
+  const peutAgir = () => !moiJoueur(etat)?.parti && !finie && !occupe && !jeAiSorti() && etat?.partie?.statut === 'en_cours';
   const pseudoDe = (uid) => (uid == null ? '' : (joueurDe(etat, uid)?.pseudo || '?'));
   const acteurPseudo = () => pseudoDe(jeu().actif);
   const jetonsMoi = () => Number(moiE().jetons) || 0;
@@ -373,8 +373,7 @@ export function creer(root, ctx) {
 
   function surQuitter(ev) {
     if (occupe || finie) return;
-    if (!confirm('Quitter la partie ? Tes jetons restent à la table, le jeu jouera pour toi.')) return;
-    envoyer(ev.currentTarget, () => plat.quitter(code), suivi);
+    quitterPartie(ev.currentTarget, () => plat.quitter(code), suivi, DEPART.poker);
   }
 
   /* ---------- Écouteurs ---------- */

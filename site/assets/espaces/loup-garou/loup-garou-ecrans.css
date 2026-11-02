@@ -83,7 +83,6 @@ html[data-mode="clair"] .lg-acc-hero { background: color-mix(in srgb, var(--surf
 .lg-sa-role-nombre { font-family: var(--font-pixel); font-weight: 400; color: var(--lg-ink); }
 .lg-salle-actions { border-width: 2px; }
 .lg-salle [data-pret][aria-pressed="true"] { background: var(--esp); color: var(--esp-text); border-color: #000; }
-.lg-lien-action { color: var(--muted); }
 
 /* Chat : onglet actif en aplat de la couleur d'espace */
 .lg-chat-onglet { border-width: 2px; border-radius: 10px; }

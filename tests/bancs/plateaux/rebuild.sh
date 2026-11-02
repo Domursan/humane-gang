@@ -19,6 +19,10 @@ for m in 131_plateaux_robots 136_nouveaux_jeux_socle 137_nj_devine 140_nj_grille
 done
 # Corrections de règles (Blackjack, Pictionary, Monopoly) relevées par l'audit de jouabilité.
 $P -d $B -f $D/../../../supabase/migrations/172_jeux_regles_audit.sql 2>&1 | grep -E "ERROR|LINE"
+# Activité humaine, fermeture des tables vides, plus de partie quittée dans Mes parties (migration 197).
+$P -d $B -f $D/../../../supabase/migrations/197_jeux_mes_parties.sql 2>&1 | grep -E "ERROR|LINE"
+# Quitter une partie est définitif (migration 198).
+$P -d $B -f $D/../../../supabase/migrations/198_quitter_plateaux.sql 2>&1 | grep -E "ERROR|LINE"
 $P -d $B -f $D/helpers.sql 2>&1 | grep -E "ERROR"
 # Robot de test du Risk (fonction t_rk_tour, utilisée par s3) : seulement sa définition (lignes 1 à 38 de t_risk.sql),
 # pas les simulations de t_risk.sql, qui durent plusieurs minutes.

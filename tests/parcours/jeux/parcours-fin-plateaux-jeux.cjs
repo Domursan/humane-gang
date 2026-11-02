@@ -105,7 +105,7 @@ const texte = (p, sel) => p.locator(sel).first().innerText();
   check(await p.locator('.bj-cartes-banque .cd-dos').count() === 1 && !/\d/.test(await p.locator('.bj-banque-total').innerText()), 'BJ1 : la banque garde sa carte cachée, pas de total');
   check((await texte(p, '.fxd-ban')).includes('Victoire !') && (await texte(p, '.fxd-ban small')).toLowerCase() === 'la banque a payé', 'BJ1 : bandeau « Victoire ! », « La banque a payé »');
   check(await p.locator('.fxd-confettis').count() === 1, 'BJ1 : confettis');
-  check(await p.locator('.bj-quitter').isDisabled(), 'BJ1 : plus d’action pendant que la table reste');
+  check(await p.locator('[data-quitter]').isDisabled(), 'BJ1 : plus d’action pendant que la table reste');
   await p.screenshot({ path: path.join(SHOTS, 'fin-bj-table-1280.png') });
   await finAffichee(p);
   check(/Tu gagnes la partie avec 3.450 jetons\./.test(await texte(p, '.plat-fin-sous')), 'BJ1 : « Tu gagnes la partie avec 3 450 jetons. »');

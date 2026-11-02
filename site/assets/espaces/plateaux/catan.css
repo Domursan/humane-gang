@@ -48,7 +48,6 @@ body.plat-catan { --plat-teinte: #3A2E12; --plat-or: #E2C77E; }
 .ct-btn-ghost { background: transparent; border: 1px solid var(--ct-bord-fort); color: var(--ct-texte); font-weight: 500; }
 .ct-grand { min-height: 56px; width: 100%; font-size: 17px; }
 .ct-petit { min-height: 44px; font-size: 13px; }
-.ct-quitter { font-size: 13px; }
 .ct-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
 .ct-choix { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
 .ct-carte-choix { flex-direction: column; align-items: flex-start; padding: 12px 14px; border-radius: 14px; background: var(--ct-carte-2); font-weight: 500; text-align: left; }

@@ -18,7 +18,8 @@
  */
 import { esc, toast } from '../../../../commun/core.js';
 import { plat, erreurTexte } from '../../api.js';
-import { bandeauHtml, brancherChrono, journalHtml, envoyer, moiJoueur, estMonTour, joueurDe } from '../../vues/commun.js';
+import { bandeauHtml, brancherChrono, journalHtml, envoyer, moiJoueur, estMonTour, joueurDe, quitterPartie } from '../../vues/commun.js';
+import { boutonQuitter } from '../../../../commun/quitter.js';
 import { creerChat, tiroirChat } from '../../vues/chat.js';
 import { creerSignalTour } from '../../../../commun/tour-signal.js';
 import { plateauSvg, RESSOURCES, nomTuile } from './plateau.js';
@@ -41,7 +42,6 @@ const AIDE_MODE = {
   ville: 'Touche une de tes colonies pour la transformer en ville.',
 };
 const PHASE_TAG = { placement: 'Mise en place', lancer: 'Production', voleur: 'Le voleur bouge', action: 'Construire et échanger' };
-const ICONE_QUITTER = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H9"></path></svg>';
 const COULEUR = /^#[0-9a-f]{6}$/i;
 const PAS_TUILE_FIN = 110;      // ms entre deux tuiles qui s'allument à la fin de la partie (CT1)
 const DUREE_TUILE_FIN = 800;    // ms : allumage d'une tuile (catan.css, .ct-tuile-fin)
@@ -78,7 +78,7 @@ function squelette() {
   <header class="ct-bandeau" data-bandeau></header>
   <div class="ct-barre" role="toolbar" aria-label="Actions de la partie">
     <span class="ct-code small muted" data-code></span>
-    <button type="button" class="ct-btn ct-btn-ghost ct-petit" data-quitter>${ICONE_QUITTER}<span>Quitter la partie</span></button>
+    ${boutonQuitter('Quitter la partie', { attrs: 'data-quitter' })}
   </div>
   <div class="ct-corps">
     <div class="ct-colonne-jeu">
@@ -179,7 +179,7 @@ export function creer(root, ctx) {
   /** Mon tour dans un état donné (sert à repérer le passage « à toi »). */
   const monTourDe = (x) => !!x?.moi?.user_id && estMonTour(x) && x?.partie?.statut === 'en_cours';
   const monTour = () => monTourDe(etat);
-  const peutAgir = () => !finie && monTour() && !occupe;
+  const peutAgir = () => !finie && monTour() && !occupe && !moiJoueur(etat)?.parti;
   const estMoi = (uid) => uid != null && String(uid) === String(monId());
   const pseudoDe = (uid) => (uid == null ? '' : (joueurDe(etat, uid)?.pseudo || '?'));
   const mesRes = () => jeu().mes_ressources || {};
@@ -620,8 +620,7 @@ export function creer(root, ctx) {
   /** Clics de la quitter : confirmation puis départ de la partie. */
   function surQuitter(ev) {
     if (occupe || finie) return;
-    if (!confirm('Quitter la partie ? Tu ne pourras plus jouer dans cette manche.')) return;
-    envoyer(ev.currentTarget, () => plat.quitter(code), suivi);
+    quitterPartie(ev.currentTarget, () => plat.quitter(code), suivi);
   }
 
   /* ---------- Écouteurs ---------- */
@@ -648,6 +647,7 @@ export function creer(root, ctx) {
       etat = e;
       indexer();
       rendreBandeau();
+      refs.quitter.disabled = !moiJoueur(etat) || moiJoueur(etat)?.parti === true;
       rendreCouts();
       rendrePlateau();
       rendreTag();

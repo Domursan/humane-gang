@@ -48,7 +48,6 @@
 .ch-btn-ghost { background: transparent; border: 1px solid var(--ch-bord-fort); color: var(--ch-texte); font-weight: 500; }
 .ch-btn-piece { background: var(--ch-carte-2); border: 2px solid var(--ch-or); color: var(--ch-texte); }
 .ch-btn-piece:hover { background: var(--ch-or-fond); }
-.ch-quitter { font-size: 13px; }
 
 /* ---------- Barre (onglets téléphone, quitter) ---------- */
 .ch-barre { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0; flex-wrap: wrap; }

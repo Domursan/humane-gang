@@ -108,6 +108,7 @@ et doit être lancé avec `node <chemin>` depuis `tests/`.
 | `parcours/irl/parcours-v8.cjs` | `node parcours/irl/parcours-v8.cjs` | `test` | Calendrier du gang (`calendrier.html`) : mois, filtres, liste du jour, abonnement ICS, rendez-vous récurrents |
 | `parcours/irl/parcours-v9.cjs` | `node parcours/irl/parcours-v9.cjs` | `test` | Ciné-club (`cine.html`) : vote, présence, avis et spoiler, « Le livre est mieux », propositions, séance du projectionniste |
 | `parcours/compte/parcours-d3.cjs` | `node parcours/compte/parcours-d3.cjs` | `test` | Admin : commandes slash (interrupteurs), calendrier et ciné (rendez-vous, réglage) ; ligne des commandes sur Mon compte |
+| `parcours/compte/parcours-ton-tour-pref.cjs` | `node parcours/compte/parcours-ton-tour-pref.cjs` | `test` | Ligne « Jeux · c’est ton tour » de Mes notifications : activée par défaut, enregistrée, relue, migration 200 |
 | `parcours/compte/parcours-centre-notifications.cjs` | `node parcours/compte/parcours-centre-notifications.cjs` | `test` | Centre de notifications : filtres, recherche, pages, lu, suppression avec confirmation, badge et panneau, états vide et erreur, 390 px |
 | `parcours/compte/parcours-session.cjs` | `node parcours/compte/parcours-session.cjs` | `test` | Session absente ou fermée : écrans visiteur, rafraîchissements, déconnexion, aucune RPC membre sans session |
 | `parcours/admin/parcours-staff.cjs` | `node parcours/admin/parcours-staff.cjs` | `test` | Staff : section Staff pour l'admin (ajout, permissions, désactivation), droits limités `cartes` + `journal` |

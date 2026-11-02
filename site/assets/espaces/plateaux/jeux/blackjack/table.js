@@ -16,7 +16,8 @@
  */
 import { esc, initials, toast } from '../../../../commun/core.js';
 import { plat, erreurTexte } from '../../api.js';
-import { bandeauHtml, brancherChrono, journalHtml, envoyer, moiJoueur, joueurDe } from '../../vues/commun.js';
+import { bandeauHtml, brancherChrono, journalHtml, envoyer, moiJoueur, joueurDe, quitterPartie } from '../../vues/commun.js';
+import { boutonQuitter } from '../../../../commun/quitter.js';
 import { creerChat, tiroirChat } from '../../vues/chat.js';
 import { creerSignalTour } from '../../../../commun/tour-signal.js';
 import { tapisHtml, valeurCarte } from './plateau.js';
@@ -33,7 +34,6 @@ const RAPIDES = [10, 25, 50, 100, 250, 500];         // boutons de mise rapide
 /** Lignes du journal qui annoncent le résultat d'une manche (gain, perte, banque, égalité). */
 const RESULTAT = / (gagne|perd) \d+ jetons|récupère sa mise|^La banque a \d|Blackjack de la banque/;
 const GARDE_FIN = 1900;                               // ms : la table reste à l'écran après la fin, le temps du vol des jetons
-const ICONE_QUITTER = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H9"></path></svg>';
 
 /** Gabarit statique : les zones variables sont remplies à chaque mise à jour. */
 function squelette() {
@@ -41,7 +41,7 @@ function squelette() {
   <header class="bj-bandeau" data-bandeau></header>
   <div class="bj-barre" role="toolbar" aria-label="Actions de la partie">
     <span class="bj-code small muted" data-code></span>
-    <button type="button" class="bj-btn bj-btn-ghost bj-quitter" data-quitter>${ICONE_QUITTER}<span>Quitter la partie</span></button>
+    ${boutonQuitter('Quitter la partie', { attrs: 'data-quitter' })}
   </div>
   <p class="bj-alerte" data-alerte hidden></p>
   <div class="bj-corps">
@@ -126,7 +126,7 @@ export function creer(root, ctx) {
   const phase = () => jeu().phase;
   const monTour = () => !!monId() && jeu().actif === monId();
   const jeAiSorti = () => !!moiJoueur(etat)?.elimine;
-  const peutAgir = () => !finie && !occupe && !jeAiSorti() && etat?.partie?.statut === 'en_cours';
+  const peutAgir = () => !moiJoueur(etat)?.parti && !finie && !occupe && !jeAiSorti() && etat?.partie?.statut === 'en_cours';
   const pseudoDe = (uid) => (uid == null ? '' : (joueurDe(etat, uid)?.pseudo || '?'));
   const acteurPseudo = () => pseudoDe(jeu().actif);
   const jetonsMoi = () => Number(moiJoueur(etat)?.etat?.jetons) || 0;
@@ -360,8 +360,7 @@ export function creer(root, ctx) {
 
   function surQuitter(ev) {
     if (occupe || finie) return;
-    if (!confirm('Quitter la partie ? Tu ne pourras plus jouer dans cette manche.')) return;
-    envoyer(ev.currentTarget, () => plat.quitter(code), suivi);
+    quitterPartie(ev.currentTarget, () => plat.quitter(code), suivi);
   }
 
   /* ---------- Écouteurs ---------- */

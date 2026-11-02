@@ -24,6 +24,7 @@ export const NOTIFY = [
   ['plat_party', 'Partie de jeu de plateau', 'annonce dans le salon quand un membre crée une partie de Cluedo, Shadow Hunters, Destins, Monopoly ou Risk avec « Annoncer sur le Discord du gang »'],
   ['ndc_party', 'Partie de Nom de code', 'annonce dans le salon quand un membre crée une partie de Nom de code avec « Annoncer sur le Discord du gang »'],
   ['duel_defi', 'MP : défi de duel', 'MP au membre défié à un duel (Puissance 4, Morpion, Mastermind, Bataille navale, Qui est-ce ?) s\'il accepte la catégorie « Jeux »'],
+  ['ton_tour', 'C’est ton tour', 'duels, Uno et plateaux : le membre est prévenu quand le jeu a dû jouer pour lui, sur le site, en push ou en MP (pas de copie aux admins)'],
   ['quiz_daily', 'Publier la question du jour', 'chaque matin dans le salon « Question du jour » (à couper pendant les vacances)'],
   ['unwrap', 'Tour de passage au déballage', 'annonce « C’est au tour de … » pendant la soirée déballage du Secret Santa (désactivé par défaut)'],
 ];

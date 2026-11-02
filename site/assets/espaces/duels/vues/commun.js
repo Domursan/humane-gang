@@ -18,6 +18,7 @@ import { creerChat } from './chat.js';
 import { creerSignalTour } from '../../../commun/tour-signal.js';
 import { creerEffets, creerTicChrono, son } from '../../../commun/effets-duels.js';
 import { vuEnCours } from './fin-fx.js';
+import { boutonQuitter, departDuel, confirmerDepart } from '../../../commun/quitter.js';
 
 /** Icônes de l'abandon, du forfait et du temps écoulé. */
 export const ICONE_DRAPEAU = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 21V4"/><path d="M6 5c4-2 7 2 12 0v9c-5 2-8-2-12 0" fill="currentColor" fill-opacity=".18"/></svg>';
@@ -72,7 +73,7 @@ export function creerCadre(root, ctx, { classe = '' } = {}) {
         <button type="button" class="btn btn-ghost duels-btn-icone" data-ouvrir-chat aria-label="Chat et journal" aria-expanded="false">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>
           <span class="duels-badge" data-nonlus hidden></span></button>
-        <button type="button" class="btn btn-ghost" data-abandon>Abandonner</button>
+        ${boutonQuitter('Abandonner', { attrs: 'data-abandon' })}
       </div>
     </header>
     <p class="duels-statut" data-statut role="status" aria-live="polite"></p>
@@ -111,7 +112,7 @@ export function creerCadre(root, ctx, { classe = '' } = {}) {
     if (st.panneauOuvert) { st.nonlus = 0; el.nonlus.hidden = true; }
   });
   el.abandon.addEventListener('click', async () => {
-    if (!confirm('Abandonner ce duel ? Ton adversaire gagnera.')) return;
+    if (!await confirmerDepart(departDuel(st.etat))) return;
     el.abandon.disabled = true;
     try { await duel.quitter(ctx.code); ctx.suivi?.rafraichir(); } catch (err) { toast(erreurTexte(err), 'error'); el.abandon.disabled = false; }
   });

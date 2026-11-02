@@ -1,13 +1,13 @@
 // ===== Humane Gang — notifications par catégorie (idée Q6, migration 095) =====
 // Rôle : dire si un membre accepte une notification d'une catégorie sur un canal (push ou MP Discord).
 // Table hg_notif_prefs : prefs = { "<catégorie>.<canal>": booléen }, clé absente = autorisé ; heures calmes
-// (quiet_start, quiet_end, heure de Zurich) pour le push seulement. Sans ligne : tout est autorisé (comportement d'avant).
+// (quiet_start, quiet_end, heure de Zurich) pour le push, et pour le MP de la catégorie « tours » (idée 2, migration 200). Sans ligne : tout est autorisé (comportement d'avant).
 // « Annonces du Staff » (admin_dm) n'a pas de catégorie : seul hg_profiles.bot_optin la coupe.
 // Dépendances : aucune pour les fonctions pures ; loadNotifPrefs lit la table avec le client de l'appelant (clé service).
 // Exporte : NOTIF_CATS, TYPE_CAT, NotifCat, NotifCanal, NotifRow, zurichHour, inQuietHours, notifAllowed, loadNotifPrefs.
 
 /** Catégories connues (même liste blanche que hg_set_notif_prefs). */
-export const NOTIF_CATS = ['messages', 'sorties', 'echanges', 'souhaits', 'santa', 'anniversaires', 'quiz', 'jeux'] as const;
+export const NOTIF_CATS = ['messages', 'sorties', 'echanges', 'souhaits', 'santa', 'anniversaires', 'quiz', 'jeux', 'tours'] as const;
 export type NotifCat = typeof NOTIF_CATS[number];
 export type NotifCanal = 'push' | 'discord';
 /** Ligne de hg_notif_prefs (les champs absents valent « rien de coupé »). */
@@ -28,6 +28,7 @@ export const TYPE_CAT: Record<string, NotifCat> = {
   irl_reminder: 'sorties',
   birthday: 'anniversaires',
   duel_defi: 'jeux',
+  ton_tour: 'tours',
 };
 
 /**
@@ -53,7 +54,7 @@ export function inQuietHours(start: number | null | undefined, end: number | nul
 }
 
 /**
- * Vrai si le membre accepte la catégorie sur ce canal (clé absente = oui). Le push respecte en plus les heures calmes.
+ * Vrai si le membre accepte la catégorie sur ce canal (clé absente = oui). Le push respecte en plus les heures calmes, et le MP aussi pour « tours ».
  * @param {NotifRow|undefined|null} row ligne du membre (absente = tout autorisé)
  * @param {NotifCat} cat catégorie
  * @param {NotifCanal} canal canal
@@ -63,7 +64,7 @@ export function inQuietHours(start: number | null | undefined, end: number | nul
 export function notifAllowed(row: NotifRow | undefined | null, cat: NotifCat, canal: NotifCanal, now: Date = new Date()): boolean {
   if (!row) return true;
   if (row.prefs?.[`${cat}.${canal}`] === false) return false;
-  if (canal === 'push' && inQuietHours(row.quiet_start, row.quiet_end, zurichHour(now))) return false;
+  if ((canal === 'push' || cat === 'tours') && inQuietHours(row.quiet_start, row.quiet_end, zurichHour(now))) return false;
   return true;
 }
 

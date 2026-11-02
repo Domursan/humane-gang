@@ -798,6 +798,13 @@ kbd { font-family: inherit; font-size: 12px; font-weight: 700; line-height: 1; m
 .salon-etat[data-etat="retour"] { background: #2FD16B; color: #000; }
 @media (max-width: 760px) { .salon-etat { left: 50%; bottom: auto; top: calc(74px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); white-space: nowrap; } }
 
+/* ===== Jeux à salon : message « l'hôte a changé » (commun/hote-msg.js) ===== */
+.hote-msg { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface-2); color: var(--text); }
+.hote-msg svg { flex: none; width: 20px; height: 20px; margin-top: 1px; color: var(--sand); }
+.hote-msg p { margin: 0; font-size: 14px; line-height: 1.4; }
+.hote-msg.is-moi { border: 2px solid #000; background: #FBD32D; color: #000; box-shadow: 3px 3px 0 #000; }
+.hote-msg.is-moi svg { color: #000; }
+
 /* ===== Réponses des jeux (admin) : bouton et fenêtre spéciale (core/admin-reponses.js) ===== */
 .adrep-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 999px; font: inherit; font-size: 13px; font-weight: 700;
   border: 1px dashed var(--amber, #D8A75E); background: rgba(216, 167, 94, .12); color: var(--amber, #D8A75E); cursor: pointer; }
@@ -1013,3 +1020,8 @@ html[data-fx="off"] ::view-transition-new(root) { animation: none; }
 @media (prefers-reduced-motion: reduce) { html.px-arrivee::after { display: none; } }
 html[data-fx="off"].px-arrivee::after { display: none; }
 html[data-mode="clair"] { --px-shadow: 4px 4px 0 #1B1A1F; --px-shadow-up: 6px 6px 0 #1B1A1F; }
+
+/* Bouton Quitter commun (commun/quitter.js), posé dans la barre de chaque table et dans les salles d'attente */
+.qt-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; white-space: nowrap; }
+.qt-btn[hidden] { display: none; }
+.qt-btn svg { flex: none; }

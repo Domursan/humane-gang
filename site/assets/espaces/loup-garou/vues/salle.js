@@ -10,8 +10,10 @@
 import { esc } from '../../../commun/core.js';
 import { erreurTexte, estInvite } from '../api.js';
 import { icone, avatar, pseudo, vignetteRole, confirmer, notifier } from '../ui.js';
+import { boutonQuitter, libelleQuitter, departSalle, confirmerDepart } from '../../../commun/quitter.js';
 import { ROLES, roleById, CAMPS } from '../roles.js';
 import { monterChat } from '../chat.js';
+import { majHoteMsg } from '../../../commun/hote-msg.js';
 
 /** Un joueur est-il prêt ? L'hôte en mode automatique l'est d'office. */
 function estPret(j, p) {
@@ -38,6 +40,7 @@ export function monter(root, s) {
   root.innerHTML = `
     <div class="lg-salle">
       ${ariane}
+      <div data-zone="hote-msg" hidden></div>
       <h1 class="lg-salle-titre display" data-zone="titre"></h1>
 
       <div data-zone-annulee hidden class="card lg-salle-annulee">
@@ -78,12 +81,13 @@ export function monter(root, s) {
             <span id="lg-salle-raison" class="small muted" data-raison></span>
           </div>
         </div>
-        <p class="lg-salle-quitter"><button type="button" class="lg-lien-action" data-quitter></button></p>
+        <p class="lg-salle-quitter">${boutonQuitter('Quitter la salle', { attrs: 'data-quitter' })}</p>
       </div>
     </div>`;
 
   const q = (sel) => root.querySelector(sel);
   const zTitre = q('[data-zone="titre"]');
+  const zHoteMsg = q('[data-zone="hote-msg"]');
   const zAnnulee = q('[data-zone-annulee]');
   const zNormale = q('[data-zone-normale]');
   const zCode = q('[data-zone="code"]');
@@ -135,13 +139,9 @@ export function monter(root, s) {
   });
   btnLancer.addEventListener('click', () => essayer(() => s.lg.lancer(code)));
   btnQuitter.addEventListener('click', async () => {
-    const e = s.etat();
-    const hote = !!e?.moi?.hote;
-    const ok = await confirmer(
-      hote ? 'Annuler la partie pour tout le monde ?' : 'Quitter la partie ?',
-      { oui: hote ? 'Annuler la partie' : 'Quitter', danger: true },
-    );
-    if (!ok) return;
+    if (!await confirmerDepart(departSalle(s.etat(), { annuleTout: true }))) return;
+    // Lancée pendant que la fenêtre était ouverte : le serveur refuserait ce départ.
+    if (s.etat()?.partie?.statut !== 'attente') return;
     essayer(async () => {
       await s.lg.quitter(code);
       // Invité : retour à son lien d'invitation (il peut rejoindre à nouveau) ; membre : accueil.
@@ -275,7 +275,7 @@ export function monter(root, s) {
     btnLancer.disabled = busy || !!raisonTexte;
     raison.textContent = raisonTexte;
 
-    btnQuitter.textContent = estHote ? 'Annuler la partie' : 'Quitter la partie';
+    libelleQuitter(btnQuitter, estHote ? 'Annuler la partie' : 'Quitter la salle');
     btnQuitter.disabled = busy;
   }
 
@@ -283,6 +283,7 @@ export function monter(root, s) {
     if (fini || !e?.partie) return;
     const p = e.partie;
     rendreTitre(p);
+    majHoteMsg(zHoteMsg, e);
     const annulee = p.statut === 'annulee';
     zAnnulee.hidden = !annulee;
     zNormale.hidden = annulee;

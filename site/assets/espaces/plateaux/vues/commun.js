@@ -10,6 +10,7 @@
 import { esc, avatarHtml as avatarCore, toast } from '../../../commun/core.js';
 import { erreurTexte } from '../api.js';
 import { creerTicChrono } from '../../../commun/effets-duels.js';
+import { DEPART, ACTION_EN_COURS, confirmerDepart, tableLibre } from '../../../commun/quitter.js';
 
 const GRIS_INVITE = '#9A968F';
 const COULEUR = /^#[0-9a-f]{6}$/i;
@@ -235,6 +236,23 @@ export async function envoyer(bouton, fn, suivi) {
       if (bouton) bouton.disabled = false;
     }
   }
+  return ok;
+}
+
+/**
+ * Partir d'une partie en cours : la fenêtre commune, puis l'envoi. Le bouton est lu avant l'attente (l'événement ne le garde pas).
+ * @param {HTMLButtonElement} bouton bouton Quitter de la table.
+ * @param {Function} fn appelle plat.quitter.
+ * @param {object} suivi suivi de la partie.
+ * @param {{titre: string, texte: string, ok: string}} [cas] phrase propre au jeu (poker).
+ * @returns {Promise<boolean>} vrai si le départ a été envoyé.
+ */
+export async function quitterPartie(bouton, fn, suivi, cas = DEPART.plateau) {
+  if (!await confirmerDepart(cas)) return false;
+  if (!await tableLibre(() => envoisEnCours.has(suivi))) { toast(ACTION_EN_COURS, 'error'); return false; }
+  const ok = await envoyer(bouton, fn, suivi);
+  // envoyer rend le bouton actif après la relecture, donc après le rendu de la table : parti, il reste éteint.
+  if (ok && bouton) bouton.disabled = true;
   return ok;
 }
 

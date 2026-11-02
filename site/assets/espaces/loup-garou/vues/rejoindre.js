@@ -9,6 +9,7 @@
 import { esc } from '../../../commun/core.js';
 import { lg, erreurTexte, estInvite, jetonInvite } from '../api.js';
 import { icone, pseudo, filAriane } from '../ui.js';
+import { hoteMsgHtml } from '../../../commun/hote-msg.js';
 
 /** « 4821 », « hglg4821 » ou « HGLG-4821 » donnent « HGLG-4821 ». Renvoie null si le format ne colle pas. */
 function normaliserCode(saisie) {
@@ -241,7 +242,8 @@ export async function afficher(root, { code, naviguer }) {
     return;
   }
 
-  zone.innerHTML = vueInvitation(etat.partie, code);
+  // L'ancien meneur n'est pas joueur : seul lui reçoit hote_passe ici.
+  zone.innerHTML = hoteMsgHtml({ ...etat, moi: { user_id: etat.hote_passe?.ancien } }) + vueInvitation(etat.partie, code);
   brancherSaisie(zone, naviguer);
 
   const bouton = zone.querySelector('#lg-rejoindre-bouton');

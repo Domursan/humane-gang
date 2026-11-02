@@ -5,6 +5,7 @@
 // window.__LOG (['rpc', fonction, arguments]).
 // Scénario (window.__SCN) : jeu ('blackjack' par défaut, ou 'poker') ; fin : true pour une partie terminée.
 // Expose window.__CARTES : { etat(), tourDe(uid) } pour faire passer la main dans un test (la page se met à jour à la relecture).
+// window.__PATCH (facultatif, posé par le test) retouche l'état renvoyé par hg_plat_etat.
 // Exporte createClient().
 const S = window.__SCN || {};
 const prefix = window.__HG_RACINE || ''; // préfixe du site servi (HG_PREFIX), injecté par le harnais
@@ -146,7 +147,7 @@ function etatRenvoye() {
 }
 
 const HANDLERS = {
-  hg_plat_etat: () => ok(etatRenvoye()),
+  hg_plat_etat: () => ok((window.__PATCH || ((e) => e))(etatRenvoye())),
   hg_plat_agir: (a) => { (POKER ? agirPoker : agirBlackjack)(a.p_action, a.p_args || {}); return ok({}); },
   hg_plat_creer: () => ok(CODE),
   hg_plat_rejoindre: () => ok(CODE),

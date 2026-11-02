@@ -20,7 +20,8 @@
  */
 import { esc, toast } from '../../../../commun/core.js';
 import { plat, erreurTexte, nomDe, imageExiste } from '../../api.js';
-import { bandeauHtml, brancherChrono, journalHtml, imagePlateau, envoyer, moiJoueur, joueurDe, avatarHtml, pseudoHtml } from '../../vues/commun.js';
+import { bandeauHtml, brancherChrono, journalHtml, imagePlateau, envoyer, moiJoueur, joueurDe, avatarHtml, pseudoHtml, quitterPartie } from '../../vues/commun.js';
+import { boutonQuitter } from '../../../../commun/quitter.js';
 import { creerChat, tiroirChat } from '../../vues/chat.js';
 import { creerSignalTour } from '../../../../commun/tour-signal.js';
 import { plateauHtml, marquer, fleche, animerMouvement, animerChutes, animerCompteur } from './plateau.js';
@@ -29,7 +30,6 @@ import { voisinSpatial } from '../../../../commun/grille-clavier.js';
 
 const ECRAN_GRAND = '(min-width: 761px)';
 const MOUVEMENT_REDUIT = '(prefers-reduced-motion: reduce)';
-const ICONE_QUITTER = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H9"></path></svg>';
 const ICONE_FAIT = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>';
 const ICONE_FLECHE = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"></path></svg>';
 /** Phases de l'écran : 3 étapes (Renforts, Attaques, Déplacement), chacune regroupe les phases techniques. */
@@ -97,7 +97,7 @@ function squelette() {
       <button type="button" class="rk-onglet" data-onglet-carte aria-pressed="true">Carte et actions</button>
       <button type="button" class="rk-onglet" data-onglet-infos aria-pressed="false">Joueurs et journal</button>
     </div>
-    <button type="button" class="rk-btn rk-btn-ghost rk-quitter" data-quitter>${ICONE_QUITTER}<span>Quitter la partie</span></button>
+    ${boutonQuitter('Quitter la partie', { attrs: 'data-quitter' })}
   </div>
   <p class="rk-elimine" data-elimine hidden></p>
 
@@ -1047,8 +1047,7 @@ export function creer(root, ctx) {
 
   function surQuitter(ev) {
     if (occupe) return;
-    if (!confirm('Quitter la partie ? Tu ne pourras plus jouer dans cette manche.')) return;
-    envoyer(ev.currentTarget, () => plat.quitter(code), suivi);
+    quitterPartie(ev.currentTarget, () => plat.quitter(code), suivi);
   }
 
   /** Zoom de la carte (téléphone) : seule la variable CSS change. */

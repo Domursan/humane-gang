@@ -188,7 +188,9 @@ const cacher = (p, oui) => p.evaluate((x) => {
   await p.context().close();
 
   // ----- Invité : pas de canal, seulement les relectures -----
+  // Avec son jeton, comme un vrai invité : sans jeton, la table considère qu'il l'a quittée (parcours-quitter.cjs).
   p = await ouvrir(browser, UNO, { scenario: { guest: true, realtime: false } });
+  await p.evaluate(() => localStorage.setItem('hg_uno_invite:HGUNO-4242', 'jeton'));
   check(await p.evaluate(() => window.__fakeRealtime.tables().length === 0), 'invité : aucun canal temps réel');
   await p.evaluate(() => window.dispatchEvent(new Event('offline')));
   await sleep(4300);

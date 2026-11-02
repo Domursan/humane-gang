@@ -60,3 +60,7 @@ supabase/migrations/193_echanges_expiration_alerte.sql
 supabase/migrations/194_modeles_reponse.sql
 supabase/migrations/195_centre_notifications.sql
 supabase/migrations/196_give_panier.sql
+supabase/migrations/197_jeux_mes_parties.sql
+supabase/migrations/198_quitter_plateaux.sql
+supabase/migrations/199_transfert_hote.sql
+supabase/migrations/200_notif_ton_tour.sql

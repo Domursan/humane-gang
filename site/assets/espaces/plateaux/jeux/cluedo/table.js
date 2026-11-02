@@ -15,7 +15,8 @@
  */
 import { esc, initials, toast } from '../../../../commun/core.js';
 import { plat, erreurTexte, nomDe, imageExiste } from '../../api.js';
-import { bandeauHtml, brancherChrono, journalHtml, imagePlateau, envoyer, moiJoueur, joueurDe } from '../../vues/commun.js';
+import { bandeauHtml, brancherChrono, journalHtml, imagePlateau, envoyer, moiJoueur, joueurDe, quitterPartie } from '../../vues/commun.js';
+import { boutonQuitter } from '../../../../commun/quitter.js';
 import { creerChat, tiroirChat } from '../../vues/chat.js';
 import { creerSignalTour } from '../../../../commun/tour-signal.js';
 import { plateauHtml } from './plateau.js';
@@ -24,7 +25,6 @@ import { voisinSpatial } from '../../../../commun/grille-clavier.js';
 
 const ECRAN_GRAND = '(min-width: 761px)';
 const CARNET_CLE = (code) => `hg_cluedo_carnet:${String(code || '').toUpperCase()}`;
-const ICONE_QUITTER = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H9"></path></svg>';
 /** Couleur de fond et de texte des cartes en main, par type. */
 const STYLE_CARTE = {
   s: { fond: '#ECE8E0', texte: '#121212', type: 'Suspect' },
@@ -56,7 +56,7 @@ function squelette() {
       <button type="button" class="ch-onglet" data-onglet-jeu aria-pressed="true">Plateau</button>
       <button type="button" class="ch-onglet" data-onglet-carnet aria-pressed="false">Carnet et journal</button>
     </div>
-    <button type="button" class="ch-btn ch-btn-ghost ch-quitter" data-quitter>${ICONE_QUITTER}<span>Quitter la partie</span></button>
+    ${boutonQuitter('Quitter la partie', { attrs: 'data-quitter' })}
   </div>
   <p class="ch-elimine" data-elimine hidden></p>
 
@@ -151,7 +151,7 @@ export function creer(root, ctx) {
   const phase = () => jeu().phase;
   const monTour = () => !!monId() && jeu().actif === monId();
   const jeAiSorti = () => !!moiJoueur(etat)?.elimine;
-  const peutAgir = () => !occupe && !jeAiSorti() && etat?.partie?.statut === 'en_cours';
+  const peutAgir = () => !moiJoueur(etat)?.parti && !occupe && !jeAiSorti() && etat?.partie?.statut === 'en_cours';
   /** Vrai quand je dois montrer une carte. */
   const jeMontre = () => phase() === 'montrer' && !!monId() && etat?.partie?.tour === monId() && !!jeu().hypothese?.a_montrer;
   /** Nom de la personne qui doit agir (pour les textes « C'est à X de jouer »). */
@@ -526,8 +526,7 @@ export function creer(root, ctx) {
 
   function surQuitter(ev) {
     if (occupe) return;
-    if (!confirm('Quitter la partie ? Tu ne pourras plus jouer dans cette manche.')) return;
-    envoyer(ev.currentTarget, () => plat.quitter(code), suivi);
+    quitterPartie(ev.currentTarget, () => plat.quitter(code), suivi);
   }
 
   /* ---------- Écouteurs ---------- */

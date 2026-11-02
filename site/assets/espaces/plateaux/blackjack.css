@@ -48,7 +48,6 @@ html[data-mode="clair"] .bj-tapis {
 .bj-btn-primary { background: var(--bj-accent); color: #FFFFFF; }
 .bj-btn-ghost { background: transparent; border: 1px solid var(--bj-bord-fort); font-weight: 500; }
 .bj-grand { min-height: 52px; width: 100%; font-size: 16px; }
-.bj-quitter { font-size: 13px; }
 
 /* ---------- Barre et corps ---------- */
 .bj-barre { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0; flex-wrap: wrap; }

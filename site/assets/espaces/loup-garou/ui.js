@@ -8,6 +8,7 @@
  *   libellePhase, libelleCause, filAriane, CANAUX.
  */
 import { esc, avatarHtml, toast } from '../../commun/core.js';
+import { confirmBox } from '../../commun/ui-confirm.js';
 import { roleById, CAMPS } from './roles.js';
 
 /** Chemins d'icônes (trait 24×24). */
@@ -134,16 +135,9 @@ export function ouvrirFenetre(titre, contenu, { large = false, onFerme } = {}) {
   return d;
 }
 
-/** Demande de confirmation ; renvoie une promesse booléenne. */
+/** Demande de confirmation dans la fenêtre commune ; renvoie une promesse booléenne. */
 export function confirmer(question, { oui = 'Confirmer', non = 'Annuler', danger = false } = {}) {
-  return new Promise((resolve) => {
-    let rep = false;
-    const d = ouvrirFenetre('Confirmation', `<p>${esc(question)}</p>
-      <div class="lg-actions"><button type="button" class="btn btn-ghost" data-fermer>${esc(non)}</button>
-      <button type="button" class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-oui>${esc(oui)}</button></div>`,
-      { onFerme: () => resolve(rep) });
-    d.querySelector('[data-oui]').addEventListener('click', () => { rep = true; d.fermer(); });
-  });
+  return confirmBox(question, '', { ok: oui, cancel: non, danger });
 }
 
 /** Message bref (toast du site). */

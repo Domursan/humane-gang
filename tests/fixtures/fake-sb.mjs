@@ -254,7 +254,7 @@ const CASCADE = {
   hg_pages: [['hg_page_access', 'page_slug', 'slug']],
 };
 // Fonctions SQL appelables sans session (rôle anon), comme en ligne.
-const ANON_OK = new Set(['hg_client_error', 'hg_support_public', 'hg_auth_user_gone', 'hg_card_rank', 'hg_card_roll', 'hg_cards_admin_audit_del', 'hg_claim_invite_link', 'hg_msg_push_trg', 'hg_msg_realtime_trg', 'hg_uno_invite']);
+const ANON_OK = new Set(['hg_client_error', 'hg_support_public', 'hg_auth_user_gone', 'hg_card_rank', 'hg_card_roll', 'hg_cards_admin_audit_del', 'hg_claim_invite_link', 'hg_msg_push_trg', 'hg_msg_realtime_trg', 'hg_uno_invite', 'hg_ndc_invite', 'hg_plat_invite', 'hg_duel_invite']);
 // Compléments par paquet (S.extra = nom d'un fichier de tests/fixtures/) : le module reçoit la base et le scénario,
 // peut y ajouter ses tables et renvoie { rpc(fn, args) } (réponse ou undefined). Servi depuis le dépôt comme le site.
 const EXTRA = S.extra ? (await import(`${location.origin}${window.__HG_RACINE || ''}/tests/fixtures/${S.extra}`)).default({ DB, S, uidNow, ME, U }) : null;
@@ -1025,10 +1025,15 @@ export function createClient(_url, _key, opts = {}) {
       // Extension par test : RPC simulées en plus (renvoie undefined pour laisser la main aux RPC ci-dessous).
       if (typeof window.__FAKE_RPC === 'function') { const r = await window.__FAKE_RPC(fn, args); if (r !== undefined) return r; }
       if (EXTRA?.rpc) { const r = await EXTRA.rpc(fn, args); if (r) return r; }
+      // Barre « Reprendre ma partie » (migration 197). S.mesParties : les lignes ; S.mesPartiesKo : refus tant qu'il est vrai ; S.mesPartiesAttente : réponse retenue jusqu'à window.__HG_LIBERE().
+      if (fn === 'hg_jeux_mes_parties') {
+        if (S.mesPartiesAttente) await new Promise((r) => { window.__HG_LIBERE = r; });
+        return S.mesPartiesKo ? { data: null, error: { message: 'Failed to fetch' } } : { data: S.mesParties || [], error: null };
+      }
       // Notifications par catégorie (idée Q6, migration 095) : liste blanche, heures 0 à 23, une ligne par membre.
       if (fn === 'hg_set_notif_prefs') {
         const uid = S.uid || ME;
-        const ok = /^((messages|sorties|echanges|souhaits|santa|anniversaires|quiz)\.(push|discord)|carte_proposee\.site)$/;
+        const ok = /^((messages|sorties|echanges|souhaits|santa|anniversaires|quiz|tours)\.(push|discord)|carte_proposee\.site)$/;
         const pr = args?.p_prefs || {};
         if (Object.entries(pr).some(([k, v]) => !ok.test(k) || typeof v !== 'boolean')) return { data: null, error: { message: 'Catégorie inconnue' } };
         const qs = args?.p_quiet_start ?? null, qe = args?.p_quiet_end ?? null;

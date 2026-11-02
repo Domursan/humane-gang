@@ -91,9 +91,6 @@
 .uno-salle-bilan { margin: 0; font-size: 15px; }
 .uno-salle [data-raison]:empty { display: none; }
 .uno-salle-quitter { margin: 0; }
-.uno-salle .uno-lien-action { min-height: 44px; padding: 0 4px; border: 0; background: none; color: var(--muted);
-  font: inherit; font-size: 14px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.uno-salle .uno-lien-action:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ----- Adieu (invité qui a quitté) ----- */
 .uno-salle-adieu { display: flex; flex-direction: column; gap: 12px; max-width: 560px; margin: 24px auto; }

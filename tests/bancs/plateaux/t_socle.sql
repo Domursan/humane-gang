@@ -1,7 +1,7 @@
 -- Tests du socle des jeux de plateau (125) : salle, invités, chat, admin, accès.
 \set ON_ERROR_STOP 1
 do $$
-declare c text; pid uuid; r jsonb; v_jeton text; v_inv uuid; v text;
+declare c text; pid uuid; r jsonb; v_jeton text; v_inv uuid; v text; n bigint;
 begin
   c := t_call(1, $q$hg_plat_creer('{"jeu":"cluedo","nb_places":4,"visibilite":"publique","nom":"Soirée"}'::jsonb)$q$) #>> '{}';
   pid := t_pid(c);
@@ -32,6 +32,13 @@ begin
   -- Quitter en cours : le jeu joue pour lui
   perform t_call(2, format('hg_plat_quitter(%L)', c));
   perform t_ok((select parti and absent from hg_plat_joueurs where partie = pid and user_id = t_uid(2)), 'quitter en cours : joué par le jeu');
+  -- Migration 198 : quitter est définitif, agir ne ramène plus le joueur
+  perform t_ok(t_err(2, format('hg_plat_agir(%L, %L)', c, 'rien')) like '%quitté cette partie%', 'quitter en cours : plus de retour en agissant');
+  perform t_ok((select parti and absent from hg_plat_joueurs where partie = pid and user_id = t_uid(2)), 'quitter en cours : toujours parti après le refus');
+  -- Migration 198 : un joueur déjà parti ne repart pas (ni journal ni signe de vie)
+  n := (select count(*) from hg_plat_coups where partie = pid);
+  perform t_call(2, format('hg_plat_quitter(%L)', c));
+  perform t_ok((select count(*) from hg_plat_coups where partie = pid) = n, 'quitter deux fois : pas de ligne de journal');
   -- Admin
   perform t_ok(t_err(2, $q$hg_plat_admin_reglages('cluedo')$q$) like '%administrateurs%', 'réglages réservés aux admins');
   perform t_ok(jsonb_array_length(t_call(1, $q$hg_plat_admin_reglages('cluedo')$q$)->'contenus') = 6, 'admin : 6 contenus');

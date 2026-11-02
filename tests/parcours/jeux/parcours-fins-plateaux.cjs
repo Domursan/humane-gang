@@ -435,6 +435,23 @@ const conf = (p) => p.locator('.fxd-confettis, .rk-anim-conf, .mo-conf, .ds-anim
   await p.screenshot({ path: `${__dirname}/../../shots/fins-sh1-390.png` });
   await p.ctx.close();
 
+  // Shadow Hunters, joueur parti alors que c'est son tour : ni révélation ni fenêtre Vision (le jeu joue pour lui).
+  const parti = (x = {}) => { const e = SH.table('georges'); e.partie.tour = ME; e.joueurs.find((j) => j.user_id === ME).parti = true; Object.assign(e.jeu, x); return e; };
+  const present = (x = {}) => { const e = parti(x); e.joueurs.find((j) => j.user_id === ME).parti = false; return e; };
+  const VISION = { phase: 'vision', vision: { pour: ME, de: A, carte: 'v01' } };
+  p = await ouvrir(browser, 'shadow', present(VISION));
+  await p.waitForSelector(TABLE.shadow, { timeout: 8000 }).catch(() => {});
+  await sleep(300);
+  check(!(await p.locator('[data-revele]').isDisabled()) && (await p.locator('[data-act="repondre"]').count()) >= 1, 'Shadow Hunters : à mon tour, révélation et Vision ouvertes');
+  await p.context().close();
+  p = await ouvrir(browser, 'shadow', parti(VISION));
+  await p.waitForSelector(TABLE.shadow, { timeout: 8000 }).catch(() => {});
+  await sleep(300);
+  check(await p.locator('[data-revele]').isDisabled(), 'Shadow Hunters, parti : Me révéler désactivé');
+  check((await p.locator('[data-act="repondre"]').count()) === 0, 'Shadow Hunters, parti : pas de fenêtre Vision');
+  check(!(await p.locator('.sh-note').allInnerTexts()).some((t) => t.includes('pendant ton tour')), 'Shadow Hunters, parti : pas de promesse de révélation');
+  await p.context().close();
+
   await browser.close();
   finish();
 })();

@@ -204,7 +204,7 @@ html[data-mode="clair"] .ndc-consigne, html[data-mode="clair"] .ndc-form-indice 
   .ndc-au-tour { order: 3; flex-basis: 100%; font-size: 15px; }
   .ndc-chrono-texte { font-size: 15px; min-width: 0; }
   .ndc-anneau { width: 34px; height: 34px; }
-  .ndc-bouton-quitter .ndc-quitter-libelle, .ndc-bouton-quitter span { display: none; }
+  .ndc-bouton-quitter span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .ndc-bouton-quitter, .ndc-bouton-chat { width: 44px; min-width: 44px; padding: 0; justify-content: center; }
   .ndc-bouton-chat .ndc-chat-libelle { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 

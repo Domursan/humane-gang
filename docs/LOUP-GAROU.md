@@ -100,6 +100,8 @@ Le navigateur n'envoie que des intentions et relit son état personnalisé.
 
 Un joueur qui n'est pas dans la partie reçoit `{ partie: { code, nom, statut, mode, nb_joueurs, invites, hote_pseudo, joueurs }, moi: null }` (partie en attente) ou une erreur.
 
+**Hôte ou meneur disparu (migration 199).** En salle d'attente, un hôte sans signal de présence depuis 5 minutes passe la main au premier membre arrivé, présent depuis moins de 2 minutes ; passage fait par `hg_lg_tick`, pour tous les jeux à salon. Un meneur humain a droit à 15 minutes : la salle passe alors en meneur automatique et les rôles réservés au meneur deviennent des Villageois. L'état porte alors `hote_passe` (`ancien`, `ancien_nom`, `nouveau`, `nouveau_nom`, `meneur`), tant que la salle est ouverte. En cours de partie, rien n'est transféré : `meneur_parti` vaut vrai tant que le meneur est absent depuis 5 minutes, et la partie avance seule.
+
 ## Accès et tests
 
 - `hg_lg_peut()` : accès à la page « loup-garou » (`hg_page_ok`) ou compte listé dans `hg_settings.loup_garou.testeurs`.

@@ -8,13 +8,14 @@
  * Réglages par défaut = comportement d'avant : clé absente = autorisé ; « Sorties IRL » sur Discord reprend remind_irl
  * (rappels de sortie) et « Cartes · souhaits » sur Discord reprend notify_card_wish ; la RPC tient ces colonnes à jour.
  * « Carte de ma liste proposée » (migration 193) ne part que sur le site : sa ligne a un seul interrupteur, sous « Cartes · souhaits ».
+ * « C’est ton tour » (migration 200) : les heures calmes coupent aussi son MP, voir hg_notif_allowed.
  * Exporte : NOTIF_ROWS, mountNotifPrefs.
  */
 import { sb, toast, errMsg, esc } from '../../commun/core.js';
 import { loadMyPages, canAccess, pageLabel } from '../../commun/core/pages-access.js';
 
 /**
- * Catégories affichées : [clé, titre, détail, push disponible, page requise (facultatif : la ligne n'apparaît que si la page est déclarée et ouverte au membre)]. Le push n'est envoyé aujourd'hui que pour les messages :
+ * Catégories affichées : [clé, titre, détail, push disponible, page requise (facultatif : la ligne n'apparaît que si la page est déclarée et ouverte au membre)]. Le push n'est envoyé aujourd'hui que pour les messages et « c’est ton tour » :
  * les autres lignes montrent « Bientôt » dans la colonne téléphone au lieu d'un interrupteur sans effet.
  */
 export const NOTIF_ROWS = [
@@ -26,6 +27,7 @@ export const NOTIF_ROWS = [
   ['anniversaires', 'Anniversaires', 'Ton message d’anniversaire', false],
   ['quiz', 'Quiz et défis', 'Nouveau défi du gang, résultats', false],
   ['jeux', 'Jeux · duels', 'Un membre te défie à un duel (Puissance 4, Bataille navale…)', false, 'duels'],
+  ['tours', 'Jeux · c’est ton tour', 'Duels, Uno et plateaux : tu n’es pas sur le site et le jeu a dû jouer pour toi. Une fois par partie, 5 par jour au plus.', true],
 ];
 /** Heures calmes proposées quand on les active. */
 const QUIET_DEFAULT = [23, 8];
@@ -61,10 +63,10 @@ function blockHtml(me, row) {
   const ligneCarteProposee = `<div class="np-row" role="row">
       <div class="np-cat" role="rowheader"><b>Cartes · carte de ma liste proposée</b><span>Un membre la met en échange. 3 alertes par jour au plus.</span></div>
       <div class="np-cell np-site" role="cell"><span class="np-soon">Sur le site</span>${sw('carte_proposee.site', 'Carte de ma liste proposée : sur le site')}</div></div>`;
-  const rows = NOTIF_ROWS.filter(([, , , , page]) => !page || (pageLabel(page) && canAccess(page))).map(([k, t, d, push]) => `<div class="np-row" role="row">
+  const rows = NOTIF_ROWS.filter(([, , , , page]) => !page || (pageLabel(page) && canAccess(page))).map(([k, t, d, push]) => { const nom = k === 'tours' ? 'C’est ton tour' : t; return `<div class="np-row" role="row">
       <div class="np-cat" role="rowheader"><b>${esc(t)}</b><span>${esc(d)}</span></div>
-      <div class="np-cell" role="cell">${push ? sw(`${k}.push`, `${t} : sur ce téléphone`) : '<span class="np-soon">Bientôt</span>'}</div>
-      <div class="np-cell np-discord" role="cell">${sw(`${k}.discord`, `${t} : sur Discord`)}</div></div>${k === 'souhaits' ? ligneCarteProposee : ''}`).join('');
+      <div class="np-cell" role="cell">${push ? sw(`${k}.push`, `${nom} : sur ce téléphone`) : '<span class="np-soon">Bientôt</span>'}</div>
+      <div class="np-cell np-discord" role="cell">${sw(`${k}.discord`, `${nom} : sur Discord`)}</div></div>${k === 'souhaits' ? ligneCarteProposee : ''}`; }).join('');
   return `<form class="card stack np-card" id="np-form" novalidate aria-labelledby="np-title">
       <h2 class="card-title" id="np-title">Mes notifications</h2>
       <label class="np-master switch-row">
@@ -82,7 +84,7 @@ function blockHtml(me, row) {
       </div>
       <div class="np-quiet">
         <label class="switch-row np-quiet-row">
-          <span class="switch-txt"><strong>Heures calmes</strong><small>Aucune notification sur ce téléphone pendant ce créneau ; les MP Discord ne changent pas.</small></span>
+          <span class="switch-txt"><strong>Heures calmes</strong><small>Aucune notification sur ce téléphone pendant ce créneau ; les MP Discord ne changent pas, sauf « C’est ton tour ».</small></span>
           <input class="pref-switch" type="checkbox" role="switch" id="np-quiet"${quietOn ? ' checked' : ''}>
         </label>
         <div class="np-hours"${quietOn ? '' : ' hidden'}>

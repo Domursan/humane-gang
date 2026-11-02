@@ -12,6 +12,9 @@
 import { esc, avatarHtml, toast } from '../../../commun/core.js';
 import { ndc, erreurTexte, estInvite, EQUIPES } from '../api.js';
 import { creerChat } from './chat.js';
+import { majHoteMsg } from '../../../commun/hote-msg.js';
+import { boutonQuitter, departSalle, confirmerDepart } from '../../../commun/quitter.js';
+import { confirmBox } from '../../../commun/ui-confirm.js';
 
 const PLURIEL = { jaune: 'Jaunes', rose: 'Roses' };
 const PAQUETS = { classique: 'Classique' };
@@ -76,6 +79,7 @@ export function creer(root, ctx) {
   root.innerHTML = `
     <div class="ndc-salle">
       <nav class="ndc-fil" aria-label="Fil d'Ariane" ${invite ? 'hidden' : ''}><a href="/pages/jeux/nom-de-code.html">Nom de code</a> › <span>Salle d'attente</span></nav>
+      <div data-zone="hote-msg" hidden></div>
 
       <div data-zone-adieu hidden class="card ndc-salle-adieu">
         <h2>Tu as quitté la salle</h2>
@@ -254,7 +258,8 @@ export function creer(root, ctx) {
     }
     const monPret = !!actifs(e).find((j) => j.user_id === mon.user_id)?.pret;
     const eq = mon.equipe || null;
-    const cle = JSON.stringify([eq, !!mon.espion, monPret, !!mon.hote]);
+    const depart = departSalle(e);
+    const cle = JSON.stringify([eq, !!mon.espion, monPret, !!mon.hote, depart.ok]);
     const bouton = (classe, act, attrs, texte) => `<button type="button" class="btn ${classe}" data-act="${act}" ${attrs}>${esc(texte)}</button>`;
 
     const equipes = ['jaune', 'rose'].filter((x) => x !== eq)
@@ -268,7 +273,7 @@ export function creer(root, ctx) {
       : '<p class="ndc-salle-note">Choisis d\'abord une équipe pour devenir espion.</p>';
 
     const pret = bouton(monPret ? 'btn-sand' : 'btn-primary', 'pret', `aria-pressed="${monPret}"`, monPret ? 'Je ne suis plus prêt' : 'Je suis prêt');
-    const quitter = bouton('btn-danger', 'quitter', '', mon.hote ? 'Annuler la partie' : 'Quitter la salle');
+    const quitter = boutonQuitter(depart.ok, { attrs: 'data-act="quitter"' });
 
     zone('actions', cle, `
       <div class="ndc-actions-groupe">
@@ -342,9 +347,9 @@ export function creer(root, ctx) {
     const { act, eq, user, oui } = b.dataset;
     if (act === 'copier') return copierLien();
     if (act === 'quitter') {
-      const hote = !!dernier?.moi?.hote;
-      const texte = hote ? "Tu es l'hôte : quitter annule la partie pour tout le monde. Continuer ?" : 'Quitter la salle ?';
-      if (!window.confirm(texte)) return;
+      if (!await confirmerDepart(departSalle(dernier))) return;
+      // Lancée pendant que la fenêtre était ouverte : ce départ-là n'est plus celui que la fenêtre annonçait.
+      if ((suivi?.etat?.() || dernier)?.partie?.statut !== 'attente') return;
       return essayer(async () => {
         await ndc.quitter(code);
         if (invite) adieu();
@@ -352,7 +357,7 @@ export function creer(root, ctx) {
       }, b);
     }
     if (act === 'exclure') {
-      if (!window.confirm(`Retirer ${b.dataset.pseudo || 'ce joueur'} de la partie ?`)) return;
+      if (!await confirmBox(`Retirer ${b.dataset.pseudo || 'ce joueur'} de la partie ?`, '', { ok: 'Retirer', danger: true })) return;
       return essayer(() => ndc.exclure(code, user), b);
     }
     if (act === 'equipe') return essayer(() => ndc.equipe(code, eq || null, user || null), b);
@@ -381,6 +386,7 @@ export function creer(root, ctx) {
   function maj(e) {
     if (fini || !e?.partie) return;
     dernier = e;
+    majHoteMsg(q('[data-zone="hote-msg"]'), e);
     rendreReglages(e);
     rendreBilan(e);
     rendreEquipe('jaune', e);

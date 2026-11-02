@@ -2,7 +2,7 @@
 /*
  * Rôle : titre du vainqueur (ou « partie arrêtée »), podium des trois premiers, tableau de tous les joueurs
  * (cartes restantes, points de la manche ou cumul en mode points), récompense du joueur (membres seulement),
- * puis revanche ou retour à l'accueil.
+ * puis revanche (tout membre de la partie peut la lancer, migration 199) ou retour à l'accueil.
  * Mise en scène (scènes UNo et UNp, sons UN14 et UN3) quand on arrive de la table (ctx.depuisTable) : les marches montent de
  * la 3e à la 1re, un tampon tombe sur ma marche (VICTOIRE, ou ma place en gris ; jamais sur un autre joueur), le podium encaisse
  * le coup, puis les Paillettes défilent. Elle n'est jouée qu'une fois : ouverture directe, rechargement, onglet masqué : le
@@ -91,7 +91,8 @@ export function creer(root, ctx) {
     btn.disabled = true;
     try {
       const nouveau = await uno.rejouer(code);
-      if (nouveau) naviguer(`#partie/${encodeURIComponent(nouveau)}`);
+      // Revanche déjà lancée par un autre : le serveur renvoie son code, mais je n'en suis pas encore membre.
+      if (nouveau) naviguer(`#rejoindre/${encodeURIComponent(nouveau)}`);
       else toast('La revanche n\'a pas pu être créée.', 'error');
     } catch (e) {
       toast(erreurTexte(e), 'error');
@@ -206,12 +207,14 @@ export function creer(root, ctx) {
     const hote = !!moi.hote;
     const suite = p.suite || null;
     let rejouerHtml;
-    if (hote) {
-      rejouerHtml = `<button type="button" class="btn btn-primary" data-rejouer>Rejouer avec la même table</button>`;
-    } else if (suite) {
+    if (suite) {
       rejouerHtml = `<a class="btn btn-primary" href="/pages/jeux/uno.html#rejoindre/${encodeURIComponent(suite)}">Rejoindre la revanche</a>`;
+    } else if (hote) {
+      rejouerHtml = `<button type="button" class="btn btn-primary" data-rejouer>Rejouer avec la même table</button>`;
+    } else if (invite) {
+      rejouerHtml = '<p class="small muted uno-attente-revanche">En attente d\'un membre pour la revanche.</p>';
     } else {
-      rejouerHtml = '<p class="small muted uno-attente-revanche">En attente de l\'hôte pour la revanche.</p>';
+      rejouerHtml = '<button type="button" class="btn btn-primary" data-rejouer>Revanche</button>';
     }
     const accueil = invite ? '' : '<a class="btn btn-ghost" href="/pages/jeux/uno.html">Retour à l\'accueil</a>';
     // Le bouton hôte peut être désactivé pendant une requête : on le reconstruit seulement si la clé change.

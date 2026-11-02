@@ -21,6 +21,7 @@ import { roleById } from '../roles.js';
 import { themeDe, imagesTheme } from '../themes.js';
 import { erreurTexte } from '../api.js';
 import { creerEffets } from './effets.js';
+import { meneurPartiHtml } from '../../../commun/hote-msg.js';
 import { boutonReponses } from '../../../commun/core/admin-reponses.js';
 import {
   typeAction, choisissable, badgesCible, comptesVote, panneauAction, choisir, executer, LIENS, doitAgir,
@@ -55,6 +56,7 @@ const SQUELETTE = `<div class="lg-pl" data-ambiance="nuit">
   <div class="lg-pl-table"><img class="lg-pl-embleme" data-ref="embleme" alt="" aria-hidden="true" hidden><div class="lg-pl-table-corps" data-ref="table"></div></div>
   <div class="lg-pl-colonne">
     <div class="lg-pl-annonce-zone" data-ref="annonce"></div>
+    <div data-ref="meneur-parti" hidden></div>
     <div class="lg-pl-action-zone" data-ref="action"></div>
     <section class="lg-pl-carte lg-pl-role" aria-labelledby="lg-pl-role-t">
       <h2 id="lg-pl-role-t" class="lg-pl-h">Ton rôle</h2>
@@ -281,6 +283,9 @@ export function monter(root, s) {
     document.body.dataset.lgAmbiance = amb;
     el.dataset.ambiance = amb;
     appliquerTheme(m.role);
+    const zMeneur = el.querySelector('[data-ref="meneur-parti"]');
+    zMeneur.hidden = !e.meneur_parti;
+    remplacer(zMeneur, meneurPartiHtml(e));
 
     const cle = `${p.phase}|${p.manche}`;
     if (cle !== st.cle) { st.cle = cle; st.depart = s.secondesRestantes() || 0; st.sel = {}; }

@@ -12,7 +12,7 @@ const U = (n) => `0000000${n}-0000-4000-8000-00000000000${n}`;
   const p = await openPage(browser, { page: 'compte', width: 360, height: 800, scenario: { uid: U(2) } });
   await p.waitForSelector('#np-form', { timeout: 8000 }).catch(() => {});
   check(await p.isVisible('#np-form'), 'bloc « Mes notifications » affiché');
-  check(await p.locator('#np-form [role=rowheader]').count() === 9, '7 catégories, « Carte de ma liste proposée » et « Annonces du Staff »');
+  check(await p.locator('#np-form [role=rowheader]').count() === 10, '8 catégories, « Carte de ma liste proposée » et « Annonces du Staff »');
   check(await p.isChecked('[data-key="messages.push"]') && await p.isChecked('[data-key="echanges.discord"]'), 'par défaut : messages et échanges actifs');
   check(!(await p.isChecked('[data-key="souhaits.discord"]')), 'souhaits sur Discord : repris du profil (coupé par défaut)');
   check(await p.locator('#profile-form #pf-bot, #profile-form #pf-notify-wish').count() === 0, 'anciennes cases retirées du Profil');

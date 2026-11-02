@@ -3,3 +3,5 @@
 hg-cron
 # 2026-10-29 : pseudo échappé (Markdown) dans l'annonce et le MP d'anniversaire (audit)
 hg-birthdays
+# 2026-11-01 : « c'est ton tour », push ou MP d'un membre absent (migration 200, lot 3)
+hg-push

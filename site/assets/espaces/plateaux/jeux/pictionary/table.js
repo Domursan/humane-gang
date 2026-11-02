@@ -28,7 +28,8 @@
  */
 import { esc, toast, sb, motionAllowed } from '../../../../commun/core.js';
 import { plat, erreurTexte } from '../../api.js';
-import { avatarHtml, pseudoHtml, joueurDe, moiJoueur, brancherChrono, envoyer } from '../../vues/commun.js';
+import { avatarHtml, pseudoHtml, joueurDe, moiJoueur, brancherChrono, envoyer, quitterPartie } from '../../vues/commun.js';
+import { boutonQuitter } from '../../../../commun/quitter.js';
 import { creerChat, tiroirChat } from '../../vues/chat.js';
 import { creerSignalTour } from '../../../../commun/tour-signal.js';
 import { jouerSonJeu } from '../../../../commun/sons-jeux.js';
@@ -42,7 +43,6 @@ const PAS_ENVOI = 50;           // ms entre deux paquets de traits : au plus 20 
 const GARDE_FIN = 2200;         // ms : la dernière toile reste à l'écran après la fin, le temps du cadre doré (PI1)
 const PAS_SAUVEGARDE = 5000;    // ms entre deux enregistrements du dessin complet
 const DUREE_REVELE = 6000;      // ms d'affichage du mot du tour précédent
-const ICONE_QUITTER = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H9"></path></svg>';
 
 let compteur = 0;
 let seq = 0;
@@ -70,7 +70,7 @@ function squelette(uid) {
   <header class="pi-bandeau" data-bandeau></header>
   <div class="pi-barre" role="toolbar" aria-label="Actions de la partie">
     <span class="pi-code small muted" data-code></span>
-    <button type="button" class="pi-btn pi-btn-ghost" data-quitter>${ICONE_QUITTER}<span>Quitter la partie</span></button>
+    ${boutonQuitter('Quitter la partie', { attrs: 'data-quitter' })}
   </div>
   <div class="pi-corps">
     <div class="pi-colonne-jeu">
@@ -211,8 +211,8 @@ export function creer(root, ctx) {
   const aTrouve = () => !!monId() && (jeu().trouves || []).includes(monId());
   const pseudoDe = (u) => (u == null ? '' : (joueurDe(etat, u)?.pseudo || '?'));
   const dessinEnCours = () => etat?.partie?.statut === 'en_cours' && phase() === 'dessin';
-  const peutDessiner = () => !finie && dessinEnCours() && estDessinateur();
-  const peutDeviner = () => !finie && dessinEnCours() && !!monId() && !estDessinateur() && !aTrouve();
+  const peutDessiner = () => !finie && dessinEnCours() && estDessinateur() && !moiJoueur(etat)?.parti;
+  const peutDeviner = () => !finie && dessinEnCours() && !!monId() && !estDessinateur() && !aTrouve() && !moiJoueur(etat)?.parti;
 
   /** Message pour le lecteur d'écran (zone aria-live). */
   const annoncer = (texte) => { refs.annonce.textContent = texte; };
@@ -618,8 +618,7 @@ export function creer(root, ctx) {
   refs.toile.addEventListener('pointercancel', surPointerFin);
 
   refs.quitter.addEventListener('click', (ev) => {
-    if (!confirm('Quitter la partie ? Tu ne pourras plus jouer dans ce tour.')) return;
-    envoyer(ev.currentTarget, () => plat.quitter(code), suivi);
+    quitterPartie(ev.currentTarget, () => plat.quitter(code), suivi);
   });
 
   rendreOutils();
@@ -755,7 +754,7 @@ export function creer(root, ctx) {
     rendreScene();
     rendreScores();
     rendreFil();
-    refs.quitter.disabled = !moiJoueur(etat);
+    refs.quitter.disabled = !moiJoueur(etat) || moiJoueur(etat)?.parti === true;
     verifierRevele();
     appliquerEffets(ev);
     chat?.maj(etat);

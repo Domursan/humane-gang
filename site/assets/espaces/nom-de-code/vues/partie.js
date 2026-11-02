@@ -12,7 +12,8 @@
  * Exporte : afficher.
  */
 import { esc } from '../../../commun/core.js';
-import { suivrePartie, messages, estInvite } from '../api.js';
+import { suivrePartie, messages, estInvite, jetonInvite } from '../api.js';
+import { sortieInvite } from '../../../commun/quitter.js';
 
 const VUES = {
   salle: () => import('./salle.js'),
@@ -128,7 +129,16 @@ export async function afficher(root, { code, naviguer, moi }) {
     },
     onMessage: (m) => ajouterMessage(m),
     onErreur: (err) => {
-      if (!courant && !fini) erreurCarte(root, code, err?.message);
+      if (fini) return;
+      if (!courant) erreurCarte(root, code, err?.message);
+      // Invité parti de la table : la salle a son propre au revoir, la table n'en a pas et ne reçoit plus rien.
+      else if (courant.nom === 'table' && estInvite() && !jetonInvite(code)) {
+        fini = true;
+        try { suivi.arreter(); } catch { /* sans effet */ }
+        try { courant.vue.detruire?.(); } catch { /* sans effet */ }
+        courant = null;
+        sortieInvite(root, 'ndc-erreur', '/pages/jeux/nom-de-code.html');
+      }
     },
   });
 

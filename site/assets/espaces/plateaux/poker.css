@@ -45,7 +45,6 @@ body.plat-poker { --plat-teinte: #15324A; --plat-or: #E2C77E; }
 .pk-btn-tapis { border-color: var(--pk-rouge); color: var(--pk-rouge); background: transparent; }
 .pk-btn-ghost { background: transparent; border: 1px solid var(--pk-bord-fort); font-weight: 500; }
 .pk-btn:hover:not(:disabled) { filter: brightness(1.12); }
-.pk-quitter { font-size: 13px; }
 
 /* ---------- Barre et corps ---------- */
 .pk-barre { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0; flex-wrap: wrap; }

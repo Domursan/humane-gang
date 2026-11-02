@@ -44,7 +44,6 @@
 .ds-btn-primary { background: var(--ds-accent); color: #FFFFFF; }
 .ds-btn-ghost { background: transparent; border: 1px solid var(--ds-bord-fort); color: var(--ds-texte); font-weight: 500; }
 .ds-grand { min-height: 52px; width: 100%; font-size: 16px; }
-.ds-quitter { font-size: 13px; }
 .ds-choix { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .ds-carte-choix { min-height: 44px; box-sizing: border-box; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--ds-bord-fort); background: var(--ds-carte-2); color: var(--ds-texte);
   text-align: left; font: 500 14px Inter, sans-serif; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }

@@ -30,6 +30,7 @@ import { carteHtml, dosHtml, nomCarte, COULEURS, ICONE_PASSE } from '../cartes.j
 import { creerEffets, mouvementReduit, son, rejouer, presse, boite } from '../effets.js';
 import { creerChat } from './chat.js';
 import { boutonReponses } from '../../../commun/core/admin-reponses.js';
+import { boutonQuitter, DEPART, ACTION_EN_COURS, confirmerDepart, tableLibre } from '../../../commun/quitter.js';
 import { creerSignalTour } from '../../../commun/tour-signal.js';
 
 const RAYON = 16;
@@ -115,6 +116,7 @@ function squelette(idChat) {
       <span class="visually-hidden" aria-live="polite" data-chrono-annonce></span>
     </div>
     <button type="button" class="btn btn-ghost uno-bouton-chat" data-chat-bouton aria-controls="${idChat}" aria-expanded="true">${ICONE_CHAT}<span class="uno-chat-libelle">Masquer le chat</span></button>
+    ${boutonQuitter('Quitter la table', { attrs: 'data-quitter' })}
   </header>
 
   <div class="uno-corps">
@@ -209,7 +211,7 @@ export function creer(root, ctx) {
   const refs = {
     titre: q('[data-nom]'), nom: q('[data-nom]'), code: q('[data-code]'), sens: q('[data-sens]'), sensBloc: q('[data-sens-bloc]'),
     anneau: q('[data-anneau]'), chrono: q('[data-chrono]'), chronoAnnonce: q('[data-chrono-annonce]'),
-    chatBouton: q('[data-chat-bouton]'), chatFermer: q('[data-chat-fermer]'),
+    chatBouton: q('[data-chat-bouton]'), chatFermer: q('[data-chat-fermer]'), quitter: q('[data-quitter]'),
     sieges: q('[data-sieges]'), couleur: q('[data-couleur]'), cumul: q('[data-cumul]'), fleches: q('[data-fleches]'),
     pioche: q('[data-pioche]'), bulle: q('[data-bulle]'), piocheNb: q('[data-pioche-nb]'), dessus: q('[data-dessus]'),
     dernier: q('[data-dernier]'), annonce: q('[data-annonce]'), tapis: q('.uno-tapis'),
@@ -286,6 +288,8 @@ export function creer(root, ctx) {
     const p = etat.partie;
     refs.nom.textContent = p.nom || 'Partie';
     refs.code.textContent = p.code || code;
+    refs.quitter.hidden = !moiJoueur();
+    refs.quitter.disabled = !!moiJoueur()?.exclu;
     const antihoraire = p.sens === -1;
     refs.sens.textContent = antihoraire ? 'Sens antihoraire' : 'Sens horaire';
     refs.sensBloc.classList.toggle('inverse', antihoraire);
@@ -1160,6 +1164,11 @@ export function creer(root, ctx) {
 
   refs.pioche.addEventListener('click', () => { if (peutPiocher()) { presse(refs.pioche); agir(() => uno.piocher(code)); } });
   refs.passer.addEventListener('click', () => agir(() => uno.passer(code)));
+  refs.quitter.addEventListener('click', async () => {
+    if (!await confirmerDepart(DEPART.uno)) return;
+    if (!await tableLibre(() => occupe || poseNonConfirmee())) { toast(ACTION_EN_COURS, 'error'); return; }
+    agir(() => uno.quitter(code));
+  });
   refs.uno.addEventListener('click', () => { presse(refs.uno); agir(() => uno.direUno(code)); });
   refs.contrer.addEventListener('click', () => {
     const cible = refs.contrer.dataset.cible;

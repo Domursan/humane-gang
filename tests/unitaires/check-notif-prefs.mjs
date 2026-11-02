@@ -25,6 +25,9 @@ const quiet = { user_id: 'u', prefs: {}, quiet_start: 23, quiet_end: 8 };
 check(!notifAllowed(quiet, 'messages', 'push', new Date('2026-01-15T22:30:00Z')), 'push coupé pendant les heures calmes');
 check(notifAllowed(quiet, 'messages', 'discord', new Date('2026-01-15T22:30:00Z')), 'MP Discord non touchés par les heures calmes');
 check(notifAllowed(quiet, 'messages', 'push', new Date('2026-01-15T12:00:00Z')), 'push autorisé hors heures calmes');
+check(TYPE_CAT.ton_tour === 'tours', 'ton_tour : catégorie tours');
+check(!notifAllowed(quiet, 'tours', 'discord', new Date('2026-01-15T22:30:00Z')), 'MP de « tours » coupé pendant les heures calmes');
+check(notifAllowed(quiet, 'tours', 'discord', new Date('2026-01-15T12:00:00Z')), 'MP de « tours » autorisé hors heures calmes');
 
 const fakeDb = (rows, error = null) => ({ from: () => ({ select: () => ({ in: async () => ({ data: rows, error }) }) }) });
 const m = await loadNotifPrefs(fakeDb([{ user_id: 'a', prefs: { 'santa.discord': false } }]), ['a', 'b', 'a']);

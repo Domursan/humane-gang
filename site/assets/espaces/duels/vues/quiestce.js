@@ -32,6 +32,7 @@ import { voisinSpatial } from '../../../commun/grille-clavier.js';
 import { jouerSonJeu } from '../../../commun/sons-jeux.js';
 import { anime as animePermis, son as sonDuels } from '../../../commun/effets-duels.js';
 import { vuEnCours, effetsFinDuel, fxFin } from './fin-fx.js';
+import { confirmBox } from '../../../commun/ui-confirm.js';
 
 const DELAI_ENVOI = 600;
 const ANNONCE_MS = 6000;
@@ -256,7 +257,7 @@ export function creer(root, ctx) {
 
   /** « Je pense que c'est… » : juste → manche gagnée, faux → manche perdue. */
   async function deviner(p) {
-    if (!confirm(`Tu penses que c'est ${p.prenom} ? Si tu te trompes, tu perds la manche.`)) return;
+    if (!await confirmBox(`Tu penses que c'est ${p.prenom} ?`, 'Si tu te trompes, tu perds la manche.', { ok: 'Deviner' })) return;
     st.mode = 'normal';
     let juste = null;
     const ok = await agir(async () => { juste = await duel.deviner(ctx.code, p.id); });

@@ -219,11 +219,10 @@ body.plat-risk { --plat-teinte: #3B2A18; --plat-or: #D8A75E; }
 .plat-joueur.plat-place-libre { border-style: dashed; color: var(--muted); }
 .plat-place-vide { width: 40px; height: 40px; border-radius: 50%; border: 1px dashed var(--border-strong); flex: none; }
 .plat-icone { flex: none; min-width: 44px; min-height: 44px; border-radius: 999px; border: 1px solid var(--border-strong); background: transparent; color: var(--text); font: inherit; font-size: 18px; cursor: pointer; }
-.plat-icone:focus-visible, .plat-lien-action:focus-visible { outline: 2px solid var(--sand); outline-offset: 2px; }
+.plat-icone:focus-visible { outline: 2px solid var(--sand); outline-offset: 2px; }
 .plat-actions { position: sticky; bottom: 0; z-index: 5; margin-top: 16px; }
 .plat-actions .plat-boutons { margin: 10px 0; }
 .plat-quitter { margin: 8px 0 0; }
-.plat-lien-action { font: inherit; background: none; border: 0; color: var(--rose); text-decoration: underline; cursor: pointer; min-height: 44px; padding: 0 4px; }
 .plat-adieu { margin: 24px auto; max-width: 560px; }
 
 /* ---------- Chat ---------- */

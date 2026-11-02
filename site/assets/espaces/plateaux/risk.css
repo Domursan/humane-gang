@@ -59,7 +59,6 @@
 .rk-rond { width: 44px; padding: 0; font-size: 20px; flex: none; }
 .rk-choix { background: var(--rk-carte-2); border: 1px solid var(--rk-bord-fort); color: var(--rk-texte); }
 .rk-choix[aria-pressed="true"] { border-color: var(--rk-or); color: var(--rk-or); background: var(--rk-or-fond); }
-.rk-quitter { font-size: 14px; }
 .rk-rejouer { min-height: 36px; padding: 0 12px; font-size: 13px; text-transform: none; letter-spacing: 0; font-family: Inter, sans-serif; }
 
 /* ---------- Bandeau du site (commun), habillé comme la maquette ---------- */

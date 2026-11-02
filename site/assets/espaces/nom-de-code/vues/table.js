@@ -25,6 +25,7 @@ import { creerChat } from './chat.js';
 import { animationsOk, son, banniere, grandIndice, flashRouge, secouer, arreterEffets } from './effets.js';
 import { creerSignalTour } from '../../../commun/tour-signal.js';
 import { boutonReponses } from '../../../commun/core/admin-reponses.js';
+import { boutonQuitter, departNomDeCode, ACTION_EN_COURS, confirmerDepart, tableLibre } from '../../../commun/quitter.js';
 
 const RAYON = 16;
 const CIRCONFERENCE = 2 * Math.PI * RAYON;
@@ -37,7 +38,6 @@ const ICONE_CHAT = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" 
 const ICONE_CHECK = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2F7D45" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l5 5 9-10"></path></svg>';
 const ICONE_PASSANT = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#121212" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle><path d="M3 3l18 18"></path></svg>';
 const ICONE_TETE = '<svg width="30" height="30" viewBox="0 0 24 24" fill="#F2EFEA" aria-hidden="true"><path d="M12 2a9 9 0 0 0-9 9c0 3.1 1.6 5.6 4 7v3h2v-2h2v2h2v-2h2v2h2v-3c2.4-1.4 4-3.9 4-7a9 9 0 0 0-9-9z"></path><circle cx="8.5" cy="11" r="2" fill="#111111"></circle><circle cx="15.5" cy="11" r="2" fill="#111111"></circle><path d="M12 13.5l-1 2h2z" fill="#111111"></path></svg>';
-const ICONE_QUITTER = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16M6 5h11l-2 4 2 4H6"></path></svg>';
 
 /** Couleur d'affichage d'un joueur : sa couleur de profil, gris pour un invité. */
 const couleurJoueur = (j) => (j?.invite ? '#9A968F' : (HEX.test(j?.couleur || '') ? j.couleur : '#F2EFEA'));
@@ -107,7 +107,7 @@ function squelette(idChat) {
       <span class="visually-hidden" aria-live="polite" data-chrono-annonce></span>
     </div>
     <button type="button" class="btn btn-ghost ndc-bouton-equipes" data-tiroir-ouvrir aria-haspopup="dialog">Équipes et historique</button>
-    <button type="button" class="btn btn-ghost ndc-bouton-quitter" data-quitter>${ICONE_QUITTER}<span>Quitter</span></button>
+    ${boutonQuitter('Quitter la partie', { classe: 'ndc-bouton-quitter', attrs: 'data-quitter' })}
     <button type="button" class="btn btn-ghost ndc-bouton-chat" data-chat-bouton aria-controls="${idChat}" aria-expanded="false">${ICONE_CHAT}<span class="ndc-chat-libelle">Chat</span><span class="ndc-pastille-nonlu" data-non-lus hidden></span></button>
   </header>
 
@@ -603,9 +603,9 @@ export function creer(root, ctx) {
       .finally(() => { occupe = false; rendreActions(); suivi.rafraichir(); });
   }
 
-  function surQuitter() {
-    if (occupe) return;
-    if (!confirm('Quitter la partie ? Tu ne pourras plus jouer dans cette manche.')) return;
+  async function surQuitter() {
+    if (!await confirmerDepart(departNomDeCode(etat))) return;
+    if (!await tableLibre(() => occupe)) { toast(ACTION_EN_COURS, 'error'); return; }
     agir(() => ndc.quitter(code));
   }
 

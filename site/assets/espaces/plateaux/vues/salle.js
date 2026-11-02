@@ -18,6 +18,9 @@ import { avatarHtml, pseudoHtml, envoyer } from './commun.js';
 import { creerChat, tiroirChat } from './chat.js';
 import { creerEffets, departPartie, premiereFois, son } from '../../../commun/effets-duels.js';
 import { estRecent } from './fin-fx.js';
+import { majHoteMsg } from '../../../commun/hote-msg.js';
+import { boutonQuitter, libelleQuitter, departSalle, confirmerDepart } from '../../../commun/quitter.js';
+import { confirmBox } from '../../../commun/ui-confirm.js';
 
 /** Met à jour un bloc seulement si son contenu a changé (évite de casser le focus). */
 function zone(el, cle, html) {
@@ -48,6 +51,7 @@ export function creer(root, ctx) {
   root.innerHTML = `
     <div class="plat-salle">
       <nav class="plat-fil" aria-label="Fil d'Ariane" ${invite ? 'hidden' : ''}><a href="${esc(J.page)}">${esc(J.nom)}</a> › <span>Salle d'attente</span></nav>
+      <div data-zone="hote-msg" hidden></div>
       <h1 class="plat-titre display" data-zone="titre"></h1>
 
       <div class="card plat-adieu" data-zone-adieu hidden>
@@ -83,12 +87,13 @@ export function creer(root, ctx) {
           <button type="button" class="btn btn-ghost" data-robot hidden>Ajouter un robot</button>
         </div>
         <p id="plat-salle-raison" class="small muted" data-raison></p>
-        <p class="plat-quitter"><button type="button" class="plat-lien-action" data-quitter></button></p>
+        <p class="plat-quitter">${boutonQuitter('Quitter la salle', { attrs: 'data-quitter' })}</p>
       </div>
     </div>`;
 
   const q = (sel) => root.querySelector(sel);
   const zTitre = q('[data-zone="titre"]');
+  const zHoteMsg = q('[data-zone="hote-msg"]');
   const zAdieu = q('[data-zone-adieu]');
   const zNormale = q('[data-zone-normale]');
   const zCode = q('[data-zone="code"]');
@@ -131,9 +136,9 @@ export function creer(root, ctx) {
   btnRobot.addEventListener('click', () => envoyer(btnRobot, () => plat.ajouterRobot(code), suivi));
 
   btnQuitter.addEventListener('click', async () => {
-    const hote = !!dernierEtat?.moi?.hote;
-    const texte = hote ? 'Annuler la partie pour tout le monde ?' : 'Quitter la salle ?';
-    if (!window.confirm(texte)) return;
+    if (!await confirmerDepart(departSalle(dernierEtat))) return;
+    // Lancée pendant que la fenêtre était ouverte : ce départ-là n'est plus celui que la fenêtre annonçait.
+    if (suivi.etat()?.partie?.statut !== 'attente') return;
     const ok = await envoyer(btnQuitter, () => plat.quitter(code), suivi);
     if (!ok) return;
     if (invite) {
@@ -151,12 +156,12 @@ export function creer(root, ctx) {
   });
 
   // ----- Retirer un joueur (hôte) -----
-  zJoueurs.addEventListener('click', (ev) => {
+  zJoueurs.addEventListener('click', async (ev) => {
     const b = ev.target.closest('[data-exclure]');
     if (!b) return;
     const uid = b.dataset.exclure;
     const nom = b.dataset.pseudo;
-    if (!window.confirm(`Retirer ${nom} de la partie ?`)) return;
+    if (!await confirmBox(`Retirer ${nom} de la partie ?`, '', { ok: 'Retirer', danger: true })) return;
     envoyer(b, () => plat.exclure(code, uid), suivi);
   });
 
@@ -232,7 +237,7 @@ export function creer(root, ctx) {
     raison.textContent = estHote ? raisonTexte : '';
     bilan.textContent = `${pretsN} joueur${pretsN > 1 ? 's' : ''} sur ${n} ${pretsN > 1 ? 'sont prêts' : 'est prêt'}${p.nb_places ? ` (${p.nb_places} places)` : ''}`;
 
-    btnQuitter.textContent = estHote ? 'Annuler la partie' : 'Quitter la salle';
+    libelleQuitter(btnQuitter, departSalle(e).ok);
   }
 
   /** SA1 et SA2 : compare à l'état précédent, après le dessin. Le premier état ne fait que retenir la salle. */
@@ -253,6 +258,7 @@ export function creer(root, ctx) {
     if (fini || !e?.partie) return;
     dernierEtat = e;
     zTitre.textContent = e.partie.nom || `Partie de ${J.nom}`;
+    majHoteMsg(zHoteMsg, e);
     rendreJoueurs(e);
     rendreActions(e);
     effets(e);

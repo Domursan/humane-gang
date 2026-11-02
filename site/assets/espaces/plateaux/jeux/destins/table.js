@@ -19,7 +19,8 @@
  */
 import { esc, initials, toast } from '../../../../commun/core.js';
 import { plat, erreurTexte, nomDe, imageExiste } from '../../api.js';
-import { bandeauHtml, brancherChrono, journalHtml, imagePlateau, envoyer, moiJoueur, joueurDe } from '../../vues/commun.js';
+import { bandeauHtml, brancherChrono, journalHtml, imagePlateau, envoyer, moiJoueur, joueurDe, quitterPartie } from '../../vues/commun.js';
+import { boutonQuitter } from '../../../../commun/quitter.js';
 import { creerChat, tiroirChat } from '../../vues/chat.js';
 import { creerSignalTour } from '../../../../commun/tour-signal.js';
 import { jouerSonJeu } from '../../../../commun/sons-jeux.js';
@@ -32,7 +33,6 @@ const MOUVEMENT_REDUIT = '(prefers-reduced-motion: reduce)';
 const NB_CASES = POSITIONS.length;
 const SAISIE_MIN = 25000;   // montant à réunir pour rembourser un prêt
 const ASSURANCE = { habitation: 20000, auto: 10000 };
-const ICONE_QUITTER = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H9"></path></svg>';
 const ROUE_COULEURS = ['#9E3543', '#E2C77E', '#8FBF9A', '#7FA3D6', '#D98BA0', '#A98BD4', '#CE9B6C', '#6F9C86', '#B5573F', '#4F6E96'];
 const ANGLE_CASE = 36;      // une valeur de la roue = 36 degrés
 const TOURS = 5;            // tours complets avant de s'arrêter
@@ -89,7 +89,7 @@ function squelette() {
   <header class="ds-bandeau" data-bandeau></header>
   <div class="ds-barre" role="toolbar" aria-label="Actions de la partie">
     <span class="ds-code small muted" data-code></span>
-    <button type="button" class="ds-btn ds-btn-ghost ds-quitter" data-quitter>${ICONE_QUITTER}<span>Quitter la partie</span></button>
+    ${boutonQuitter('Quitter la partie', { attrs: 'data-quitter' })}
   </div>
   <p class="ds-elimine" data-elimine hidden></p>
   <div class="ds-corps">
@@ -425,7 +425,7 @@ export function creer(root, ctx) {
   const phase = () => jeu().phase;
   const monTour = () => !!monId() && jeu().actif === monId();
   const jeAiSorti = () => !!moiJoueur(etat)?.elimine;
-  const peutAgir = () => !occupe && !jeAiSorti() && etat?.partie?.statut === 'en_cours';
+  const peutAgir = () => !moiJoueur(etat)?.parti && !occupe && !jeAiSorti() && etat?.partie?.statut === 'en_cours';
   const acteurPseudo = () => pseudoDe(jeu().actif);
   /** Ma situation (état de mon joueur dans la partie), ou {} si je ne joue pas. */
   const monEtat = () => moiJoueur(etat)?.etat || {};
@@ -795,8 +795,7 @@ export function creer(root, ctx) {
 
   function surQuitter(ev) {
     if (occupe) return;
-    if (!confirm('Quitter la partie ? Tu ne pourras plus jouer dans cette manche.')) return;
-    envoyer(ev.currentTarget, () => plat.quitter(code), suivi);
+    quitterPartie(ev.currentTarget, () => plat.quitter(code), suivi);
   }
 
   /* ---------- Écouteurs ---------- */

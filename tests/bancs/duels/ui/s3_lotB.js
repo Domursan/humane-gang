@@ -32,11 +32,11 @@ const su = (sql) => { const r = psql(null, 'reset role; ' + sql); if (!r.ok) thr
   if (await auto.count()) { await auto.click(); await a.waitForTimeout(1500); }
   await shot(a, '36-qec-apres-question', false);
   // Fin : je devine faux deux fois de suite ? On force la fin par le serveur
-  a.on('dialog', (d) => d.accept());
   const des = a.locator('[data-act="designer"]:visible').first();
   if (await des.count() && await des.isEnabled()) {
     await des.click(); await a.waitForTimeout(400);
-    await a.locator('[data-act="carte"]:not([disabled])').first().click(); await a.waitForTimeout(2500);
+    await a.locator('[data-act="carte"]:not([disabled])').first().click();
+    await a.locator('dialog.hg-dialog[open] .btn-primary').click(); await a.waitForTimeout(2500);
   } else console.log('pas de bouton designer');
   await shot(a, '37-qec-apres-designation', false);
   // Défi entre membres au téléphone (bataille), placement puis fin forcée

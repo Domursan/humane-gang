@@ -19,7 +19,8 @@
  */
 import { esc, initials, toast } from '../../../../commun/core.js';
 import { plat, erreurTexte, nomDe } from '../../api.js';
-import { bandeauHtml, brancherChrono, journalHtml, envoyer, moiJoueur, joueurDe, pseudoHtml, texteSur } from '../../vues/commun.js';
+import { bandeauHtml, brancherChrono, journalHtml, envoyer, moiJoueur, joueurDe, pseudoHtml, texteSur, quitterPartie } from '../../vues/commun.js';
+import { boutonQuitter } from '../../../../commun/quitter.js';
 import { creerChat, tiroirChat } from '../../vues/chat.js';
 import { creerSignalTour } from '../../../../commun/tour-signal.js';
 import { plateauHtml, pointCase } from './plateau.js';
@@ -32,7 +33,6 @@ const CAUTION_PRISON = 50;
 const PAS_MARCHE_MS = 150;                 // durée d'une case pendant le déplacement d'un pion
 const DELAI_DES_MS = 1300;                 // attente, après un nouveau lancer, avant que le pion avance (fin du roulement)
 const DUREE_TITRE_MS = 3200;               // durée d'affichage de la carte de propriété achetée
-const ICONE_QUITTER = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H9"></path></svg>';
 const LIBELLE_CASE = { rue: 'Rue', gare: 'Gare', compagnie: 'Compagnie', caisse: 'Caisse de communauté', chance: 'Chance', impot: 'Impôt', depart: 'Départ', prison: 'Prison', parc: 'Parc gratuit', allez_prison: 'Allez en prison' };
 const LIBELLES_LOYER = ['Loyer nu', 'Avec 1 maison', 'Avec 2 maisons', 'Avec 3 maisons', 'Avec 4 maisons', 'Avec un hôtel'];
 const BILLETS = [500, 100, 50, 20];        // coupures affichées, de la plus grosse à la plus petite
@@ -66,7 +66,7 @@ function squelette() {
       <button type="button" class="mo-onglet" data-onglet-cote aria-pressed="false">Joueurs et journal</button>
     </div>
     <div class="mo-barre-droite">
-      <button type="button" class="mo-btn mo-btn-ghost mo-quitter" data-quitter>${ICONE_QUITTER}<span>Quitter la partie</span></button>
+      ${boutonQuitter('Quitter la partie', { attrs: 'data-quitter' })}
     </div>
   </div>
   <p class="mo-elimine" data-elimine hidden></p>
@@ -791,8 +791,7 @@ export function creer(root, ctx) {
   refs.echange.addEventListener('change', surSaisie);
   refs.quitter.addEventListener('click', (ev) => {
     if (occupe) return;
-    if (!confirm('Quitter la partie ? Tu ne pourras plus jouer dans cette manche.')) return;
-    envoyer(ev.currentTarget, () => plat.quitter(code), suivi);
+    quitterPartie(ev.currentTarget, () => plat.quitter(code), suivi);
   });
   refs.ongletJeu.addEventListener('click', () => ongletPour('jeu'));
   refs.ongletCote.addEventListener('click', () => ongletPour('cote'));

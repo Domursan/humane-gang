@@ -7,7 +7,7 @@
  * Le jeu de la page est fixé une fois au démarrage (choisirJeu), d'après <body data-jeu="…">.
  * Contenus (noms des suspects, rues, territoires…) : modifiables dans le panel admin, chargés une fois (contenus()).
  * Dépendances : core.js (notify : annonce Discord de la partie), commun/jeux-salon.js.
- * Exporte : JEUX, choisirJeu, jeu, plat, contenus, nomDe, suivrePartie, messages, erreurTexte, activerInvite, estInvite, imageExiste.
+ * Exporte : JEUX, choisirJeu, jeu, plat, contenus, nomDe, suivrePartie, messages, erreurTexte, activerInvite, estInvite, jetonInvite, imageExiste.
  */
 import { notify } from '../../commun/core.js';
 import { creerSalon } from '../../commun/jeux-salon.js';
@@ -67,7 +67,7 @@ export const plat = Object.assign(commun, {
   adminContenu: (jeuId, cle, valeur) => rpc('hg_plat_admin_contenu', { p_jeu: jeuId, p_cle: cle, p_valeur: valeur }),
 });
 
-export const { erreurTexte, activerInvite, estInvite, messages, suivrePartie } = salon;
+export const { erreurTexte, activerInvite, estInvite, jetonInvite, messages, suivrePartie } = salon;
 
 /* ---------- Contenus paramétrables ---------- */
 let cacheContenus = null;

@@ -15,6 +15,7 @@ import { esc, toast } from '../../../commun/core.js';
 import { duel, erreurTexte, JEUX } from '../api.js';
 import { departPartie, premiereFois } from '../../../commun/effets-duels.js';
 import { vuEnAttente } from './fin-fx.js';
+import { boutonQuitter, departDefi, confirmerDepart } from '../../../commun/quitter.js';
 
 const FORMATS = { 1: '1 manche', 3: 'Au meilleur des 3', 5: 'Au meilleur des 5' };
 
@@ -68,7 +69,7 @@ export function creer(root, ctx) {
         <p class="duels-salle-attente" role="status">En attente de la réponse de <strong>${esc(e.defie_pseudo || 'ton adversaire')}</strong></p>
         <p class="duels-decompte" data-compte></p>
         ${reglagesHtml({ ...p, defie: true })}
-        <button type="button" class="btn btn-ghost duels-pleine" data-annuler>Annuler le défi</button>
+        ${boutonQuitter('Annuler le défi', { classe: 'duels-pleine', attrs: 'data-annuler' })}
       </section>`;
     } else {
       root.innerHTML = `<section class="card duels-salle" aria-labelledby="salle-titre">
@@ -80,7 +81,7 @@ export function creer(root, ctx) {
           <p class="muted small duels-salle-lien">${esc(lien())}</p>
         </div>
         ${reglagesHtml({ ...p, defie: false })}
-        <button type="button" class="btn btn-ghost duels-pleine" data-annuler>Annuler</button>
+        ${boutonQuitter('Annuler', { classe: 'duels-pleine', attrs: 'data-annuler' })}
       </section>`;
       root.querySelector('[data-copier]').addEventListener('click', copier);
     }
@@ -102,6 +103,14 @@ export function creer(root, ctx) {
   async function annuler(ev) {
     if (occupe) return;
     const bouton = ev.currentTarget;
+    // Défi envoyé : fenêtre, l'autre ne pourra plus accepter. Duel par code : personne n'y perd rien, pas de fenêtre.
+    if (etat?.partie?.defie) {
+      occupe = true;
+      const oui = await confirmerDepart(departDefi(etat));
+      occupe = false;
+      // Accepté pendant que la fenêtre était ouverte : hg_duel_quitter abandonnerait le duel, ce n'est pas ce qui a été confirmé.
+      if (!oui || (suivi?.etat?.() || etat)?.partie?.statut !== 'attente') return;
+    }
     occupe = true;
     bouton.disabled = true;
     try {

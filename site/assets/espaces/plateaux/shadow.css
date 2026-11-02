@@ -107,7 +107,6 @@
 /* ---------- Barre du haut, élimination ---------- */
 .sh-barre { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0; flex-wrap: wrap; }
 .sh-composition { margin: 0; font-size: 14px; color: var(--sh-muet); }
-.sh-quitter { min-height: 44px; }
 .sh-elimine { margin: 0 0 12px; padding: 10px 14px; border-radius: 12px; background: var(--sh-rouge-fond); color: var(--sh-non); font-weight: 700; font-size: 14px; }
 
 /* ---------- Corps : trois colonnes ---------- */
