@@ -61,9 +61,11 @@ async function versionSite() {
   } catch { return null; }
 }
 
-/** Erreur à ignorer : extension du navigateur, script d'un autre site (« Script error. »), message vide. */
+/** Erreur à ignorer : extension du navigateur, script d'un autre site (« Script error. »), message vide,
+ * avertissement « ResizeObserver loop » (sans effet : la mesure est reprise à l'image suivante). */
 function ignoree(msg, file) {
   if (!msg || /^(uncaught )?script error\.?$/i.test(msg)) return true;
+  if (/^ResizeObserver loop/i.test(msg)) return true;
   return /^(chrome|moz|safari|safari-web)-extension:|^webkit-masked-url:/i.test(String(file || ''));
 }
 

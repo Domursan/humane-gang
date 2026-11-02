@@ -741,7 +741,10 @@ function fitOne(el) {
   else if (!el.style.getPropertyValue('--k')) el.style.setProperty('--k', 0);
 }
 // Recalcule l'échelle quand un cadre change de taille ou réapparaît (onglet rouvert, fenêtre d'enchère fermée…).
-const FIT_RO = typeof ResizeObserver === 'function' ? new ResizeObserver((entries) => entries.forEach((e) => fitOne(e.target))) : null;
+// À l'image suivante : changer --k dans le rappel redimensionne le cadre observé (boucle « ResizeObserver loop »).
+const FIT_RO = typeof ResizeObserver === 'function'
+  ? new ResizeObserver((entries) => requestAnimationFrame(() => entries.forEach((e) => fitOne(e.target))))
+  : null;
 function fitAll(root = document) {
   root.querySelectorAll('.fit').forEach((el) => {
     fitOne(el);

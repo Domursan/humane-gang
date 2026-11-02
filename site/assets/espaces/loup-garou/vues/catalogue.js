@@ -148,9 +148,10 @@ export async function afficher(root) {
   const toutes = () => cartes.forEach(verifier);
   let observateur = null;
   if ('ResizeObserver' in window) {
-    observateur = new ResizeObserver((entrees) => {
+    // À l'image suivante : afficher ou cacher le bouton dans le rappel change la taille observée (boucle « ResizeObserver loop »).
+    observateur = new ResizeObserver((entrees) => requestAnimationFrame(() => {
       entrees.forEach((e) => { const c = parDesc.get(e.target); if (c) verifier(c); });
-    });
+    }));
     cartes.forEach((c) => observateur.observe(c.desc));
   } else {
     window.addEventListener('resize', toutes);

@@ -46,6 +46,9 @@ addEventListener('error', (e) => {
 });
 addEventListener('unhandledrejection', (e) => {
   const r = e.reason;
+  // Transition entre pages abandonnée par le navigateur (clic rapide, page pas encore prête) : la page s'affiche
+  // simplement sans animation. Rien à corriger, on ne la remonte pas.
+  if (/^Transition was (aborted|skipped)/i.test(String(r?.message || ''))) { e.preventDefault(); return; }
   const stack = String(r?.stack || '');
   const at = stack.match(/(https?:\/\/[^\s)]+?):(\d+):(\d+)/);
   remonte({ message: `Unhandled rejection: ${r?.message || r || ''}`, file: at?.[1] || '', line: at ? Number(at[2]) : null, col: at ? Number(at[3]) : null });
