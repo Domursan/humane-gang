@@ -40,7 +40,8 @@ check(await essai(jwt(A)) !== 'parti' && partis.length === n, 'page figée : plu
 E.debutBascule();
 check(!E.estFige() && await essai(jwt(A)) === 'parti', 'retour au compte de la page (bascule demandée ici) : les requêtes repartent');
 change = null;
-check(await essai(jwt(B)) !== 'parti' && change === null, 'pendant une bascule demandée ici : l\'autre compte reste bloqué, sans boîte');
+// setSession (supabase-js) vérifie le nouveau compte avec son propre jeton (GET /auth/v1/user) : bloquée, la bascule échouait.
+check(await essai(jwt(B)) === 'parti' && change === null && !E.estFige(), 'pendant une bascule demandée ici : la vérification du nouveau compte part, sans boîte');
 E.finBascule();
 
 // 3. Comptes de l'appareil

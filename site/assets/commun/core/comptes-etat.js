@@ -90,7 +90,9 @@ function jetonDe(input, init) {
 export function fetchGarde(input, init) {
   if (G.fige) return Promise.reject(new TypeError('Compte changé dans un autre onglet : rien n’est envoyé.'));
   const sub = G.uid ? sujetJeton(jetonDe(input, init)) : null;
-  if (sub && sub !== G.uid) {
+  // Pendant une bascule voulue (debutBascule), setSession vérifie le nouveau compte avec son propre jeton : on laisse passer,
+  // la page se recharge juste après.
+  if (sub && sub !== G.uid && !G.bascule) {
     signalerCompte(sub);
     return Promise.reject(new TypeError('Compte changé dans un autre onglet : rien n’est envoyé.'));
   }
