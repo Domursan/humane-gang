@@ -74,3 +74,4 @@
 2026-11-02T12:21:49.152Z ok supabase/migrations/214_spectateurs.sql
 2026-11-02T12:21:49.987Z ok supabase/migrations/215_encheres_panier.sql
 2026-11-02T17:03:53.281Z ok supabase/migrations/216_donnees_personnelles.sql
+2026-11-02T20:06:54.798Z ok supabase/migrations/217_defi_cartes_nouvelles.sql
