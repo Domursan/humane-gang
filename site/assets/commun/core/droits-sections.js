@@ -53,6 +53,8 @@ export const SECTION_PERM = {
   'nom-de-code': 'admin',
   // Jeux de plateau (Cluedo, Shadow Hunters, Destins, Monopoly, Risk) : noms, Paillettes, badges, parties ; administrateur
   plateaux: 'admin',
+  // Challenges de la semaine (La Fabrique › Animations, migration 218) : réservé à l'administrateur (RLS hg_is_admin)
+  'challenges-semaine': 'admin',
 };
 
 // Planning (idée A2) : visible si l'une de ces permissions est accordée (quiz, cartes, événements, sorties, Secret Santa, bot).

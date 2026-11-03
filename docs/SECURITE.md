@@ -88,3 +88,11 @@ Rapport complet hors dépôt. Corrigé par la migration `176_audit_correctifs.sq
 
 Reste à faire par le propriétaire : activer la protection contre les mots de passe fuités (tableau de bord Supabase › Authentication › Sign In / Providers › Email › « Prevent use of leaked passwords »).
 Les points 3 et 5 de la liste ci-dessus sont réglés (clé `hg_support_hash_key`, bucket `d-files` privé).
+
+## Challenges de la semaine (migration 218, 03/11/2026)
+
+- **Bucket privé `hg-challenges`** (25 Mo, images, vidéos, sons, PDF, texte brut, zip, documents bureautiques ; jamais HTML ni SVG). Chemin `<challenge_id>/<nom aléatoire>.<ext>` : le dossier du membre n'est pas dans le chemin, car les chemins sont donnés aux votants pendant le vote anonyme. Le propriétaire est `storage.objects.owner_id`, posé par l'API de stockage.
+- **Dépôt** : membre, challenge en participation qui attend un fichier, nom et extension contrôlés, 20 fichiers par challenge et 200 au total par membre (`hg_wch__obj_depot_ok`, fonction à part pour éviter la récursion des politiques). **Lecture** : propriétaire, admin, ou membre quand le fichier appartient à une participation d'un challenge non annulé dont la participation est finie (`hg_wch__obj_visible`). **Suppression** : propriétaire et admin.
+- **Tables** : aucune lecture ni écriture directe des membres (RLS admin seulement) ; tout passe par les RPC `hg_wch_*`. Les voix des autres ne sortent jamais d'une RPC de membre ; pendant le vote, ni auteur ni nombre de voix.
+- **Fichiers orphelins** : SQL ne peut pas effacer un objet du stockage (`storage.protect_delete`). Les fichiers sans participation (purge à 12 mois, retrait, compte supprimé) sont listés par `hg_wch_admin_orphelins` et retirés par le panel après une purge manuelle (Entretien).
+- **Reste à surveiller** : le nom d'origine du fichier (`file_name`) est rendu pendant le vote ; un membre qui y met son pseudo se dévoile.

@@ -24,7 +24,7 @@ const U = (n) => `0000000${n}-0000-4000-8000-00000000000${n}`;
     check((await p.textContent('.lieu-tile[data-sub="economie"] .nav-count')).trim() === '1', '(a) tuile Paillettes et dons : compteur 1');
     check((await p.textContent('.lieu-total')).includes('à traiter'), '(a) bandeau du lieu : total « à traiter »');
     const tab = await p.$$eval('.lieu-tile', (as) => as.length);
-    check(tab === 18, `(a) page de La Fabrique : 18 tuiles (${tab})`);
+    check(tab === 19, `(a) page de La Fabrique : 19 tuiles (${tab})`);
     await p.click('.lieu-todo [data-lieu-act="0.1"]');
     await sleep(900);
     check((await log(p)).some((l) => l[0] === 'eco_ignore' && l[1] === 7), '(a) « Ignorer cette semaine » : hg_eco_alerts_ignore(7)');

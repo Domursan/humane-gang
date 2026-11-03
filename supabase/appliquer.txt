@@ -81,3 +81,4 @@ supabase/migrations/214_spectateurs.sql
 supabase/migrations/215_encheres_panier.sql
 supabase/migrations/216_donnees_personnelles.sql
 supabase/migrations/217_defi_cartes_nouvelles.sql
+supabase/migrations/218_challenges_semaine.sql

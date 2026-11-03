@@ -235,5 +235,23 @@ export default {
       ],
       keywords: ["discord", "commande", "slash", "bot", "paillettes", "carte", "sortie", "quiz", "solde"],
     },
+    {
+      slug: 'challenge-de-la-semaine',
+      title: 'Challenge de la semaine',
+      summary: "Envoie ta participation au thème de la semaine, puis vote pour ta préférée parmi celles des autres.",
+      page: "/pages/compte/challenge.html",
+      steps: [
+        { title: "Ouvre le challenge", text: "Depuis la carte « Challenge de la semaine » de l'accueil, ou le menu Autres. Tu y lis le nom, les consignes (« Comment »), le « Pourquoi » et le gain du gagnant." },
+        { title: "Envoie ta participation", text: "Pendant la participation, choisis le fichier demandé (image, vidéo, son, PDF ou texte selon le challenge, 25 Mo au plus), ajoute une légende si tu veux, puis clique sur « Envoyer ma participation ». Les images sont compressées avant l'envoi." },
+        { title: "Change d'avis si besoin", text: "Tant que la participation est ouverte, « Retirer » dans « Mes participations » supprime la tienne : tu peux en envoyer une autre. Les participations des autres restent cachées jusqu'au vote." },
+        { title: "Vote", text: "À la fin de la participation, le vote s'ouvre pour les participants : les participations sont anonymes et mélangées. Clique sur « Voter » sous ta préférée ; tu peux changer ta voix jusqu'à la fin, jamais voter pour la tienne." },
+        { title: "Découvre le résultat", text: "À la fin du vote, les pseudos et les voix s'affichent. La participation la plus votée gagne et reçoit les Paillettes automatiquement ; en cas d'égalité, chaque gagnant reçoit le gain complet." },
+      ],
+      tips: [
+        "Seuls les membres qui ont participé votent : les autres regardent les participations sans voter.",
+        "Tu reçois une notification à l'ouverture du vote et au résultat (réglable dans Mon compte › Mes notifications).",
+      ],
+      keywords: ["challenge", "semaine", "concours", "participation", "vote", "voter", "gagnant", "photo", "paillettes"],
+    },
   ],
 };

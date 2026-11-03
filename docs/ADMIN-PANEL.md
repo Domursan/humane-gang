@@ -23,7 +23,7 @@ de 12 colonnes. Chaque lieu a une couleur, une icône, une phrase d'accroche et 
 | **La Poste** (`#poste`) | Demandes (Assistance, Modèles de réponse, Boîte à idées), Échanges (Messagerie, Fil d'activité), Discord (Bot Discord, Commandes slash) |
 | **La Salle des ventes** (`#ventes`) | Enchères, Échanges entre membres |
 | **Le Camp IRL** (`#camp`) | Qui (Membres IRL), Vivre les sorties (Sorties IRL, Souvenirs et photos), Rendez-vous (Secret Santa) |
-| **La Fabrique de cartes** (`#fabrique`) | Agir (Gestion globale, Drops, Codes cadeaux), Arène, Catalogue (Séries, Cartes, Boosters), Suivi (Joueurs, Statistiques), Économie (Paillettes et dons, Tirage, Recyclage et fabrication, Limites), Animations (Quêtes, Défis du gang, Cagnotte et bulletin, Cartes Champions, Atelier) |
+| **La Fabrique de cartes** (`#fabrique`) | Agir (Gestion globale, Drops, Codes cadeaux), Arène, Catalogue (Séries, Cartes, Boosters), Suivi (Joueurs, Statistiques), Économie (Paillettes et dons, Tirage, Recyclage et fabrication, Limites), Animations (Quêtes, Défis du gang, Challenges de la semaine, Cagnotte et bulletin, Cartes Champions, Atelier) |
 | **La Fête foraine** (`#fete`) | Événements (Événements à thème, Calendrier et cinéma, Calendrier de l'Avent, Saison des Worlds, Anniversaire du gang), Jeux (Questions du gang, Sutom du gang, GeoGuessr, Citations, Preuves de quêtes, Framed et Heardle, Arcade, Secrets, Mes jeux, puis Loup-Garou, Uno, Codenames, Jeux de plateau et Duels, réservés à l'administrateur) |
 | **La Mairie** (`#mairie`) | Organisation (Planning, Journal, Staff), Le site (Identité et mentions légales, Textes et intro, Menu et pied de page, Thème), Technique (État du site, Erreurs du site, Entretien, Archives, Clés avancées) |
 
@@ -109,6 +109,12 @@ Ces droits ne se délèguent pas, même à un Staff qui a toutes les permissions
 - **Clés de réglage sensibles** : les clés du propriétaire (suffixe `_owner`) et `admin_initial` n'ont aucune permission (`hg_settings_perm` renvoie `null`),
   seul l'administrateur peut les lire ou les écrire. `push_vapid_public` est public en lecture, en écriture réservée à l'administrateur.
 - **Loup-Garou, Uno, Codenames, Jeux de plateau, Duels** : sous-sections réservées à l'administrateur (Fête foraine › Jeux).
+- **Challenges de la semaine** (Fabrique › Animations, `#fabrique/challenges`, fiche `#fabrique/challenges/<id>`) : section réservée à
+  l'administrateur (`hg_weekly_challenges` en RLS `hg_is_admin`, RPC `hg_wch_admin_*`, migration 218). Création, modification, annulation
+  et suppression (sans participation) en écriture directe ; la base fige les dates, le type et le quota à la fin de la participation, et tout
+  sauf le nom, les textes et le lot une fois le challenge clos. La fiche liste les participations avec pseudos, fichiers et voix ; « Retirer »
+  demande un motif (envoyé au membre) et supprime le fichier ; sans aucune voix, l'admin désigne le gagnant ou termine « sans gagnant »
+  (`hg_wch_admin_pick`). À l'ouverture, les fichiers orphelins du bucket `hg-challenges` sont retirés (`hg_wch_admin_orphelins`).
 - **Table `hg_private`** : RLS activée sans aucune règle. Elle n'est lisible que par les fonctions et triggers serveur.
 
 ---

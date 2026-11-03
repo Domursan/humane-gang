@@ -29,6 +29,7 @@ const TACHES = [
   ['hg-badges-hourly', 'Attribution des badges'],
   ['hg-auctions-close', 'Clôture des enchères'],
   ['hg-challenges-hourly', 'Défis du gang'],
+  ['hg-wch-tick', 'Challenges de la semaine'],
   ['hg-echanges-hourly', 'Échanges : expirations et alertes'],
   ['hg-nj-images', 'Images des nouveaux jeux', { edge: 'hg-nj-images' }],
   ['hg-duel-tick', 'Minuteur : Duels'],

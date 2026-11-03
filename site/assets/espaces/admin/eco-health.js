@@ -13,7 +13,7 @@ const H = { data: null, error: null };
 const nf = new Intl.NumberFormat('fr-CH');
 const nf1 = new Intl.NumberFormat('fr-CH', { maximumFractionDigits: 1 });
 /** Libellés des raisons du journal des Paillettes (détail des gains concentrés). */
-const REASON = { quete: 'quêtes', defi: 'défis', booster: 'boosters', quotidien: 'passage du jour', recyclage: 'recyclage', fabrication: 'fabrication',
+const REASON = { quete: 'quêtes', defi: 'défis', challenge: 'challenges', booster: 'boosters', quotidien: 'passage du jour', recyclage: 'recyclage', fabrication: 'fabrication',
   echange: 'échanges', photo: 'photos', moment: 'moments', badge: 'badges', capture: 'captures', admin: 'ajustements admin', serie_complete: 'séries complètes' };
 
 /** Charge la santé de l'économie (si la personne a le droit « cartes »). Une erreur est gardée pour l'affichage. */

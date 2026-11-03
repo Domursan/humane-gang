@@ -1,8 +1,8 @@
 # Plan du dépôt — Humane Gang
 
 Où est quoi dans le dépôt, à quoi sert chaque dossier, et où ranger un nouveau fichier.
-Version : <!-- plan:derniere -->état du dépôt au 2 novembre 2026 (dernière migration : 217)<!-- /plan:derniere -->.
-Migrations numérotées de <!-- plan:plage -->001 à 217<!-- /plan:plage --> (quelques numéros manquent ou sont en double : voir `supabase/migrations/README.md`).
+Version : <!-- plan:derniere -->état du dépôt au 2 novembre 2026 (dernière migration : 218)<!-- /plan:derniere -->.
+Migrations numérotées de <!-- plan:plage -->001 à 218<!-- /plan:plage --> (quelques numéros manquent ou sont en double : voir `supabase/migrations/README.md`).
 
 Pour les pages du site (adresses, rôles, accès), voir [PLAN-DU-SITE.md](PLAN-DU-SITE.md). Le README décrit le fonctionnement du site ; ce document décrit seulement l'arborescence.
 

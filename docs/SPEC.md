@@ -38,7 +38,7 @@ Le JS de page commence par `import { sb, initPage, ... } from './core.js'; const
 - Les membres ne voient JAMAIS les infos privées des autres (anniversaire complet, Discord…). L'annuaire = RPC `hg_members()`.
 - Attributions Secret Santa : jamais de select direct (bloqué par RLS). Utiliser les RPC `hg_ss_my_target(p_edition)`, `hg_ss_progress(p_edition)`, `hg_ss_reveal(p_edition)`, `hg_ss_draw(p_edition)` (admin).
 - Événements bot via `notify(event, payload)` ; noms d'événements : `ss_draw`, `ss_gift_sent` {edition_id}, `ss_gift_received` {edition_id}, `irl_new` {event_id}, `support_new` (envoyé par la fonction hg-support elle-même).
-- Stockage : bucket privé `hg-photos` (chemin `<uid>/<event_id>/<fichier>`, afficher via `createSignedUrl`), public `hg-avatars` (`<uid>/avatar.<ext>`), public `hg-assets` (admin : `cartes/base-<année>.png`, `badges/<code>.png`).
+- Stockage : bucket privé `hg-photos` (chemin `<uid>/<event_id>/<fichier>`, afficher via `createSignedUrl`), public `hg-avatars` (`<uid>/avatar.<ext>`), public `hg-assets` (admin : `cartes/base-<année>.png`, `badges/<code>.png`). Privé `hg-challenges` (challenges de la semaine, migration 218 : `<challenge_id>/<nom aléatoire>.<ext>`, 25 Mo, liens signés courts).
 - Ne PAS modifier la base Supabase toi-même. Si un changement de schéma est nécessaire, écris-le dans `supabase/migrations/00X_<nom>.sql` (numéro libre ≥ 003) et signale-le dans ton rapport.
 - Ne touche qu'aux fichiers de ton périmètre. Rapport final : liste des fichiers créés, migrations ajoutées, points ouverts.
 

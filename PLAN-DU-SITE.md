@@ -68,6 +68,7 @@ Les chemins de code sont relatifs à `site/assets/espaces/` (« espace » = un d
 | `/pages/compte/membre.html` | Membre | Carte de membre d'un joueur : infos partagées, badges, vitrine de cartes, « Voir sa collection » ; sur sa propre carte, bouton « Créer une image » (image PNG 1080 × 1350 de sa collection, téléchargée, aucun lien public) et bouton « Mes stats de jeux » vers `/pages/jeux/jeux.html#mes-stats` | `compte/membre.js` |
 | `/pages/compte/messages.html` | Membre | Conversations privées, nouveau message, messages avec son Santa (anonymes), recherche dans mes messages (liste et loupe du fil), réactions émoji (sauf assistance) | `messages/messages.js`, `messages-groupes.js` |
 | `/pages/compte/notifications.html` | Membre | Historique des notifications du site : filtres par catégorie, recherche, lecture et suppression, gardées 90 jours. Ouverte depuis « Voir tout l’historique » du panneau de la photo | `compte/notifications.js`, `commun/core/presence.js` |
+| `/pages/compte/challenge.html` | Membre | Challenge de la semaine (menu Autres, migration 218) : consignes et compte à rebours, participation (fichier ou texte, légende, retrait), vote anonyme des participants (ordre mélangé, une voix), résultat (gagnant, ex æquo, « Choisi par l’admin »), challenges précédents. Carte sur l’accueil à côté du Défi du gang | `challenge/challenge.js`, `challenge/fichiers.js`, `challenge/challenge-commun.js`, `challenge/carte-accueil.js` |
 | `/pages/infos/aide.html` | Public | Tutos illustrés en groupes, recherche, accès à l'assistance | `infos/aide.js`, `infos/tutos/` |
 | `/pages/infos/assistance.html` | Public | Formulaire d'aide (bug, question, idée) et suivi de mes demandes | `infos/assistance.js` |
 | `/pages/infos/legal.html` | Public | Mentions légales, confidentialité, cookies | `infos/legal.js` |
@@ -162,7 +163,7 @@ Sept lieux, regroupés sur le plateau (`#plateau`), avec leurs sous-sections (d�
 | La Poste (`#poste`) | Demandes (Assistance, Modèles de réponse, Boîte à idées) · Échanges (Messagerie, Fil d'activité) · Discord (Bot Discord, Commandes slash) |
 | La Salle des ventes (`#ventes`) | Enchères (enchère de la semaine, dont le lot se compose comme un give : Paillettes, cartes, séries, boosters, créé pour le gagnant à la fin ; une seule à la fois, migration 215 ; et en lecture les enchères des membres : qui a enchéri sur qui) · Échanges entre membres |
 | Le Camp IRL (`#camp`) | Qui (Membres IRL) · Vivre les sorties (Sorties IRL, Souvenirs et photos) · Rendez-vous (Secret Santa) |
-| La Fabrique de cartes (`#fabrique`) | Agir (Gestion globale, Drops, Codes cadeaux) · Arène · Catalogue (Séries, Cartes, Boosters) · Suivi (Joueurs, Statistiques) · Économie (Paillettes et dons, Tirage, Recyclage et fabrication, Limites) · Animations (Quêtes, Défis du gang, Cagnotte et bulletin, Cartes Champions, Atelier) |
+| La Fabrique de cartes (`#fabrique`) | Agir (Gestion globale, Drops, Codes cadeaux) · Arène · Catalogue (Séries, Cartes, Boosters) · Suivi (Joueurs, Statistiques) · Économie (Paillettes et dons, Tirage, Recyclage et fabrication, Limites) · Animations (Quêtes, Défis du gang, Challenges de la semaine, Cagnotte et bulletin, Cartes Champions, Atelier) |
 | La Fête foraine (`#fete`) | Événements (Événements à thème, Calendrier et cinéma, Calendrier de l'Avent, Saison des Worlds, Anniversaire du gang) · Jeux (Questions du gang, Sutom du gang, GeoGuessr, Citations, Preuves de quêtes, Framed et Heardle, Arcade, Secrets, Mes jeux ; Loup-Garou, Uno, Codenames, Jeux de plateau et Duels réservés à l'administrateur) |
 | La Mairie (`#mairie`) | Organisation (Planning, Journal, Staff) · Le site (Identité et mentions légales, Textes et intro, Menu et pied de page, Thème) · Technique (État du site, Erreurs du site, Entretien, Archives, Clés avancées) |
 
@@ -216,6 +217,7 @@ Avant le rangement, les pages étaient toutes à la racine du site (`/jeux.html`
 | `hg-badges-hourly` | Toutes les heures (à hh:07) | Attribution des badges |
 | `hg-cards-hourly` | Toutes les heures (à hh:23) | Récompenses de présence du jeu de cartes |
 | `hg-challenges-hourly` | Toutes les heures (à hh:17) | Progression et récompenses des défis du gang |
+| `hg-wch-tick` | Toutes les 10 minutes | Challenges de la semaine : notification à l’ouverture du vote, clôture des votes échus, gagnants, Paillettes, notification du résultat |
 | `hg-quests-hourly` | Toutes les heures (à hh:02) | Progression des quêtes |
 | `hg-event-cards-hourly` | Toutes les heures (à hh:41) | Distribution des cartes d'événement |
 | `hg-birthdays-daily` | 8 h, heure suisse | Messages et annonces d'anniversaire |

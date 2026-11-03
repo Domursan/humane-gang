@@ -30,7 +30,7 @@ const PING_MS = 50000;
 const STATUTS_MS = 60000;
 /** Libellés des catégories (petite étiquette dans la liste). */
 const CATS = { messages: 'Message', sorties: 'Sortie', echanges: 'Échange', souhaits: 'Cartes', santa: 'Secret Santa',
-  anniversaires: 'Anniversaire', jeux: 'Jeux', tours: 'Jeux', annonces: 'Annonce', info: 'Info' };
+  anniversaires: 'Anniversaire', jeux: 'Jeux', tours: 'Jeux', challenges: 'Challenge', annonces: 'Annonce', info: 'Info' };
 
 /**
  * Libellé d'une catégorie. Les catégories ne sont pas une liste fermée : une catégorie inconnue s'affiche sous son propre nom.

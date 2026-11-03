@@ -1,10 +1,10 @@
 // ===== Accueil : le QG du Humane Gang (/pages/compte/accueil.html) =====
 // Page d'accueil. Visiteur : présentation et connexion. Membre : tuiles (Secret Santa, IRL, Historique),
 // fil d'activité (pastilles et « Voir plus », idée 74), anniversaires à venir (30 jours, carte commune : carte-anniv.js),
-// défi du gang, bandeaux (récap, événement en cours) et boîte à idées.
+// défi du gang et, à côté, la carte du challenge de la semaine, bandeaux (récap, événement en cours) et boîte à idées.
 // Chaque tuile et chaque bloc se charge séparément : une erreur n'empêche pas les autres.
 // Dépendances : core.js (sb, initPage, canAccess, textes réglables), icons.js, dyn-events.js (événement en cours, lu dès le démarrage),
-// accueil-ce-jour.js (tuile « Ce jour-là »).
+// accueil-ce-jour.js (tuile « Ce jour-là »), challenge/carte-accueil.js (carte du challenge, chargée à la demande).
 // Tables et RPC : hg_settings (site_textes), hg_ss_editions, hg_ss_participants, hg_ss_progress, hg_events, hg_event_rsvps,
 // hg_moments, hg_activity, hg_members, hg_challenges_active, hg_ideas, hg_profiles. N'exporte rien.
 import { sb, initPage, esc, $, fmtDate, fmtDateTime, avatarHtml, errMsg, toast, logoAttrs, canAccess, pageLabel, applyTheme, getSiteTheme } from '../../commun/core.js';
@@ -927,6 +927,8 @@ if (!me) {
     tileOn('tile-ss') ? loadSecretSanta() : null, tileOn('tile-irl') ? loadIrl() : null, tileOn('tile-hist') ? loadHistory() : null,
     loadTheme(), tileOn('tile-admin') ? loadAdminTile() : null,
     $('#feed') ? loadFeed() : null, ($('#bdays') ? loadBirthdays() : Promise.resolve()).then(loadCartesAnniv), loadDynBanner(), $('#defi') ? loadChallenges() : null, loadDailyQuestion(), loadSeasonal(),
+    // Challenge de la semaine : carte à côté du bloc des défis (module chargé seulement si la page est accessible)
+    $('#defi') && canAccess('challenge') ? import('../challenge/carte-accueil.js').then((m) => m.mountChallengeHome($('#defi'), me)).catch((e) => console.warn('[challenge]', e?.message || e)) : null,
     home?.loadOwn(),
     tileOn('tile-day') ? import('./accueil-ce-jour.js').then((m) => m.loadOnThisDay($('#tile-day'), me)) : null, // module chargé seulement si la tuile existe
   ]);

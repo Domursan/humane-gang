@@ -108,6 +108,7 @@ export const LIEUX = [
     ...under('Animations', [
       { id: 'quetes', label: 'Quêtes', section: 'cartes', tab: 'quetes', help: 'Missions pour les membres', icon: 'flag' },
       { id: 'defis', label: 'Défis du gang', section: 'defis', help: 'Objectifs collectifs', icon: 'trophy' },
+      { id: 'challenges', label: 'Challenges de la semaine', section: 'challenges-semaine', help: 'Fichiers des membres et vote', icon: 'award' },
       { id: 'cagnotte', label: 'Cagnotte et bulletin', section: 'cagnotte', help: 'Cagnotte et votes', icon: 'vote' },
       { id: 'champions', label: 'Cartes Champions', section: 'champions', help: 'Cartes des champions', icon: 'star' },
       { id: 'recettes', label: 'Atelier (recettes)', section: 'cartes', tab: 'recettes', help: 'Recettes de fabrication', icon: 'flask' },

@@ -34,7 +34,7 @@ const slugOf = (s) => String(s ?? '').split(/[?#]/)[0].split('/').pop().replace(
 
 /** Dossier de chaque page publiée : /pages/<dossier>/<slug>.html. Une page absente de cette table part de /pages/<slug>.html. */
 const PAGE_DIR = {
-  accueil: 'compte', compte: 'compte', membre: 'compte', messages: 'compte', notifications: 'compte',
+  accueil: 'compte', challenge: 'compte', compte: 'compte', membre: 'compte', messages: 'compte', notifications: 'compte',
   admin: 'admin',
   cartes: 'cartes', 'collection-a4': 'cartes',
   aide: 'infos', assistance: 'infos', legal: 'infos', rejoindre: 'infos',

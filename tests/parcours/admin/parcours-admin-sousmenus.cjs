@@ -37,7 +37,7 @@ const TREE = {
   camp: [['Qui', ['membres-irl']], ['Vivre les sorties', ['sorties', 'souvenirs']], ['Rendez-vous', ['secret-santa']]],
   fabrique: [['Agir', ['gestion', 'drops', 'codes']], ['Arène', ['arene']], ['Catalogue', ['series', 'cartes', 'boosters']],
     ['Suivi', ['joueurs', 'stats']], ['Économie', ['economie', 'tirage', 'recyclage', 'limites']],
-    ['Animations', ['quetes', 'defis', 'cagnotte', 'champions', 'recettes']]],
+    ['Animations', ['quetes', 'defis', 'challenges', 'cagnotte', 'champions', 'recettes']]],
   fete: [['Événements', ['evenements', 'rdv', 'avent', 'saison-worlds', 'anniv-gang']],
     ['Jeux', ['programmation', 'questions', 'sutom', 'geoguessr', 'citations', 'preuves', 'framed-heardle', 'arcade', 'secrets', 'mes-jeux', 'loup-garou', 'uno', 'nom-de-code', 'plateaux', 'duels']]],
   mairie: [['Organisation', ['planning', 'journal', 'staff']], ['Le site', ['identite', 'textes', 'menu', 'theme']],
@@ -148,7 +148,8 @@ async function goHash(p, h) {
   check(JSON.stringify(lieux) === JSON.stringify(['#ventes', '#fabrique', '#mairie']), `(d) Staff ['cartes'] : plateau = ${lieux.join(' ')} (Planning inclus)`);
   await goHash(p, '#fabrique');
   const st = await groupsOnPage(p);
-  check(JSON.stringify(st) === JSON.stringify(TREE.fabrique), `(d) Staff ['cartes'] : La Fabrique complète (${st.map(([h]) => h).join(', ')})`);
+  // Challenges de la semaine : réservé à l'administrateur, absent pour le Staff « cartes ».
+  check(JSON.stringify(st) === JSON.stringify(TREE.fabrique.map(([h, subs]) => [h, subs.filter((s) => s !== 'challenges')])), `(d) Staff ['cartes'] : La Fabrique complète (${st.map(([h]) => h).join(', ')})`);
   check(await p.locator('#lieu-root a[href="#fete/secrets"], #lieu-root a[href="#poste/fil"]').count() === 0, '(d) Staff : ni Secrets, ni Fil d’activité dans les pages');
   await goHash(p, '#fete/secrets');
   check(await p.evaluate(() => location.hash) !== '#fete/secrets' && !(await p.isVisible('#eggs')), '(d) Staff : #fete/secrets redirigée, section jamais affichée');

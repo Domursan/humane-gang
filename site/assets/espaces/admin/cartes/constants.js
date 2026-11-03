@@ -26,7 +26,7 @@ export const RARITY_IDS = RARITIES_TIRAGE.map((r) => r.id);
 const CRAFT_IDS = ['commune', 'peu_commune', 'rare', 'epique', 'legendaire']; // mythique et identite ne se fabriquent jamais
 /* Libellés des raisons enregistrées dans le journal des Paillettes (hg_wallet_log). */
 export const REASON_LABEL = {
-  quete: 'Quête de la semaine', defi: 'Défi du gang',
+  quete: 'Quête de la semaine', defi: 'Défi du gang', challenge: 'Challenge de la semaine',
   booster: 'Booster', quotidien: 'Passage du jour', recyclage: 'Recyclage', fabrication: 'Fabrication', echange: 'Échange',
   reponse_sortie: 'Réponse à une sortie', sortie_creee: 'Sortie créée', photo: 'Photo publiée', moment: 'Moment publié',
   badge: 'Badge gagné', capture: 'Image attrapée', presence: 'Présence à une sortie', cadeau_santa: 'Cadeau Secret Santa',

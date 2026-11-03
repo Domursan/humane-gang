@@ -9,6 +9,7 @@
  * (rappels de sortie) et « Cartes · souhaits » sur Discord reprend notify_card_wish ; la RPC tient ces colonnes à jour.
  * « Carte de ma liste proposée » (migration 193) ne part que sur le site : sa ligne a un seul interrupteur, sous « Cartes · souhaits ».
  * « Anniversaires · cartes communes » (migration 205) : notification du site seulement, une ligne à un interrupteur sous « Anniversaires ».
+ * « Challenge de la semaine » (migration 218, clé challenges.site) : notification du site seulement, ligne à un interrupteur.
  * « C’est ton tour » (migration 200) : les heures calmes coupent aussi son MP, voir hg_notif_allowed.
  * Exporte : NOTIF_ROWS, mountNotifPrefs.
  */
@@ -68,6 +69,10 @@ function blockHtml(me, row) {
   const ligneCartesAnniv = `<div class="np-row" role="row">
       <div class="np-cat" role="rowheader"><b>Anniversaires · cartes communes</b><span>Une carte s’ouvre pour un membre, rappel la veille si tu n’as pas signé.</span></div>
       <div class="np-cell np-site" role="cell"><span class="np-soon">Sur le site</span>${sw('anniversaires.site', 'Cartes d’anniversaire communes : sur le site')}</div></div>`;
+  // Challenge de la semaine (migration 218) : notification du site seulement, si la page est ouverte au membre.
+  const ligneChallenges = pageLabel('challenge') && canAccess('challenge') ? `<div class="np-row" role="row">
+      <div class="np-cat" role="rowheader"><b>Challenge de la semaine</b><span>Ouverture du vote, résultat. Un retrait de ta participation par l’admin est toujours signalé.</span></div>
+      <div class="np-cell np-site" role="cell"><span class="np-soon">Sur le site</span>${sw('challenges.site', 'Challenge de la semaine : sur le site')}</div></div>` : '';
   const rows = NOTIF_ROWS.filter(([, , , , page]) => !page || (pageLabel(page) && canAccess(page))).map(([k, t, d, push]) => { const nom = k === 'tours' ? 'C’est ton tour' : t; return `<div class="np-row" role="row">
       <div class="np-cat" role="rowheader"><b>${esc(t)}</b><span>${esc(d)}</span></div>
       <div class="np-cell" role="cell">${push ? sw(`${k}.push`, `${nom} : sur ce téléphone`) : '<span class="np-soon">Bientôt</span>'}</div>
@@ -80,7 +85,7 @@ function blockHtml(me, row) {
       </label>
       <div class="np-table" role="table" aria-label="Notifications par catégorie">
         <div class="np-head" role="row"><span role="columnheader"><span class="visually-hidden">Catégorie</span></span><span role="columnheader">Sur ce téléphone</span><span role="columnheader">Sur Discord</span></div>
-        ${rows}
+        ${rows}${ligneChallenges}
         <div class="np-row" role="row">
           <div class="np-cat" role="rowheader"><b>Annonces du Staff</b><span>Toujours actives</span></div>
           <div class="np-cell" role="cell"><span class="np-soon">Toujours</span></div>

@@ -7,7 +7,8 @@
 // Dépendances : core.js (Supabase, initPage, profil), profile-fields.js (champs des informations), push.js (notifications),
 // badge-levels.js (niveaux des badges), invite-config.js (format des codes), icons.js.
 // Tables, RPC et stockage : hg_profiles, hg_profile_info, hg_badges, hg_user_badges, hg_my_badge_progress, hg_dyn_captures,
-// hg_join, hg_export_my_data, hg_delete_my_account, hg_photos, hg_moments, stockage hg-avatars et hg-photos ;
+// hg_join, hg_export_my_data, hg_delete_my_account, hg_photos, hg_moments, hg_wch_mes_fichiers, stockage hg-avatars, hg-photos
+// et hg-challenges ;
 // « Mes souvenirs » : hg_carte_anniv_souvenirs (accueil/carte-anniv.js, migration 205).
 // N'exporte rien.
 import { sb, authLanding, signOutDevice, initPage, getProfile, esc, $, $$, toast, errMsg, fmtDate, fmtDateTime, avatarHtml, updateHeaderProfile, pageHref } from '../../commun/core.js';
@@ -1135,6 +1136,12 @@ function bindData() {
 /** Supprime (au mieux) les fichiers stockés de l'utilisateur avant la suppression du profil. */
 async function cleanupStorage(withPhotos) {
   try { await sb.storage.from('hg-avatars').remove(AVATAR_EXTS.map((x) => `${me.id}/avatar.${x}`)); } catch {}
+  // Fichiers envoyés aux challenges de la semaine (migration 218) : toujours retirés, par lots de 100.
+  try {
+    const { data } = await sb.rpc('hg_wch_mes_fichiers');
+    const list = Array.isArray(data) ? data : [];
+    for (let i = 0; i < list.length; i += 100) await sb.storage.from('hg-challenges').remove(list.slice(i, i + 100));
+  } catch (e) { console.warn('[compte] nettoyage des fichiers des challenges', e); }
   if (!withPhotos) return;
   try {
     const [{ data: photos }, { data: moments }] = await Promise.all([

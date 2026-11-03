@@ -19,7 +19,7 @@ const LIMITE = 30;
 const FRAPPE_MS = 250;
 /** Libellés des filtres, dans leur ordre d'affichage. Une catégorie absente d'ici vient ensuite, dans l'ordre alphabétique. */
 const FILTRES = { souhaits: 'Cartes', echanges: 'Échanges', messages: 'Messages', sorties: 'Sorties', jeux: 'Jeux', tours: 'Tours de jeu', annonces: 'Annonces',
-  santa: 'Secret Santa', anniversaires: 'Anniversaires', quiz: 'Quiz', info: 'Infos' };
+  santa: 'Secret Santa', anniversaires: 'Anniversaires', quiz: 'Quiz', challenges: 'Challenges', info: 'Infos' };
 const ORDRE = Object.keys(FILTRES);
 const nomFiltre = (c) => FILTRES[c] || catNom(c);
 const rang = (c) => (ORDRE.includes(c) ? ORDRE.indexOf(c) : ORDRE.length);

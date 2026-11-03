@@ -247,6 +247,9 @@ regSub('drops', { main: () => mountDropsSection($('#drops-root')) }); // drops :
 regSub('cagnotte', { main: () => import('./cartes/pots.js').then((m) => m.mountPotsSection($('#pots-root'))) });
 regSub('champions', { main: () => import('./cartes/champions.js').then((m) => m.mountChampionsSection($('#champions-root'))) });
 regSub('defis', { main: () => mountChallengesSection($('#challenges-root')) });
+// Challenges de la semaine (migration 218, administrateur) : liste, ou fiche de suivi avec #fabrique/challenges/<id> ; module à la demande
+const wchMod = () => import('./admin-wch.js');
+regSub('challenges', { main: async () => (await wchMod()).mountWchSection($('#wch-root')), open: async (_el, { id }) => (await wchMod()).openWch(id) });
 // questions du gang : un onglet réponses et statistiques ; #fete/questions/jour ouvre l'onglet « Question du jour » (Programmation)
 regSub('questions', { main: () => mountQuizSection($('#quiz-root')), open: (_el, { id }) => { if (id === 'jour') $('#adq-tab-j')?.click(); } });
 regSub('sutom', { main: () => mountSutomSection($('#sutom-root')) }); // Sutom du gang (J8) : banque de mots, programmation

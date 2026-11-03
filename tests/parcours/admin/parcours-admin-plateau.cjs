@@ -1,6 +1,6 @@
 // Parcours : plateau d'action du panel (/pages/admin/admin.html) : accueil par défaut, 7 lieux, page de lieu avec tuiles, fil d'Ariane
 // et retour, anciennes adresses, Staff partiel, téléphone 390 px sans défilement horizontal, aucune erreur JavaScript.
-// (a) administrateur : #plateau par défaut, 7 lieux sur le plan (chemin, pastilles, actions rapides) ; ouverture de La Fabrique (18 tuiles) ; une tuile
+// (a) administrateur : #plateau par défaut, 7 lieux sur le plan (chemin, pastilles, actions rapides) ; ouverture de La Fabrique (19 tuiles) ; une tuile
 //     mène à la page (fil « Plateau › Lieu › Page », retour au lieu) ; le fil ramène au plateau.
 // (b) anciennes adresses : #pilotage/…, #membres/…, #irl/…, #event/…, #cartes/…, #jeux/…, #comptes, #apercu, #reglages.
 // (c) Staff { cartes, journal } : seuls les lieux permis (Mairie, Fabrique, Salle des ventes) sont sur le plateau.
@@ -43,7 +43,7 @@ const settle = async (p) => { await sleep(350); return p.evaluate(() => location
     check((await p.evaluate(() => location.hash)) === '#fabrique', '(a) clic sur La Fabrique de cartes : #fabrique');
     check((await p.textContent('#zone-title')).trim() === 'La Fabrique de cartes', '(a) titre de la page de lieu');
     const tuiles = await p.$$eval('.lieu-tile', (as) => as.length);
-    check(tuiles === 18, `(a) page de lieu : 18 tuiles (${tuiles})`);
+    check(tuiles === 19, `(a) page de lieu : 19 tuiles (${tuiles})`);
     const groupes = await p.$$eval('.lieu-group-title', (hs) => hs.map((h) => h.textContent.trim()));
     check(JSON.stringify(groupes) === JSON.stringify(['Agir', 'Arène', 'Catalogue', 'Suivi', 'Économie', 'Animations']),
       `(a) groupes de la page : ${groupes.join(', ')}`);

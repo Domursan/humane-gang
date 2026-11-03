@@ -2,6 +2,7 @@
 // (.hg-dialog de ui-confirm.css) et son comportement (<dialog> modal, Échap ferme, focus sur « Annuler », retirée à la fermeture).
 // Aperçu : hg_entretien_apercu ; purge : hg_entretien_purger (administrateur seulement, journalisées). Les deux passent par la même
 // fonction de base que la purge de nuit (migration 192). La fenêtre n'invente aucun chiffre : elle plafonne l'aperçu avec le plafond rendu.
+// Après la purge, les fichiers du bucket hg-challenges sans participation (hg_wch_admin_orphelins, migration 218) sont retirés du stockage.
 // Utilisé par admin-entretien.js. Dépend de core.js (sb, toast, errMsg, esc) et entretien-sante.js (nf).
 import { sb, toast, errMsg, esc } from '../../commun/core.js';
 import { nf } from './entretien-sante.js';
@@ -20,12 +21,34 @@ const TABLES = [
   ['hg_cartes_anniv_mots', 'Mots des cartes d’anniversaire', 365],
   ['hg_cartes_anniv', 'Cartes d’anniversaire', 365],
   ['hg_jeux_jokers', 'Jokers (série terminée)', 365],
+  ['hg_weekly_challenge_votes', 'Voix des challenges finis', 365],
+  ['hg_weekly_challenge_winners', 'Gagnants des challenges finis', 365],
+  ['hg_weekly_challenge_entries', 'Participations aux challenges finis', 365],
 ];
 const TEXTE = {
   charge: 'L’aperçu compte les lignes concernées.',
   vide: 'Rien à purger pour l’instant : aucune ligne ne dépasse les durées réglées.',
   pret: 'Ces lignes seront supprimées définitivement.',
 };
+
+/**
+ * Fichiers du bucket hg-challenges qui n'ont plus de participation (purgée, retirée, compte supprimé, envoi abandonné depuis
+ * plus d'un jour) : la base ne peut pas les effacer, ils partent ici par l'API de stockage, au mieux, par lots de 100 (migration 218).
+ * @returns {Promise<number>} Nombre de fichiers retirés (0 en cas d'échec : la purge des lignes, elle, est faite).
+ */
+async function fichiersChallenges() {
+  try {
+    const { data, error } = await sb.rpc('hg_wch_admin_orphelins');
+    if (error || !Array.isArray(data) || !data.length) return 0;
+    let n = 0;
+    for (let i = 0; i < data.length; i += 100) {
+      const { error: e } = await sb.storage.from('hg-challenges').remove(data.slice(i, i + 100));
+      if (e) break;
+      n += Math.min(100, data.length - i);
+    }
+    return n;
+  } catch { return 0; }
+}
 
 /** « n ligne » ou « n lignes ». */
 export const lignes = (n) => `${nf(n)} ${n > 1 ? 'lignes' : 'ligne'}`;
@@ -114,9 +137,11 @@ export function ouvrirPurge(onPurge) {
       const { data, error } = await sb.rpc('hg_entretien_purger');
       if (error) throw error;
       const n = Object.values(data?.tables || {}).reduce((s, x) => s + Number(x || 0), 0);
+      const f = await fichiersChallenges();
       enCours = false;
       dlg.close('fait');
-      toast(n ? `${lignes(n)} ${n > 1 ? 'purgées' : 'purgée'}.` : 'Aucune ligne purgée.', 'ok');
+      toast((n ? `${lignes(n)} ${n > 1 ? 'purgées' : 'purgée'}.` : 'Aucune ligne purgée.')
+        + (f ? ` ${nf(f)} ${f > 1 ? 'fichiers de challenge retirés' : 'fichier de challenge retiré'}.` : ''), 'ok');
       onPurge?.(n);
     } catch (e) {
       enCours = false;

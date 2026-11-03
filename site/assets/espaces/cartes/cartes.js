@@ -82,7 +82,7 @@ const REASON_LABEL = {
   serie_complete: 'Série complétée', reponse_sortie: 'Réponse à une sortie', presence: 'Présence à une sortie', photo: 'Photo partagée',
   moment: 'Moment culte', badge: 'Badge obtenu', capture: 'Capture d’événement', sortie_creee: 'Sortie créée',
   cadeau_santa: 'Cadeau Secret Santa', echange: 'Échange de cartes', admin: 'Ajustement du gang',
-  quete: 'Quête de la semaine', defi: 'Défi du gang', don_admin: 'Don du gang',
+  quete: 'Quête de la semaine', defi: 'Défi du gang', challenge: 'Challenge de la semaine', don_admin: 'Don du gang',
   framed: 'Framed du ciné-club', heardle: 'Heardle du gang', bataille: 'Arène de cartes', bataille_def: 'Défense tenue (Arène)',
   cagnotte: 'Cagnotte du gang', cagnotte_remboursee: 'Cagnotte remboursée', cagnotte_annulee: 'Cagnotte annulée', // C13 (migration 082)
   code: 'Code cadeau', atelier: 'Atelier', enchere: 'Offre d’enchère', enchere_remboursee: 'Enchère dépassée (remboursée)',

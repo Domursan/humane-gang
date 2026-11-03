@@ -101,6 +101,7 @@ const SPEC = {
   membre: { fixture: 'fake-sb-social.mjs' },
   calendrier: { fixture: 'fake-sb-vd.mjs' }, cine: { fixture: 'fake-sb-vd.mjs' },
   citations: { fixture: 'fake-sb-contenus.mjs' }, playlist: { fixture: 'fake-sb-contenus.mjs' }, recap: { fixture: 'fake-sb-contenus.mjs' },
+  challenge: { fixture: 'fake-sb-challenge.mjs' }, // challenge de la semaine (migration 218), en phase de participation
 };
 
 /**
