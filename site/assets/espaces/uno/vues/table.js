@@ -104,11 +104,32 @@ function trier(cartes, mode) {
  * @param {number} n nombre d'adversaires.
  * @returns {Array<{x:number, y:number}>}
  */
-function placer(n) {
-  const etendue = n <= 1 ? 0 : Math.min(212, 40 + 36 * (n - 1));
+function placer(n, w = 800, h = 470) {
+  if (n <= 6) {
+    const etendue = n <= 1 ? 0 : Math.min(212, 40 + 36 * (n - 1));
+    return Array.from({ length: n }, (_, k) => {
+      const phi = (n <= 1 ? 90 : 90 + etendue / 2 - k * (etendue / (n - 1))) * Math.PI / 180;
+      return { x: 50 + 40 * Math.cos(phi), y: 50 - 34 * Math.sin(phi) };
+    });
+  }
+  // Plus de six : l'arc s'ouvre jusqu'à faire presque le tour (300°, le bas reste libre au-dessus de ma main) et les sièges
+  // sont espacés à distance égale en pixels, pas en degrés : sinon ils s'entassent sur les côtés de l'ovale.
+  const etendue = Math.min(300, 30 * (n - 1));
+  const ry = n > 12 ? 39 : 36;
+  const a0 = (90 + etendue / 2) * Math.PI / 180;
+  const a1 = (90 - etendue / 2) * Math.PI / 180;
+  const pts = [];
+  let long = 0;
+  for (let i = 0; i <= 600; i++) {
+    const phi = a0 + (a1 - a0) * i / 600;
+    const p = { x: 50 + 40 * Math.cos(phi), y: 50 - ry * Math.sin(phi), l: 0 };
+    if (pts.length) { const q = pts[pts.length - 1]; long += Math.hypot((p.x - q.x) * w, (p.y - q.y) * h); }
+    p.l = long;
+    pts.push(p);
+  }
   return Array.from({ length: n }, (_, k) => {
-    const phi = (n <= 1 ? 90 : 90 + etendue / 2 - k * (etendue / (n - 1))) * Math.PI / 180;
-    return { x: 50 + 40 * Math.cos(phi), y: 50 - 34 * Math.sin(phi) };
+    const p = pts.find((q) => q.l >= long * k / (n - 1) - 1e-6) || pts[pts.length - 1];
+    return { x: p.x, y: p.y };
   });
 }
 
@@ -360,14 +381,18 @@ export function creer(root, ctx) {
   }
 
   /** Partie fixe d'un siège (le reste est peint par peindreSiege, sans recréer le nœud : ses animations survivent). */
+  /** Densité des sièges : en ligne de 7 à 12 adversaires, photo seule au-delà (13 à 19, partie de 20 places). */
+  const densite = (n) => (n > 12 ? ' uno-mini' : n > 6 ? ' uno-serre' : '');
+
   function siege(j, pos, n) {
-    return `<li class="uno-siege${n > 6 ? ' uno-serre' : ''}"
+    const inv = j.invite ? ' <span class="uno-invite-tag">invité</span>' : '';
+    return `<li class="uno-siege${densite(n)}${j.invite ? ' est-invite' : ''}"
         style="--x:${pos.x.toFixed(1)}%;--y:${pos.y.toFixed(1)}%" data-joueur="${esc(j.user_id)}">
-      <span class="uno-siege-photo">${avatar(j, n > 6 ? 44 : 56)}<span data-badge></span><span data-pastille></span>
+      <span class="uno-siege-photo">${avatar(j, n > 12 ? 36 : n > 6 ? 40 : 56)}<span data-badge></span><span data-pastille></span>
         <span class="uno-tampon" aria-hidden="true">${ICONE_BLOQUE}</span></span>
       <span class="uno-siege-infos">
-        <span class="uno-siege-nom"><strong style="color:${couleurJoueur(j)}">${esc(j.pseudo || '?')}</strong>${j.invite ? ' <span class="uno-invite-tag">invité</span>' : ''}</span>
-        <span class="uno-siege-cartes"><span class="uno-mini-dos" aria-hidden="true"></span><span data-nb></span></span>
+        <span class="uno-siege-nom"><strong style="color:${couleurJoueur(j)}">${esc(j.pseudo || '?')}</strong>${n > 6 ? '' : inv}</span>
+        <span class="uno-siege-cartes"><span class="uno-mini-dos" aria-hidden="true"></span><span data-nb></span>${n > 6 ? inv : ''}</span>
         <span class="uno-etiquettes"></span>
       </span>
       <span data-lecteur></span>
@@ -384,7 +409,8 @@ export function creer(root, ctx) {
     li.classList.toggle('exclu', !!j.exclu);
     li.classList.toggle('is-robot', robot);
     ecritHtml(li.querySelector('.uno-mini-dos'), '<span></span>'.repeat(Math.min(nb, 3)));
-    ecritTexte(li.querySelector('[data-nb]'), nbCartes(nb));
+    if (li.classList.contains('uno-mini')) ecritHtml(li.querySelector('[data-nb]'), `${nb}<span class="uno-nb-mot"> ${nb === 1 ? 'carte' : 'cartes'}</span>`);
+    else ecritTexte(li.querySelector('[data-nb]'), nbCartes(nb));
     ecritHtml(li.querySelector('[data-badge]'), j.uno ? '<span class="uno-badge-siege">UNO</span>' : '');
     ecritHtml(li.querySelector('[data-pastille]'), robot ? `<span class="rb-pastille" title="Robot">${ICONE_ROBOT}</span>` : '');
     ecritHtml(li.querySelector('.uno-etiquettes'), `${tour ? '<span class="uno-joue">Joue</span>' : ''}${j.exclu ? '<span class="uno-tag">exclu</span>' : ''}${robot ? '<span class="uno-tag rb-tag">robot</span>' : ''}`);
@@ -397,10 +423,18 @@ export function creer(root, ctx) {
     const cle = liste.map((j) => [j.user_id, j.pseudo, j.couleur, j.avatar_url, j.invite].join('|')).join('#');
     if (cle !== cleSieges) {
       cleSieges = cle;
-      const pos = placer(liste.length);
+      const pos = placer(liste.length, refs.sieges.clientWidth || 800, refs.sieges.clientHeight || 470);
       refs.sieges.innerHTML = liste.map((j, k) => siege(j, pos[k], liste.length)).join('');
     }
     liste.forEach(peindreSiege);
+  }
+
+  /** La table change de proportions (fenêtre, chat masqué) : les sièges glissent à leur nouvelle place, sans être recréés. */
+  function replacerSieges() {
+    const lis = [...refs.sieges.children];
+    if (lis.length <= 6 || !refs.sieges.clientWidth) return;
+    const pos = placer(lis.length, refs.sieges.clientWidth, refs.sieges.clientHeight);
+    lis.forEach((li, k) => { li.style.setProperty('--x', `${pos[k].x.toFixed(1)}%`); li.style.setProperty('--y', `${pos[k].y.toFixed(1)}%`); });
   }
 
   /** Empile une carte sur la défausse montrée (trois au plus). */
@@ -1336,6 +1370,8 @@ export function creer(root, ctx) {
   grand.addEventListener('change', surChangementEcran);
   const observateur = typeof ResizeObserver === 'function' ? new ResizeObserver(() => placerMain()) : null;
   observateur?.observe(refs.main);
+  const observateurTable = typeof ResizeObserver === 'function' ? new ResizeObserver(() => replacerSieges()) : null;
+  observateurTable?.observe(refs.sieges);
 
   /** Onglet masqué : rien ne doit rester en attente, l'état revient d'un coup. */
   function surVisibilite() {

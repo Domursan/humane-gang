@@ -54,7 +54,23 @@
   background: rgba(13, 11, 19, .78); border-radius: 16px; }
 .uno-siege.est-tour .uno-siege-nom strong { text-shadow: 0 0 12px rgba(226, 199, 126, .7); }
 .uno-siege.exclu { opacity: .4; }
-.uno-siege.uno-serre { width: 96px; }
+/* Ordinateur, 7 à 12 adversaires : siège en ligne (photo à gauche). 13 et plus : photo, nombre de cartes en pastille sur la
+   photo, pseudo dessous. « Joue » passe en pastille sur le bord haut ; un invité a un anneau en pointillés (« invité » reste lu). */
+@media (min-width: 761px) {
+  .uno-siege.uno-serre { width: 128px; flex-direction: row; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px; text-align: left; }
+  .uno-serre .uno-siege-infos { align-items: flex-start; gap: 1px; flex: 1; }
+  .uno-serre .uno-siege-nom, .uno-mini .uno-siege-nom { flex-wrap: nowrap; max-width: 100%; font-size: 13px; }
+  .uno-serre .uno-siege-nom strong, .uno-mini .uno-siege-nom strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .uno-serre .uno-siege-cartes { gap: 4px; font-size: 12px; white-space: nowrap; }
+  .uno-serre .uno-etiquettes, .uno-mini .uno-etiquettes { position: absolute; left: 50%; top: -10px; z-index: 3; transform: translateX(-50%); }
+  .uno-serre .uno-badge-siege, .uno-mini .uno-badge-siege { right: -14px; top: -10px; font-size: 12px; }
+  .uno-serre .uno-invite-tag, .uno-mini .uno-invite-tag, .uno-mini .uno-nb-mot { position: absolute; width: 1px; height: 1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .uno-serre.est-invite .uno-av, .uno-mini.est-invite .uno-av { outline: 2px dashed var(--muted); outline-offset: 1px; }
+  .uno-siege.uno-mini { width: 76px; gap: 0; padding: 3px 2px 3px; border-radius: 14px; }
+  .uno-mini .uno-mini-dos { display: none; }
+  .uno-mini .uno-siege-cartes { position: absolute; left: calc(50% + 10px); top: 28px; z-index: 2; min-width: 22px; height: 22px; padding: 0 5px;
+    justify-content: center; border-radius: 999px; background: #F4F1EA; color: #0B0A10; font-size: 12px; font-weight: 800; box-shadow: 0 0 0 2px #0B0A10; }
+}
 .uno-siege-infos { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
 .uno-siege-nom { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; font-size: 15px; font-weight: 700; }
 .uno-siege-cartes { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
