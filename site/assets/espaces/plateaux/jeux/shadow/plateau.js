@@ -2,12 +2,13 @@
 /*
  * Rôle : HTML de la table de Shadow Hunters, sans logique de jeu (table.js décide quand le refaire).
  *   Table ronde (maquette « Table de veillée ») : anneau de la piste des blessures (0 à 14) avec les pions,
- *   médaillons des joueurs autour, les 6 lieux en tuiles au centre (image assets/images/plateaux/shadow/<lieu>.webp
- *   si elle existe, sinon dessin de la maquette), et le visuel d'un personnage.
+ *   médaillons des joueurs autour (personnage, camp et PV une fois connus), et sous la table les 6 lieux rangés par zone
+ *   (image assets/images/plateaux/shadow/<lieu>.webp si elle existe, sinon dessin de la maquette, avec l'effet du lieu),
+ *   et le visuel d'un personnage.
  *   Règles fixes : points de vie maximum, camps, dés des lieux. Les noms et textes viennent des contenus (table.js).
  * Dépendances : core.js (esc, initials).
- * Exporte : LIEUX, GROUPES, PV_MAX, CAMP_LIBELLE, campDe, couleurCamp, lieuxAplatis, voisinsDe,
- *           plateauHtml, pisteHtml, medaillonsHtml, persoVisuelHtml.
+ * Exporte : LIEUX, GROUPES, PV_MAX, CAMP_LIBELLE, campDe, couleurCamp, lieuxAplatis, voisinsDe, zoneDe,
+ *           zonesHtml, pisteHtml, medaillonsHtml, persoVisuelHtml.
  */
 import { esc, initials } from '../../../../commun/core.js';
 
@@ -75,11 +76,6 @@ function dessinLieu(id) {
   return `<svg class="sh-lieu-svg" viewBox="0 0 314 161" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">${DESSIN[id] || DESSIN.ermite}</svg>`;
 }
 
-/** Place de chaque lieu sur la table, en % du côté (coin haut-gauche de la tuile), d'après la maquette. */
-const POS_LIEU = {
-  ermite: [24, 21], porte: [52, 21], sanctuaire: [9, 44.5],
-  monastere: [67, 44.5], foret: [24, 68], cimetiere: [52, 68],
-};
 /** Rayons en % du côté : cases de la piste (anneau intérieur) et médaillons des joueurs (anneau extérieur). */
 const R_PISTE = 33;
 const R_MEDAILLON = 48;
@@ -103,39 +99,53 @@ function pionHtml(j, { moiId = null, tour = null, mort = false, zone = '' } = {}
   return `<span class="${classes.join(' ')}" data-uid="${esc(j.user_id)}" data-zone="${esc(zone)}" style="--pion:${couleurPion(j)}" role="img" aria-label="${esc(nom)}" title="${esc(nom)}">${esc(initials(j.pseudo))}</span>`;
 }
 
+/** Numéro de zone (1 à 3) d'un lieu, d'après les groupes tirés par le serveur ; null si le lieu est inconnu. */
+export function zoneDe(lieu, zones) {
+  const z = Array.isArray(zones) && zones.length ? zones : GROUPES;
+  const i = z.findIndex((g) => Array.isArray(g) && g.includes(lieu));
+  return i < 0 ? null : i + 1;
+}
+
 /**
- * Lieux : six tuiles au centre de la table, avec les pions des joueurs sur leur lieu.
+ * Lieux, rangés par zone (les deux lieux d'une zone côte à côte, dans l'ordre tiré par le serveur) : visuel, dés, nom,
+ * effet du lieu et pions des joueurs qui s'y trouvent. On attaque les joueurs de sa zone.
  * @param {object} o
- *   lieux : { id: {id, nom, texte} } ; joueurs : etat.joueurs ;
+ *   zones : etat.jeu.zones (3 groupes de 2 lieux) ; lieux : { id: {id, nom, texte} } ; joueurs : etat.joueurs ;
  *   options : lieux proposés (phase choisir_zone) ; choix : lieu coché par moi, ou null ;
- *   images : { id: url } des visuels qui existent ; moiId ; tour : qui doit agir.
- * @returns {string} HTML (<div class="sh-plan">).
+ *   images : { id: url } des visuels qui existent ; moiId ; tour : qui doit agir ; maZone : numéro de ma zone, ou null.
+ * @returns {string} HTML (<ol class="sh-zones">).
  */
-export function plateauHtml({ lieux = {}, joueurs = [], options = [], choix = null, images = {}, moiId = null, tour = null } = {}) {
-  const surPlateau = (id) => joueurs.filter((j) => !j.parti && !j.elimine && j.etat?.lieu === id);
+export function zonesHtml({ zones = null, lieux = {}, joueurs = [], options = [], choix = null, images = {}, moiId = null, tour = null, maZone = null } = {}) {
+  const z = Array.isArray(zones) && zones.length ? zones : GROUPES;
+  const surLieu = (id) => joueurs.filter((j) => !j.parti && !j.elimine && j.etat?.lieu === id);
   const tuile = (id) => {
-    const [x, y] = POS_LIEU[id];
     const estOption = options.includes(id);
     const estChoix = choix === id;
     const nom = lieux[id]?.nom || id;
+    const texte = lieux[id]?.texte || '';
     const img = images[id];
-    const pions = surPlateau(id).map((j) => pionHtml(j, { moiId, tour, zone: 'lieu' })).join('');
+    const pions = surLieu(id).map((j) => pionHtml(j, { moiId, tour, zone: 'lieu' })).join('');
     const etiquette = estChoix
       ? '<span class="sh-tag is-choix">Choisi</span>'
       : (estOption ? '<span class="sh-tag">Possible</span>' : '');
-    return `<article class="sh-lieu${estOption ? ' is-option' : ''}${estChoix ? ' is-choix' : ''}" style="left:${pct(x)};top:${pct(y)}" aria-labelledby="sh-lieu-${esc(id)}" data-lieu="${esc(id)}">
+    return `<article class="sh-lieu${estOption ? ' is-option' : ''}${estChoix ? ' is-choix' : ''}" aria-labelledby="sh-lieu-${esc(id)}" data-lieu="${esc(id)}">
       <div class="sh-lieu-scene">${img
         ? `<img class="sh-lieu-img" src="${esc(img)}" alt="" width="1200" height="560" loading="lazy">`
-        : dessinLieu(id)}</div>
-      <span class="sh-lieu-des">${esc(LIEUX[id]?.des || '')}</span>
-      ${etiquette}
-      <div class="sh-lieu-bas">
-        <h3 class="sh-lieu-nom" id="sh-lieu-${esc(id)}">${esc(nom)}</h3>
-        <div class="sh-pions">${pions}</div>
+        : dessinLieu(id)}${etiquette}<span class="sh-lieu-des">${esc(LIEUX[id]?.des || '')}</span></div>
+      <div class="sh-lieu-infos">
+        <h4 class="sh-lieu-nom" id="sh-lieu-${esc(id)}">${esc(nom)}</h4>
+        ${texte ? `<p class="sh-lieu-effet">${esc(texte)}</p>` : ''}
+        ${pions ? `<div class="sh-pions">${pions}</div>` : ''}
       </div>
     </article>`;
   };
-  return `<div class="sh-plan">${Object.keys(POS_LIEU).map(tuile).join('')}</div>`;
+  return `<ol class="sh-zones">${z.map((g, i) => {
+    const mienne = maZone === i + 1;
+    return `<li class="sh-zone${mienne ? ' is-mienne' : ''}" data-zone-n="${i + 1}">
+      <div class="sh-zone-tete"><h3 class="sh-zone-titre">Zone ${i + 1}</h3>${mienne ? '<span class="sh-tag-zone">Ta zone</span>' : ''}</div>
+      <div class="sh-zone-lieux">${(g || []).filter((id) => LIEUX[id]).map(tuile).join('')}</div>
+    </li>`;
+  }).join('')}</ol>`;
 }
 
 /**
@@ -164,8 +174,8 @@ export function pisteHtml({ joueurs = [], pv = {}, moiId = null, tour = null } =
   return `<ol class="sh-piste" aria-label="Piste des blessures, de 0 à 14">${cases.join('')}</ol>`;
 }
 
-/** Un médaillon de joueur autour de la table. */
-function medaillonHtml(j, [x, y], { moiId, tour, portrait }) {
+/** Un médaillon de joueur autour de la table : portrait, pseudo, et pour un personnage connu son nom, son camp et ses PV. */
+function medaillonHtml(j, [x, y], { moiId, tour, portrait, aPortee }) {
   const moi = !!moiId && j.user_id === moiId;
   const estTour = !!tour && j.user_id === tour;
   const s = j.etat || {};
@@ -177,14 +187,19 @@ function medaillonHtml(j, [x, y], { moiId, tour, portrait }) {
   if (j.elimine) etat = 'Mort';
   else if (estTour) etat = moi ? 'À toi' : 'Son tour';
   else if (!s.lieu) etat = 'Pas encore entré';
+  const pv = portrait?.max != null ? `${Math.max(0, portrait.max - (s.degats ?? 0))}/${portrait.max} PV` : '';
+  const perso = portrait?.nom ? [portrait.nom, pv].filter(Boolean).join(' · ') : '';
   const classes = ['sh-med', `is-camp-${camp || 'inconnu'}`];
   if (moi) classes.push('is-moi');
   if (estTour) classes.push('is-tour');
   if (j.elimine) classes.push('is-mort');
+  if (aPortee) classes.push('is-portee');
   return `<li class="${classes.join(' ')}" data-uid="${esc(j.user_id)}" data-zone="med" style="left:${pct(x)};top:${pct(y)};--camp:${couleurCamp(camp)}">
       <div class="sh-med-cadre">${cadre}</div>
       <span class="sh-med-nom">${esc(j.pseudo || '?')}${moi ? ' <span class="sh-etiquette">Toi</span>' : ''}</span>
+      ${perso ? `<span class="sh-med-perso">${esc(perso)}</span>` : ''}
       ${camp ? `<span class="sh-med-camp">${esc(CAMP_LIBELLE[camp])}</span>` : ''}
+      ${aPortee ? '<span class="sh-med-portee">À portée</span>' : ''}
       ${etat ? `<span class="sh-med-etat">${esc(etat)}</span>` : ''}
     </li>`;
 }
@@ -192,15 +207,16 @@ function medaillonHtml(j, [x, y], { moiId, tour, portrait }) {
 /**
  * Médaillons des joueurs autour de la table : moi en bas, les autres à la suite, dans le sens des aiguilles.
  * @param {object} o joueurs : etat.joueurs ; moiId ; tour ;
- *   portraits : { user_id: { url, camp } } (visuel connu : le mien, ou un personnage révélé).
+ *   portraits : { user_id: { url, camp, nom, max } } (personnage connu : le mien, ou un personnage révélé) ;
+ *   portee : joueurs que je peux attaquer (marqués « À portée »).
  * @returns {string} HTML (<ul class="sh-medaillons">).
  */
-export function medaillonsHtml({ joueurs = [], moiId = null, tour = null, portraits = {} } = {}) {
+export function medaillonsHtml({ joueurs = [], moiId = null, tour = null, portraits = {}, portee = [] } = {}) {
   const liste = joueurs.filter((j) => !j.parti);
   const ordre = [...liste.filter((j) => j.user_id === moiId), ...liste.filter((j) => j.user_id !== moiId)];
   const pas = 360 / Math.max(ordre.length, 1);
   return `<ul class="sh-medaillons" aria-label="Joueurs autour de la table">${ordre.map((j, i) =>
-    medaillonHtml(j, surCercle(R_MEDAILLON, 90 + i * pas), { moiId, tour, portrait: portraits[j.user_id] || null })).join('')}</ul>`;
+    medaillonHtml(j, surCercle(R_MEDAILLON, 90 + i * pas), { moiId, tour, portrait: portraits[j.user_id] || null, aPortee: portee.includes(j.user_id) })).join('')}</ul>`;
 }
 
 /**

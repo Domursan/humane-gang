@@ -1,9 +1,12 @@
 // ===== Humane Gang — Shadow Hunters : la table de jeu (plateaux/jeux/shadow/table.js) =====
 /*
  * Rôle : affiche une partie de Shadow Hunters en cours (règles officielles : dés d6 et d4, 7 = au choix).
- *   Colonne gauche : mon personnage (carte, révéler, PV), pioches, mes équipements.
- *   Centre : panneau « Ton tour » selon la phase, plan des 3 groupes de lieux, piste des blessures.
- *   Droite : joueurs (camps, PV, équipements), journal, chat (en tiroir sur téléphone).
+ *   Colonne gauche « Joueurs » : ma fiche en tête (personnage, révéler, PV, lieu et zone, pouvoir, mission, équipements),
+ *   puis une fiche de même forme par autre joueur (personnage et pouvoir une fois révélé, PV, lieu et zone, « À portée », équipements).
+ *   Centre : table ronde (piste des blessures, médaillons avec personnage et PV connus, jet de dés), puis les lieux rangés
+ *   par zone avec leur effet, puis les pioches.
+ *   Droite : panneau « Ton tour » selon la phase, dernière carte Lumière ou Ténèbres piochée (avec son effet), journal,
+ *   chat (en tiroir sur téléphone).
  *   Une carte Vision reçue s'affiche dans une fenêtre (maquette OmbresVisionTel).
  *   La mise en page est dans assets/espaces/plateaux/shadow.css ; les dessins dans ./plateau.js.
  *   Chaque zone n'est reconstruite que si son HTML change (le focus et les listes restent en place).
@@ -21,7 +24,7 @@ import { boutonQuitter } from '../../../../commun/quitter.js';
 import { confirmBox } from '../../../../commun/ui-confirm.js';
 import { creerChat, tiroirChat } from '../../vues/chat.js';
 import { creerSignalTour } from '../../../../commun/tour-signal.js';
-import { LIEUX, GROUPES, PV_MAX, CAMP_LIBELLE, campDe, voisinsDe, plateauHtml, pisteHtml, medaillonsHtml, persoVisuelHtml } from './plateau.js';
+import { LIEUX, GROUPES, PV_MAX, CAMP_LIBELLE, campDe, couleurCamp, voisinsDe, zoneDe, zonesHtml, pisteHtml, medaillonsHtml, persoVisuelHtml } from './plateau.js';
 import { creerEffets } from './effets.js';
 
 const ECRAN_GRAND = '(min-width: 761px)';
@@ -58,33 +61,32 @@ function squelette() {
   <p class="sh-elimine" data-elimine hidden></p>
 
   <div class="sh-corps">
-    <aside class="sh-colonne sh-gauche" aria-label="Ton personnage">
-      <section class="sh-bloc sh-perso" aria-labelledby="sh-perso-titre" data-perso></section>
-      <section class="sh-bloc sh-pv-bloc" aria-labelledby="sh-pv-titre" data-pv></section>
-      <section class="sh-bloc sh-pouvoir-bloc" aria-labelledby="sh-pouvoir-titre" data-pouvoir></section>
-      <section class="sh-bloc sh-mission-bloc" aria-labelledby="sh-mission-titre" data-mission></section>
-      <section class="sh-bloc sh-mes-bloc" aria-labelledby="sh-mes-titre" data-mes-equip></section>
+    <aside class="sh-colonne sh-gauche" aria-labelledby="sh-joueurs-titre">
+      <h2 id="sh-joueurs-titre" class="sh-bloc-titre sh-gauche-titre">Joueurs</h2>
+      <div class="sh-moi-zone" data-moi></div>
+      <ul class="sh-fiches" data-joueurs aria-label="Les autres joueurs"></ul>
     </aside>
     <section class="sh-colonne sh-centre" aria-label="Le jeu">
       <section class="sh-rond" aria-label="Table de veillée">
         <div class="sh-rond-anneau" aria-hidden="true"></div>
         <div class="sh-rond-piste" data-piste></div>
-        <div class="sh-rond-lieux" data-plateau></div>
         <div class="sh-rond-jet" data-jet></div>
         <div class="sh-rond-med" data-medaillons></div>
       </section>
       <p class="sh-bloc sh-legende-piste" id="sh-piste-titre"><strong>Piste des blessures.</strong> 1 case = 1 blessure. Un personnage meurt quand ses blessures atteignent ses points de vie. L'anneau doré marque les PV maximum des personnages révélés.</p>
+      <section class="sh-bloc sh-zones-bloc" aria-labelledby="sh-zones-titre">
+        <h2 id="sh-zones-titre" class="sh-bloc-titre">Lieux et zones</h2>
+        <p class="sh-note">Les lieux vont par deux : chaque paire forme une zone. Tu attaques les joueurs de ta zone.</p>
+        <div data-plateau></div>
+      </section>
       <section class="sh-bloc sh-bac" aria-labelledby="sh-pioches-titre" data-pioches></section>
     </section>
-    <aside class="sh-colonne sh-droite" aria-label="Action en cours, journal, joueurs et chat">
+    <aside class="sh-colonne sh-droite" aria-label="Action en cours, dernière carte, journal et chat">
       <section class="sh-panneau" aria-labelledby="sh-tour-titre" aria-live="polite" data-panneau></section>
+      <section class="sh-bloc sh-carte-bloc" aria-labelledby="sh-carte-titre" data-derniere hidden></section>
       <section class="sh-bloc sh-journal-bloc" aria-labelledby="sh-journal-titre">
         <h2 id="sh-journal-titre" class="sh-bloc-titre">Journal récent</h2>
         <div data-journal></div>
-      </section>
-      <section class="sh-bloc sh-joueurs-bloc" aria-labelledby="sh-joueurs-titre">
-        <h2 id="sh-joueurs-titre" class="sh-bloc-titre">Joueurs</h2>
-        <ul class="sh-joueurs" data-joueurs></ul>
       </section>
       <div class="sh-chat-zone" data-chat></div>
     </aside>
@@ -117,8 +119,8 @@ export function creer(root, ctx) {
   const q = (s) => el.querySelector(s);
   const refs = {
     bandeau: q('[data-bandeau]'), composition: q('[data-composition]'), quitter: q('[data-quitter]'), elimine: q('[data-elimine]'),
-    perso: q('[data-perso]'), pv: q('[data-pv]'), pouvoir: q('[data-pouvoir]'), mission: q('[data-mission]'),
-    pioches: q('[data-pioches]'), mesEquip: q('[data-mes-equip]'), campBandeau: q('[data-camp-bandeau]'),
+    moi: q('[data-moi]'), derniere: q('[data-derniere]'),
+    pioches: q('[data-pioches]'), campBandeau: q('[data-camp-bandeau]'),
     jet: q('[data-jet]'), med: q('[data-medaillons]'),
     panneau: q('[data-panneau]'), plateau: q('[data-plateau]'), piste: q('[data-piste]'),
     joueurs: q('[data-joueurs]'), journal: q('[data-journal]'), chatZone: q('[data-chat]'), tiroirZone: q('[data-tiroir-chat]'),
@@ -172,8 +174,9 @@ export function creer(root, ctx) {
     imageExiste(url).then((ok) => {
       if (!ok) return;
       imagesPerso[perso] = url;
-      cles.perso = null;
-      if (etat) { rendrePerso(); rendreMedaillons(); }
+      cles.moi = null;
+      cles.joueurs = null;
+      if (etat) { rendreMoi(); rendreJoueurs(); rendreMedaillons(); }
     });
   }
 
@@ -433,57 +436,81 @@ export function creer(root, ctx) {
     refs.panneau.innerHTML = corpsPanneau();
   }
 
-  /* ---------- Personnage, pioches, mes équipements ---------- */
+  /* ---------- Fiches des joueurs (la mienne en tête), pioches ---------- */
 
-  function persoHtml() {
+  /** PV d'un joueur : « 6 / 10 PV » et barre quand le maximum est connu, sinon le nombre de blessures. */
+  function pvFicheHtml(degats, max) {
+    if (max == null) return `<p class="sh-fiche-pv"><strong>${esc(degats)}</strong> ${degats > 1 ? 'blessures' : 'blessure'}<span class="sh-note"> · PV inconnus</span></p>`;
+    const pv = Math.max(0, max - degats);
+    return `<p class="sh-fiche-pv"><strong>${esc(pv)}</strong> / ${esc(max)} PV</p>
+      <div class="sh-barre-pv" aria-hidden="true"><span style="width:${Math.round((pv / max) * 100)}%"></span></div>`;
+  }
+
+  /** Lieu d'un joueur et numéro de sa zone. */
+  function lieuFiche(s, elimine) {
+    if (elimine) return 'Éliminé';
+    if (!s.lieu) return 'Pas encore entré';
+    const n = zoneDe(s.lieu, zones());
+    return `${nomLieu(s.lieu)}${n ? ` · zone ${n}` : ''}`;
+  }
+
+  /** Ma fiche : personnage (révélé ou non), PV, lieu, pouvoir, mission, équipements. */
+  function ficheMoiHtml() {
     const perso = moiPerso();
-    if (!perso) return '<h2 id="sh-perso-titre" class="sh-bloc-titre">Ton personnage</h2><p class="sh-note">Tu regardes la partie.</p>';
+    if (!perso) return '<p class="sh-note">Tu regardes la partie.</p>';
     const mon = moiEtat();
     const camp = jeu().moi?.camp || campDe(perso);
+    const info = persoInfo(perso);
     const peutReveler = !mon.revele && monTour();
-    return `<h2 id="sh-perso-titre" class="sh-bloc-titre">Personnage</h2>
-      <div class="sh-perso-tete">
-        <div class="sh-perso-portrait">${persoVisuelHtml(camp, imagesPerso[perso] || null)}</div>
-        <div class="sh-perso-nom"><strong>${esc(nomPerso(perso))}</strong>
+    const possible = POUVOIR_CIBLE.includes(perso) || POUVOIR_SANS_CIBLE.includes(perso);
+    const tour = monTour();
+    return `<article class="sh-fiche is-moi${tour ? ' is-tour' : ''}${jeAiSorti() ? ' is-mort' : ''}" aria-labelledby="sh-perso-titre">
+      <div class="sh-fiche-tete">
+        <div class="sh-fiche-portrait">${persoVisuelHtml(camp, imagesPerso[perso] || null)}</div>
+        <div class="sh-fiche-id">
+          <p class="sh-fiche-joueur">Toi ${tour ? '<span class="sh-etiquette is-tour">À toi</span>' : ''}</p>
+          <h3 class="sh-fiche-perso" id="sh-perso-titre">${esc(nomPerso(perso))}</h3>
           <span class="sh-camp is-${esc(camp || 'inconnu')}">${esc(CAMP_LIBELLE[camp] || 'Camp inconnu')}</span>
-          <span class="sh-note">${mon.revele ? 'Révélé : tout le monde voit ton personnage' : 'Seulement visible par toi'}</span>
         </div>
       </div>
+      ${pvFicheHtml(mon.degats ?? 0, PV_MAX[perso] ?? jeu().moi?.pv ?? null)}
+      <p class="sh-fiche-lieu">${esc(lieuFiche(mon, jeAiSorti()))}</p>
+      ${info.pouvoir ? `<p class="sh-fiche-texte"><strong>Pouvoir${possible ? ` (${mon.pouvoir ? 'utilisé' : 'disponible'})` : ''}.</strong> ${esc(info.pouvoir)}</p>` : ''}
+      ${info.victoire ? `<p class="sh-fiche-texte"><strong>Mission.</strong> ${esc(info.victoire)}</p>` : ''}
+      ${equipementsHtml(mon.equip || [], 'toi') || '<p class="sh-note">Aucun équipement.</p>'}
+      <p class="sh-note">${mon.revele ? 'Révélé : tout le monde voit ton personnage.' : 'Seulement visible par toi.'}</p>
       <button type="button" class="sh-btn sh-btn-outline sh-pleine" data-revele${peutReveler ? '' : ' disabled'}>${mon.revele ? 'Personnage révélé' : 'Me révéler'}</button>
-      ${!mon.revele && !monTour() && !moiJoueur(etat)?.parti ? '<p class="sh-note">Tu peux te révéler pendant ton tour.</p>' : ''}`;
+      ${!mon.revele && !monTour() && !moiJoueur(etat)?.parti ? '<p class="sh-note">Tu peux te révéler pendant ton tour.</p>' : ''}
+    </article>`;
   }
 
-  /** Points de vie : valeur, barre (le texte porte l'information). */
-  function pvHtml() {
-    const perso = moiPerso();
-    if (!perso) return '';
-    const mon = moiEtat();
-    const max = PV_MAX[perso] ?? null;
-    const pv = max != null ? Math.max(0, max - (mon.degats ?? 0)) : null;
-    const part = max ? Math.round((pv / max) * 100) : 0;
-    return `<h2 id="sh-pv-titre" class="sh-bloc-titre">Points de vie</h2>
-      <p class="sh-pv-valeur"><strong>${pv ?? '?'}</strong><span> / ${max ?? '?'} PV</span></p>
-      <div class="sh-barre-pv" aria-hidden="true"><span style="width:${part}%"></span></div>`;
+  /** Dernière carte Lumière ou Ténèbres piochée (journal, le plus récent d'abord) : qui, quelle carte, son effet. */
+  function derniereCarte() {
+    for (const l of etat?.journal || []) {
+      if (l.type !== 'carte') continue;
+      const m = /pioche : (.+)\.$/.exec(l.texte || '');
+      if (!m) continue;
+      for (const liste of ['lumiere', 'tenebres']) {
+        const item = (contenus[liste] || []).find((x) => x.nom === m[1]);
+        if (item) return { ligne: l, item, liste };
+      }
+    }
+    return null;
   }
-
-  /** Pouvoir du personnage, avec son état (disponible ou utilisé) quand il peut être utilisé. */
-  function pouvoirHtml() {
-    const perso = moiPerso();
-    const info = perso ? persoInfo(perso) : {};
-    if (!perso || !info.pouvoir) return '';
-    const mon = moiEtat();
-    const possible = POUVOIR_CIBLE.includes(perso) || POUVOIR_SANS_CIBLE.includes(perso);
-    return `<h2 id="sh-pouvoir-titre" class="sh-bloc-titre">Pouvoir</h2>
-      ${possible ? `<span class="sh-badge ${mon.pouvoir ? 'is-utilise' : 'is-dispo'}">${mon.pouvoir ? 'Utilisé' : 'Disponible'}</span>` : ''}
-      <p class="sh-perso-texte">${esc(info.pouvoir)}</p>`;
-  }
-
-  /** Mission : la condition de victoire du personnage. */
-  function missionHtml() {
-    const perso = moiPerso();
-    const info = perso ? persoInfo(perso) : {};
-    if (!info.victoire) return '';
-    return `<h2 id="sh-mission-titre" class="sh-bloc-titre">Mission</h2><p class="sh-perso-texte">${esc(info.victoire)}</p>`;
+  function derniereCarteHtml() {
+    const d = derniereCarte();
+    if (!d) return '';
+    const qui = d.ligne.user_id && d.ligne.user_id === monId() ? 'Toi' : pseudoDe(d.ligne.user_id);
+    const equip = /^Équipement\./.test(d.item.texte || '');
+    return `<h2 id="sh-carte-titre" class="sh-bloc-titre">Dernière carte piochée</h2>
+      <div class="sh-carte-tiree is-${d.liste}">
+        <span class="sh-dos" aria-hidden="true"></span>
+        <div class="sh-carte-corps">
+          <p class="sh-carte-qui">${esc(qui)} · ${d.liste === 'lumiere' ? 'Lumière' : 'Ténèbres'}${equip ? ' · gardée en équipement' : ''}</p>
+          <strong class="sh-carte-nom">${esc(d.item.nom)}</strong>
+          <p class="sh-carte-texte">${esc(d.item.texte || '')}</p>
+        </div>
+      </div>`;
   }
 
   /** Bac des pioches : dos colorés et nombre de cartes. La défausse n'a pas de compteur public. */
@@ -509,49 +536,52 @@ export function creer(root, ctx) {
     </div>`;
   }
 
-  /** Liste d'équipements : nom, texte au clic (détails). */
+  /** Liste d'équipements : visuel, nom et effet, toujours lisibles. */
   function equipementsHtml(cartes, qui) {
     if (!cartes.length) return '';
     return `<ul class="sh-equip" aria-label="Équipements de ${esc(qui || '?')}">${cartes.map((c) =>
-      `<li><details class="sh-equip-item is-${c.startsWith('L:') ? 'lumiere' : 'tenebres'}"><summary>${EQUIP_IMAGE.includes(idCarte(c))
-        ? `<img class="sh-equip-img" src="${esc(imagePlateau('shadow', `equip-${idCarte(c)}`))}" alt="" width="40" height="40" loading="lazy">` : ''}${esc(carteNom(c))}</summary><p>${esc(carteItem(c)?.texte || '')}</p></details></li>`).join('')}</ul>`;
+      `<li class="sh-equip-item is-${c.startsWith('L:') ? 'lumiere' : 'tenebres'}">${EQUIP_IMAGE.includes(idCarte(c))
+        ? `<img class="sh-equip-img" src="${esc(imagePlateau('shadow', `equip-${idCarte(c)}`))}" alt="" width="40" height="40" loading="lazy">` : ''}<div class="sh-equip-corps"><strong>${esc(carteNom(c))}</strong><span>${esc((carteItem(c)?.texte || '').replace(/^Équipement\.\s*/, ''))}</span></div></li>`).join('')}</ul>`;
   }
 
   /* ---------- Joueurs, piste, plateau ---------- */
 
+  /** Fiches des autres joueurs (tous, pour un spectateur) : personnage s'il est connu, camp, PV, lieu, pouvoir, équipements. */
   function joueursHtml() {
     const moi = monId();
     const connus = jeu().moi?.connus || {};
     const pvMax = etat.pv || {};
     const tour = etat.partie?.tour;
-    return (etat.joueurs || []).filter((j) => !j.parti).map((j) => {
+    const portee = jeu().moi?.portee || [];
+    return (etat.joueurs || []).filter((j) => !j.parti && j.user_id !== moi).map((j) => {
       const s = j.etat || {};
-      const estMoi = !!moi && j.user_id === moi;
       const estTour = !!tour && tour === j.user_id && partieEnCours();
-      const connu = s.revele ? s.perso : (estMoi ? moiPerso() : null);
-      const apprisPar = !s.revele && !estMoi && connus[j.user_id] ? connus[j.user_id] : null;
-      let identite;
-      if (connu) identite = `${nomPerso(connu)} · ${CAMP_LIBELLE[campDe(connu)] || 'Camp inconnu'}${s.revele ? '' : ' (caché)'}`;
-      else if (apprisPar) identite = `Tu sais : ${nomPerso(apprisPar)} · ${CAMP_LIBELLE[campDe(apprisPar)] || ''}`;
-      else identite = 'Camp inconnu';
-      const deg = s.degats ?? 0;
-      const max = s.revele ? (pvMax[j.user_id] ?? null) : (estMoi ? (jeu().moi?.pv ?? null) : null);
-      const pvTxt = max != null ? `${Math.max(0, max - deg)} / ${max} PV` : plur(deg, 'blessure');
-      const lieuTxt = j.elimine ? 'Éliminé' : (s.lieu ? `Lieu : ${nomLieu(s.lieu)}` : 'Pas encore entré');
+      const connu = s.revele ? s.perso : null;
+      const appris = !connu && connus[j.user_id] ? connus[j.user_id] : null;
+      const camp = connu ? campDe(connu) : null;
+      const info = connu ? persoInfo(connu) : {};
       const etiquettes = [];
-      if (estMoi) etiquettes.push('<span class="sh-etiquette">Toi</span>');
-      if (estTour) etiquettes.push(`<span class="sh-etiquette is-tour">${estMoi ? 'À toi' : 'Son tour'}</span>`);
+      if (estTour) etiquettes.push('<span class="sh-etiquette is-tour">Son tour</span>');
+      if (portee.includes(j.user_id) && !j.elimine) etiquettes.push('<span class="sh-etiquette is-portee">À portée</span>');
       if (j.elimine) etiquettes.push('<span class="sh-etiquette is-mort">Mort</span>');
       if (s.ange) etiquettes.push('<span class="sh-etiquette">Ange gardien</span>');
       if (j.absent) etiquettes.push('<span class="sh-etiquette">Absent</span>');
-      return `<li class="sh-joueur${estTour ? ' is-tour' : ''}${j.elimine ? ' is-mort' : ''}${estMoi ? ' is-moi' : ''}"${estTour ? ' aria-current="true"' : ''}>
-        ${avatarHtml(j, 36)}
-        <div class="sh-joueur-corps">
-          <div class="sh-joueur-tete">${j.elimine ? `<s>${pseudoHtml(j)}</s>` : pseudoHtml(j)} ${etiquettes.join(' ')}</div>
-          <p class="sh-joueur-perso">${esc(identite)}</p>
-          <p class="sh-joueur-lieu">${esc(lieuTxt)} · ${esc(pvTxt)}</p>
-          ${estMoi ? '' : equipementsHtml(s.equip || [], j.pseudo)}
+      const portrait = connu ? persoVisuelHtml(camp, imagesPerso[connu] || null) : avatarHtml(j, 48);
+      return `<li class="sh-fiche${estTour ? ' is-tour' : ''}${j.elimine ? ' is-mort' : ''}${connu ? '' : ' is-cache'}"${estTour ? ' aria-current="true"' : ''} style="--camp:${couleurCamp(camp)}">
+        <div class="sh-fiche-tete">
+          <div class="sh-fiche-portrait">${portrait}</div>
+          <div class="sh-fiche-id">
+            <p class="sh-fiche-joueur">${j.elimine ? `<s>${pseudoHtml(j)}</s>` : pseudoHtml(j)} ${etiquettes.join(' ')}</p>
+            <h3 class="sh-fiche-perso">${connu ? esc(nomPerso(connu)) : 'Personnage caché'}</h3>
+            ${connu ? `<span class="sh-camp is-${esc(camp)}">${esc(CAMP_LIBELLE[camp])}</span>` : ''}
+            ${appris ? `<span class="sh-note">Tu sais : ${esc(nomPerso(appris))} · ${esc(CAMP_LIBELLE[campDe(appris)] || '')}</span>` : ''}
+          </div>
         </div>
+        ${pvFicheHtml(s.degats ?? 0, connu ? (pvMax[j.user_id] ?? PV_MAX[connu] ?? null) : null)}
+        <p class="sh-fiche-lieu">${esc(lieuFiche(s, j.elimine))}</p>
+        ${info.pouvoir ? `<p class="sh-fiche-texte"><strong>Pouvoir.</strong> ${esc(info.pouvoir)}</p>` : ''}
+        ${info.victoire ? `<p class="sh-fiche-texte"><strong>Mission.</strong> ${esc(info.victoire)}</p>` : ''}
+        ${equipementsHtml(s.equip || [], j.pseudo)}
       </li>`;
     }).join('');
   }
@@ -600,23 +630,24 @@ export function creer(root, ctx) {
     poser('composition', refs.composition, esc(txt));
   }
 
-  function rendrePerso() {
-    poser('perso', refs.perso, persoHtml());
+  function rendreMoi() {
+    poser('moi', refs.moi, ficheMoiHtml());
   }
 
   function rendrePioches() {
     poser('pioches', refs.pioches, piochesHtml());
   }
 
-  function rendreMesEquip() {
-    const cartes = moiEtat().equip || [];
-    poser('mesEquip', refs.mesEquip, `<h2 id="sh-mes-titre" class="sh-bloc-titre">Tes équipements</h2>${equipementsHtml(cartes, 'toi') || '<p class="sh-note">Aucun équipement.</p>'}`);
+  function rendreDerniere() {
+    const html = derniereCarteHtml();
+    refs.derniere.hidden = !html;
+    poser('derniere', refs.derniere, html);
   }
 
   function rendrePlateau() {
     const options = phase() === 'choisir_zone' ? (jeu().options || []) : [];
-    const html = plateauHtml({
-      zones: jeu().zones,
+    const html = zonesHtml({
+      zones: zones(),
       lieux: lieuxMap,
       joueurs: etat.joueurs || [],
       options,
@@ -624,24 +655,13 @@ export function creer(root, ctx) {
       images: imagesLieux,
       moiId: monId(),
       tour: etat.partie?.tour,
+      maZone: !jeAiSorti() && moiEtat().lieu ? zoneDe(moiEtat().lieu, zones()) : null,
     });
     poser('plateau', refs.plateau, html);
   }
 
   function rendrePiste() {
     poser('piste', refs.piste, pisteHtml({ joueurs: etat.joueurs || [], pv: etat.pv || {}, moiId: monId(), tour: etat.partie?.tour }));
-  }
-
-  function rendrePv() {
-    poser('pv', refs.pv, pvHtml());
-  }
-
-  function rendrePouvoir() {
-    poser('pouvoir', refs.pouvoir, pouvoirHtml());
-  }
-
-  function rendreMission() {
-    poser('mission', refs.mission, missionHtml());
   }
 
   /** Thème de la page selon mon camp (Hunter bleu, Shadow rouge, Neutre or) ; désaturé en spectateur. */
@@ -656,7 +676,7 @@ export function creer(root, ctx) {
     poser('camp', refs.campBandeau, `<p class="sh-camp-texte">${esc(texte)}</p>`);
   }
 
-  /** Médaillons des joueurs : portrait connu pour moi et pour les personnages révélés (sinon « ? »). */
+  /** Médaillons des joueurs : portrait, personnage et PV connus pour moi et pour les personnages révélés (sinon « ? »). */
   function rendreMedaillons() {
     const portraits = {};
     for (const j of etat.joueurs || []) {
@@ -664,9 +684,11 @@ export function creer(root, ctx) {
       const perso = estMoi ? moiPerso() : (j.etat?.revele ? j.etat.perso : null);
       if (!perso) continue;
       const camp = estMoi ? (jeu().moi?.camp || campDe(perso)) : campDe(perso);
-      portraits[j.user_id] = { url: imagesPerso[perso] || null, camp };
+      const max = estMoi ? (PV_MAX[perso] ?? jeu().moi?.pv ?? null) : ((etat.pv || {})[j.user_id] ?? PV_MAX[perso] ?? null);
+      portraits[j.user_id] = { url: imagesPerso[perso] || null, camp, nom: nomPerso(perso), max };
     }
-    poser('med', refs.med, medaillonsHtml({ joueurs: etat.joueurs || [], moiId: monId(), tour: etat.partie?.tour, portraits }));
+    const portee = jeu().moi?.portee || [];
+    poser('med', refs.med, medaillonsHtml({ joueurs: etat.joueurs || [], moiId: monId(), tour: etat.partie?.tour, portraits, portee }));
   }
 
   /** Jet de dés : refait seulement quand les dés changent ; l'animation vient après. */
@@ -893,7 +915,7 @@ export function creer(root, ctx) {
   refs.panneau.addEventListener('click', surAction);
   refs.panneau.addEventListener('change', surChoix);
   refs.modaleBoite.addEventListener('click', surAction);
-  refs.perso.addEventListener('click', surPerso);
+  refs.moi.addEventListener('click', surPerso);
   refs.quitter.addEventListener('click', surQuitter);
 
   /* ---------- Contrat de la vue ---------- */
@@ -921,13 +943,10 @@ export function creer(root, ctx) {
       rendreCamp();
       rendreElimine();
       rendreComposition();
-      rendrePerso();
-      rendrePv();
-      rendrePouvoir();
-      rendreMission();
+      rendreMoi();
       rendrePioches();
-      rendreMesEquip();
       rendrePanneau();
+      rendreDerniere();
       rendrePlateau();
       rendrePiste();
       rendreMedaillons();

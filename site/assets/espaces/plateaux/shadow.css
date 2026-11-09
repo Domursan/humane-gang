@@ -110,7 +110,7 @@
 .sh-elimine { margin: 0 0 12px; padding: 10px 14px; border-radius: 12px; background: var(--sh-rouge-fond); color: var(--sh-non); font-weight: 700; font-size: 14px; }
 
 /* ---------- Corps : trois colonnes ---------- */
-.sh-corps { display: grid; grid-template-columns: 260px minmax(0, 1fr) 300px; gap: 16px; align-items: start; min-width: 0; }
+.sh-corps { display: grid; grid-template-columns: 290px minmax(0, 1fr) 300px; gap: 16px; align-items: start; min-width: 0; }
 .sh-colonne { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .sh-tiroir-chat { display: none; }
 
@@ -151,17 +151,19 @@
 .sh-legende-piste { font-size: 12px; line-height: 1.45; color: var(--sh-muet); padding: 10px 14px; }
 .sh-legende-piste strong { color: var(--sh-texte); }
 
-/* Équipements */
-.sh-equip { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.sh-equip-item summary { min-height: 44px; display: flex; align-items: center; padding: 0 10px; border-radius: 10px; border: 1px solid var(--sh-bord-fort); cursor: pointer; font-size: 13px; font-weight: 600; gap: 10px; padding-left: 6px; }
-.sh-equip-item p { margin: 6px 0 0; font-size: 13px; color: var(--sh-muet); }
+/* Équipements : visuel, nom et effet toujours lisibles */
+.sh-equip { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sh-equip-item { display: flex; align-items: flex-start; gap: 8px; padding: 6px; border-radius: 10px; border: 1px solid var(--sh-bord-fort); background: rgba(8, 12, 22, .45); }
+.sh-equip-corps { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sh-equip-corps strong { font-size: 13px; }
+.sh-equip-corps span { font-size: 12px; line-height: 1.4; color: var(--sh-muet); }
 .sh-equip-img { width: 40px; height: 40px; flex: none; border-radius: 8px; object-fit: cover; border: 1px solid #5A5A62; }
 .sh-equip-item.is-lumiere .sh-equip-img { border-color: #E2C77E; box-shadow: 0 0 8px rgba(226, 199, 126, .35); }
 .sh-equip-item.is-tenebres .sh-equip-img { border-color: #9E3543; box-shadow: 0 0 8px rgba(158, 53, 67, .45); }
 
 /* ---------- Table ronde ---------- */
 .sh-centre { gap: 14px; }
-.sh-rond { position: relative; width: min(100%, 600px); aspect-ratio: 1 / 1; margin: 0 auto; }
+.sh-rond { position: relative; width: min(100%, 600px); aspect-ratio: 1 / 1; margin: 0 auto 48px; }
 .sh-rond > * { position: absolute; inset: 0; }
 .sh-rond > .sh-rond-anneau { inset: 4%; }
 .sh-rond-anneau { border-radius: 50%; background: radial-gradient(circle at 50% 45%, #1b2f52 0%, #0e1a30 70%, #0a1322 100%); box-shadow: 0 0 0 10px #0a1424, 0 0 0 13px var(--sh-bord), 0 40px 80px rgba(0, 0, 0, .7), 0 0 60px rgba(59, 111, 212, .22); }
@@ -169,7 +171,7 @@
 .sh-table[data-camp="neutre"] .sh-rond-anneau { background: radial-gradient(circle at 50% 45%, #2e2813 0%, #1a1609 70%, #100e06 100%); box-shadow: 0 0 0 10px #0d0b05, 0 0 0 13px var(--sh-bord), 0 40px 80px rgba(0, 0, 0, .7), 0 0 60px rgba(226, 199, 126, .2); }
 .sh-table[data-camp="spectateur"] .sh-rond-anneau { background: radial-gradient(circle at 50% 45%, #22242a 0%, #141519 70%, #0c0d10 100%); }
 .sh-rond-anneau::after { content: ''; position: absolute; inset: 9%; border-radius: 50%; border: 1px dashed rgba(127, 163, 214, .3); }
-.sh-rond-piste, .sh-rond-lieux, .sh-rond-jet, .sh-rond-med { pointer-events: none; }
+.sh-rond-piste, .sh-rond-jet, .sh-rond-med { pointer-events: none; }
 .sh-rond > .sh-rond-jet { inset: 37%; }
 
 /* Piste des blessures : 15 cases sur l'anneau */
@@ -180,19 +182,27 @@
 .sh-case-pv { position: absolute; transform: translate(-50%, -50%); display: flex; gap: 2px; }
 .sh-marque-pv { width: 18px; height: 18px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--sh-or); background: #0B1424; color: var(--sh-or); font: 800 8px/14px Inter, sans-serif; text-align: center; }
 
-/* Lieux : six tuiles au centre */
-.sh-plan { position: absolute; inset: 0; }
-.sh-lieu { position: absolute; width: 24%; height: 11%; box-sizing: border-box; overflow: hidden; border-radius: 10px; border: 1px solid var(--sh-bord-fort); background: #0f1d33; pointer-events: auto; }
-.sh-lieu.is-option { outline: 3px dashed var(--sh-or); outline-offset: -5px; }
+/* Lieux, rangés par zone (sous la table) : chaque zone est une paire de lieux côte à côte */
+.sh-zones-bloc .sh-note { margin: 0; }
+.sh-zones { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.sh-zone { padding: 8px; border-radius: 14px; border: 1px dashed var(--sh-bord-fort); background: rgba(8, 12, 22, .45); }
+.sh-zone.is-mienne { border: 2px solid var(--sh-or); box-shadow: 0 0 16px rgba(226, 199, 126, .2); }
+.sh-zone-tete { display: flex; align-items: center; gap: 8px; margin: 0 2px 6px; }
+.sh-zone-titre { margin: 0; font-family: Cinzel, serif; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: var(--sh-acc-texte); }
+.sh-tag-zone { padding: 2px 8px; border-radius: 999px; background: var(--sh-or); color: #121212; font-size: 11px; font-weight: 800; }
+.sh-zone-lieux { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.sh-lieu { position: relative; display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; align-items: start; box-sizing: border-box; padding: 6px; border-radius: 10px; border: 1px solid var(--sh-bord-fort); background: #0f1d33; min-width: 0; }
+.sh-lieu.is-option { outline: 3px dashed var(--sh-or); outline-offset: -3px; }
 .sh-lieu.is-choix { border: 3px solid var(--sh-or); box-shadow: 0 0 18px rgba(226, 199, 126, .35); }
-.sh-lieu-scene { position: absolute; inset: 0; }
+.sh-lieu-scene { position: relative; width: 76px; height: 64px; border-radius: 8px; overflow: hidden; }
 .sh-lieu-svg, .sh-lieu-img { width: 100%; height: 100%; display: block; object-fit: cover; }
-.sh-lieu-des { position: absolute; top: 4px; left: 4px; padding: 1px 6px; border-radius: 999px; background: rgba(8, 10, 16, .8); font-size: 10px; font-weight: 700; color: var(--sh-texte); }
-.sh-tag { position: absolute; top: 4px; right: 4px; padding: 1px 6px; border-radius: 999px; background: rgba(8, 10, 16, .85); font-size: 10px; font-weight: 700; }
+.sh-lieu-des { position: absolute; left: 3px; bottom: 3px; padding: 1px 6px; border-radius: 999px; background: rgba(8, 10, 16, .85); font-size: 10px; font-weight: 700; color: var(--sh-texte); white-space: nowrap; }
+.sh-tag { position: absolute; top: 3px; left: 3px; padding: 1px 6px; border-radius: 999px; background: rgba(8, 10, 16, .88); font-size: 10px; font-weight: 700; }
 .sh-tag.is-choix { background: var(--sh-or); color: #121212; }
-.sh-lieu-bas { position: absolute; left: 4px; right: 4px; bottom: 4px; display: flex; align-items: flex-end; justify-content: space-between; gap: 4px; }
-.sh-lieu-nom { margin: 0; min-width: 0; padding: 2px 6px; border-radius: 999px; background: rgba(8, 10, 16, .84); font-family: Inter, sans-serif; font-size: 11px; font-weight: 700; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sh-pions { display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; }
+.sh-lieu-infos { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sh-lieu-nom { margin: 0; font-family: Inter, sans-serif; font-size: 13px; font-weight: 800; line-height: 1.25; color: var(--sh-texte); }
+.sh-lieu-effet { margin: 0; font-size: 12px; line-height: 1.4; color: var(--sh-texte-doux); }
+.sh-pions { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
 
 /* Pions (joueurs) */
 .sh-pion { width: 24px; height: 24px; box-sizing: border-box; border-radius: 50%; border: 2px solid #0E0E10; background: var(--pion, #F2EFEA); color: #121212; font: 800 10px Inter, sans-serif; display: inline-grid; place-items: center; box-shadow: 0 2px 6px rgba(0, 0, 0, .5); }
@@ -212,6 +222,9 @@
 .sh-med.is-mort .sh-med-cadre { filter: grayscale(1); }
 .sh-med-nom { max-width: 100%; box-sizing: border-box; padding: 2px 8px; border-radius: 999px; background: #1a2a48; border: 1px solid var(--sh-bord-fort); font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sh-med-camp { font-size: 11px; font-weight: 700; color: var(--camp, var(--sh-muet)); }
+.sh-med-perso { max-width: 120px; padding: 1px 7px; border-radius: 999px; background: rgba(8, 10, 16, .85); font-size: 11px; font-weight: 700; color: var(--sh-texte); white-space: nowrap; }
+.sh-med-portee { padding: 1px 7px; border-radius: 999px; background: #B2433A; color: #FFFFFF; font-size: 10px; font-weight: 800; }
+.sh-med.is-portee .sh-med-cadre { box-shadow: 0 0 0 4px #0B1424, 0 0 0 7px #B2433A; }
 .sh-med-etat { font-size: 11px; color: var(--sh-muet); }
 
 /* Jet de dés au centre : d6 (carré) et d4 (triangle) */
@@ -241,18 +254,39 @@
 .sh-panneau .sh-btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
 .sh-panneau .sh-pied:last-child { margin-top: 4px; }
 
-/* ---------- Journal et joueurs ---------- */
-.sh-joueurs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.sh-joueur { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 12px; background: var(--sh-carte-2); }
-.sh-joueur.is-tour { box-shadow: inset 0 0 0 2px var(--sh-or); }
-.sh-joueur.is-moi { background: #23232A; }
-.sh-joueur.is-mort { opacity: .6; }
-.sh-joueur > .sh-avatar, .sh-joueur > span:first-child { flex: none; }
-.sh-joueur-corps { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.sh-joueur-tete { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 15px; }
-.sh-joueur-perso, .sh-joueur-lieu { margin: 0; font-size: 13px; color: var(--sh-muet); }
-.sh-joueur-perso { color: var(--sh-texte-doux); }
+/* ---------- Joueurs : ma fiche en tête, puis une fiche de même forme par joueur ---------- */
+.sh-gauche-titre { margin: 0; }
+.sh-fiches { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.sh-fiche { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 14px; background: var(--sh-carte-2); border: 1px solid var(--sh-bord-fort); min-width: 0; }
+.sh-fiche.is-moi { border: 2px solid var(--sh-acc-clair); background: rgba(11, 20, 36, .9); }
+.sh-fiche.is-tour { box-shadow: 0 0 0 2px var(--sh-or); }
+.sh-fiche.is-mort { opacity: .6; }
+.sh-fiche-tete { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.sh-fiche-portrait { width: 56px; height: 56px; flex: none; border-radius: 10px; overflow: hidden; border: 2px solid var(--camp, var(--sh-acc-clair)); display: grid; place-items: center; background: #0B1020; }
+.sh-fiche.is-cache .sh-fiche-portrait { border-color: #5A5A62; border-radius: 50%; }
+.sh-fiche-portrait svg, .sh-fiche-portrait img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.sh-fiche-id { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+.sh-fiche-joueur { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 13px; font-weight: 700; }
+.sh-fiche-perso { margin: 0; font-family: Cinzel, serif; font-size: 17px; line-height: 1.2; color: var(--sh-texte); }
+.sh-fiche.is-cache .sh-fiche-perso { font-family: Inter, sans-serif; font-size: 13px; font-weight: 600; color: var(--sh-muet); }
+.sh-fiche-pv { margin: 0; font-size: 13px; color: var(--sh-muet); }
+.sh-fiche-pv strong { font-size: 22px; line-height: 1; color: var(--sh-texte); }
+.sh-fiche-lieu { margin: 0; font-size: 13px; color: var(--sh-texte-doux); }
+.sh-fiche-texte { margin: 0; font-size: 13px; line-height: 1.45; color: var(--sh-texte-doux); }
+.sh-fiche-texte strong { color: var(--sh-texte); }
+.sh-fiche .sh-note { margin: 0; }
+.sh-etiquette.is-portee { background: #B2433A; color: #FFFFFF; }
 .sh-journal-bloc .plat-journal { margin: 0; }
+
+/* Dernière carte piochée (colonne de droite) */
+.sh-carte-tiree { display: flex; gap: 12px; align-items: flex-start; }
+.sh-carte-tiree .sh-dos { width: 40px; height: 58px; }
+.sh-carte-tiree.is-lumiere .sh-dos { border-color: #F4F1EA; background: linear-gradient(160deg, #FFFFFF 0%, #D9D4C8 100%); box-shadow: 0 0 12px rgba(242, 239, 234, .3); }
+.sh-carte-tiree.is-tenebres .sh-dos { border-color: #B0B0B8; background: linear-gradient(160deg, #1a1a1f 0%, #050506 100%); box-shadow: 0 0 12px rgba(200, 200, 215, .3); }
+.sh-carte-corps { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sh-carte-qui { margin: 0; font-size: 12px; color: var(--sh-muet); }
+.sh-carte-nom { font-family: Cinzel, serif; font-size: 18px; line-height: 1.2; }
+.sh-carte-texte { margin: 0; font-size: 14px; line-height: 1.45; color: var(--sh-texte-doux); }
 
 /* ---------- Fenêtre Vision (téléphone et ordinateur) ---------- */
 .sh-modale { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; box-sizing: border-box; }
@@ -278,16 +312,19 @@
   .sh-corps { display: flex; flex-direction: column; gap: 12px; }
   .sh-colonne { display: contents; }
   .sh-panneau { order: 1; }
-  .sh-rond { order: 2; width: 100%; }
-  .sh-legende-piste { order: 3; }
-  .sh-bac { order: 4; }
-  .sh-perso { order: 5; }
-  .sh-pv-bloc { order: 6; }
-  .sh-pouvoir-bloc { order: 7; }
-  .sh-mission-bloc { order: 8; }
-  .sh-mes-bloc { order: 9; }
+  .sh-carte-bloc { order: 2; }
+  .sh-rond { order: 3; width: 100%; }
+  .sh-legende-piste { order: 4; }
+  .sh-zones-bloc { order: 5; }
+  .sh-gauche-titre { order: 6; }
+  .sh-moi-zone { order: 7; }
+  .sh-fiches { order: 8; }
+  .sh-bac { order: 9; }
   .sh-journal-bloc { order: 10; }
-  .sh-joueurs-bloc { order: 11; }
+  .sh-med-perso { max-width: 74px; font-size: 9px; padding: 1px 4px; overflow: hidden; text-overflow: ellipsis; }
+  .sh-med-portee { font-size: 9px; }
+  .sh-lieu { grid-template-columns: 1fr; }
+  .sh-lieu-scene { width: 100%; height: 56px; }
   .sh-chat-zone { display: none; }
   .sh-tiroir-chat { display: block; }
   .sh-rond > .sh-rond-jet { inset: 36%; }
@@ -295,9 +332,6 @@
   .sh-case-pions .sh-pion { width: 18px; height: 18px; font-size: 8px; }
   .sh-case-pv { display: none; }
   .sh-pion { width: 20px; height: 20px; font-size: 8px; }
-  .sh-lieu-des { display: none; }
-  .sh-lieu-nom { font-size: 9px; }
-  .sh-lieu-bas { left: 3px; right: 3px; bottom: 3px; }
   .sh-med { width: 74px; }
   .sh-med-cadre { width: 50px; height: 50px; }
   .sh-med-nom { font-size: 10px; }
