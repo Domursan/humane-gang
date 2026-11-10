@@ -24,7 +24,7 @@ const plusDays = (n) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zur
   check(await p.getAttribute(`#cal-grid [data-day="${T}"]`, 'aria-pressed') === 'true', 'le jour du jour est sélectionné');
   check(await p.locator(`#cal-grid [data-day="${T}"].is-today`).count() === 1, 'aujourd’hui mis en évidence');
   check(await p.locator('#cal-filters [data-filter]').count() === 6, 'six filtres de type');
-  check(await p.locator('.cal-ttls').first().isVisible(), 'ordinateur : titres dans les cases');
+  check(await p.locator('.cal-cell.has-items .cal-ttls').first().isVisible(), 'ordinateur : titres dans les cases');
 
   // Jour de la sortie IRL (dans 5 jours, si elle tombe dans ce mois)
   const sortie = plusDays(5);
@@ -113,7 +113,7 @@ const plusDays = (n) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zur
   await p.click('#cal-vue-grille');
   await p.waitForSelector('#cal-grid [data-day]', { timeout: 8000 });
   check(await hscroll(p) <= 0, '360 px : pas de défilement horizontal');
-  check(await p.locator('.cal-dots').first().isVisible() && !(await p.locator('.cal-ttls').first().isVisible()), 'téléphone : pastilles, pas de titres');
+  check(await p.locator('.cal-cell.has-items .cal-dots').first().isVisible() && !(await p.locator('.cal-cell.has-items .cal-ttls').first().isVisible()), 'téléphone : pastilles, pas de titres');
   const box = await p.locator(`#cal-grid [data-day="${today()}"]`).boundingBox();
   check(box && box.height >= 44, `case de jour ≥ 44 px de haut (${box && Math.round(box.height)})`);
   await p.screenshot({ path: require('path').join(__dirname, '..', '..', 'shots', 'v8-calendrier-360.png'), fullPage: true }).catch(() => {});
